@@ -56,7 +56,9 @@ def format_run_report(info: dict[str, Any]) -> tuple[str, str]:
         f"Scanner database: {'fresh' if info['db_ok'] else 'ERROR'}"
         + (f" – {info['db_reason']}" if info.get("db_reason") else ""),
     ]
-    if "osv_ok" in info:
+    if info.get("osv_disabled"):
+        lines.append("Second source (OSV-Scanner): off (light mode)")
+    elif "osv_ok" in info:
         lines.append(f"Second source (OSV-Scanner): {'ok' if info['osv_ok'] else 'ERROR – ' + info.get('osv_reason', '')}")
     if info.get("config_version"):
         lines.append(f"Config version: {info['config_version']}"
@@ -103,6 +105,8 @@ def format_run_report(info: dict[str, Any]) -> tuple[str, str]:
         lines.append(f"Reopened (acceptance expired): {info['reopened_count']}")
     if info.get("resolved_count"):
         lines.append(f"Resolved since last run: {info['resolved_count']}")
+    if info.get("osv_closed_count"):
+        lines.append(f"{info['osv_closed_count']} OSV-only finding(s) closed: OSV is switched off (light mode)")
     if info.get("changed_count"):
         lines.append(f"Changed since last run (rating or fix): {info['changed_count']}")
     ew = info.get("early_warnings") or {}

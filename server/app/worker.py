@@ -19,6 +19,9 @@ from .scanner import (ScanError, grype_db_status, grype_db_update, merge_sources
                       scan_sboms_osv)
 
 log = logging.getLogger("vulnwatch.worker")
+SCANNERS = ("grype+osv", "grype")
+# Leichter Modus: nur Grype. OSV lädt dann keine Datenbanken (spart den größten Teil des Arbeitsspeichers)
+LIGHT_STATUS = {"ok": True, "disabled": True, "reason": "light mode (VULNWATCH_SCANNERS=grype)"}
 OSV_REUSE_HOURS = 20   # ältere OSV-Datenbank: neu laden statt Ergebnisse wiederverwenden (Frische-Gate)
 
 
@@ -109,6 +112,7 @@ class Worker:
         parallel: int = 4,
         result_cache: Path | None = None,
         osv_cache_dir: Path | None = None,
+        scanners: str = "grype+osv",
     ):
         self.client, self.canary_dir = client, canary_dir
         self.scan_fn, self.db_update, self.db_status = scan_fn, db_update, db_status
@@ -117,6 +121,7 @@ class Worker:
         self.parallel = max(1, parallel)
         self.result_cache = result_cache
         self.osv_cache_dir = osv_cache_dir
+        self.light = scanners == "grype"
 
     def run_once(self) -> bool:
         """Holt höchstens einen Auftrag und arbeitet ihn ab. True, wenn ein Auftrag bearbeitet wurde."""
@@ -173,6 +178,8 @@ class Worker:
     def _osv_cached(self, files: dict[str, Path], db_key: str) -> tuple[dict[str, list[dict]], dict]:
         """OSV nur für SBOMs, deren Ergebnis zum aktuellen Datenbankstand fehlt; das Laden der Datenbanken (Ubuntu
         allein einige Minuten) entfällt, wenn sich nichts geändert hat."""
+        if self.light:
+            return {}, dict(LIGHT_STATUS)
         store = self.result_cache / "osv" if self.result_cache and db_key else None
         known: dict[str, list[dict]] = {}
         pre = self.osv_status()   # nur aus einer frischen Datenbank; sonst lädt OSV sie bei diesem Aufruf neu
@@ -300,7 +307,7 @@ class Worker:
             "grype_db": {"ok": bool(db.get("ok")), "age_hours": db.get("age_hours"),
                          "built": str(db.get("built", ""))[:64], "reason": str(db.get("reason", ""))[:300]},
             "osv": {"ok": bool(osv_status.get("ok")), "age_hours": osv_status.get("age_hours"),
-                    "reason": str(osv_status.get("reason", ""))[:300]},
+                    "reason": str(osv_status.get("reason", ""))[:300], "disabled": bool(osv_status.get("disabled"))},
             "systems": systems,
         }
 
@@ -326,13 +333,23 @@ def _noop() -> None:
     pass
 
 
+def scanners_from_env(env) -> str:
+    value = env.get("VULNWATCH_SCANNERS", "grype+osv").strip() or "grype+osv"
+    if value not in SCANNERS:
+        raise SystemExit(f"VULNWATCH_SCANNERS must be one of {', '.join(SCANNERS)}, not {value!r}")
+    return value
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    scanners = scanners_from_env(os.environ)
     token = Path(os.environ.get("VULNWATCH_WORKER_TOKEN_FILE", "/worker_auth/worker.token")).read_text().strip()
     canary_dir = Path(os.environ.get("VULNWATCH_CANARY_DIR", "/canary"))
     osv_cache = Path(os.environ.get("VULNWATCH_OSV_CACHE", str(Path.home() / ".cache" / "osv")))
-    have_osv = shutil.which("osv-scanner") is not None
-    if not have_osv:
+    have_osv = scanners != "grype" and shutil.which("osv-scanner") is not None
+    if scanners == "grype":
+        log.info("Light mode: scanning with Grype only, OSV is switched off")
+    elif not have_osv:
         log.warning("osv-scanner not found: runs report the second source as missing")
     # Zwischenspeicher im tmpfs: übersteht Läufe, aber keinen neuen Container (neue Grype-Version, frisch)
     result_cache = Path(tempfile.gettempdir()) / "vw-results"
@@ -341,7 +358,7 @@ def main() -> None:
                     osv_fn=(lambda paths: scan_sboms_osv(paths, osv_cache)) if have_osv else None,
                     osv_status=lambda: osv_db_status(osv_cache),
                     parallel=int(os.environ.get("VULNWATCH_SCAN_PARALLEL", "4")), result_cache=result_cache,
-                    osv_cache_dir=osv_cache)
+                    osv_cache_dir=osv_cache, scanners=scanners)
     running = True
 
     def stop(sig, _frame):

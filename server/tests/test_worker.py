@@ -403,3 +403,26 @@ def test_every_progress_step_the_worker_reports_is_stored(live):
         with live.session_factory() as s:
             stored = json.loads(s.scalar(select(ScanJob.progress).where(ScanJob.id == job["id"])))
         assert stored["step"] == step and all(stored[k] == v for k, v in extra.items())
+
+
+def test_light_mode_skips_osv_and_reports_it_disabled(live):
+    make_system(live, "h1")
+    client = ServerClient(live.base_url, live.worker_token)
+    w = Worker(client, CANARY_DIR, scan_fn=real_scan, db_update=lambda: (True, ""), db_status=lambda: GOOD_DB,
+               osv_fn=lambda paths: (_ for _ in ()).throw(AssertionError("must not run")),
+               osv_status=lambda: (_ for _ in ()).throw(AssertionError("must not read the OSV cache")),
+               scanners="grype")
+    enqueue_scan_run(live, "manual")
+    w.run_once()
+    [run] = runs(live)
+    osv = json.loads(run.db_status)["osv"]
+    assert osv["disabled"] is True and osv["ok"] is True and run.status == "success"
+    assert "Second source (OSV-Scanner): off (light mode)" in live.notifier.sent[-1][1]
+
+
+def test_scanners_setting_is_validated():
+    from app.worker import scanners_from_env
+    assert scanners_from_env({}) == "grype+osv"
+    assert scanners_from_env({"VULNWATCH_SCANNERS": "grype"}) == "grype"
+    with pytest.raises(SystemExit):
+        scanners_from_env({"VULNWATCH_SCANNERS": "trivy"})

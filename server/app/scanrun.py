@@ -74,6 +74,7 @@ class DbStatusIn(BaseModel):
     age_hours: float | None = None
     built: str = Field(default="", max_length=64)
     reason: str = Field(default="", max_length=300)
+    disabled: bool = False   # leichter Modus: OSV abgeschaltet, kein Fehler
 
 
 class WorkerResultIn(BaseModel):
@@ -323,7 +324,7 @@ def short_run_notable(info: dict) -> bool:
 def process_scan_result(ctx: Context, job_id: int, result: WorkerResultIn) -> ScanRun:
     now = datetime.now(timezone.utc)
     new_findings: list[dict] = []
-    resolved = reopened = changed = 0
+    resolved = reopened = changed = osv_closed = 0
     system_errors: list[tuple[str, str]] = []
     repeat_no_data: list[str] = []
     sharp_drops: list[tuple[str, int, int]] = []   # (Host, Funde vorher, nachher)
@@ -351,6 +352,7 @@ def process_scan_result(ctx: Context, job_id: int, result: WorkerResultIn) -> Sc
         job.status, job.finished_at = "done", now
         valid = result.canary.ok and result.grype_db.ok
         osv_ok = bool(result.osv and result.osv.ok)
+        osv_off = bool(result.osv and result.osv.disabled)
 
         if not valid:
             run.status = "failed"
@@ -427,6 +429,11 @@ def process_scan_result(ctx: Context, job_id: int, result: WorkerResultIn) -> Sc
                         kept += 1
                         continue
                     f.status, f.resolved_at = "resolved", now
+                    if f.source == "osv" and osv_off:
+                        # Leichter Modus: nicht behoben, nur nicht mehr geprüft; zählt weder als behoben noch als Einbruch
+                        osv_closed += 1
+                        kept += 1
+                        continue
                     resolved += 1
                 if is_sharp_drop(drop_cfg, len(existing), len(seen) + kept):
                     sharp_drops.append((meta["name"], len(existing), len(seen)))
@@ -445,7 +452,8 @@ def process_scan_result(ctx: Context, job_id: int, result: WorkerResultIn) -> Sc
             "osv_reason": (result.osv.reason if result.osv else "worker without OSV-Scanner"),
             "summary": json.loads(run.summary_counts), "system_errors": system_errors,
             "new_findings": new_findings, "resolved_count": resolved, "reopened_count": reopened,
-            "changed_count": changed,
+            "changed_count": changed, "osv_disabled": bool(result.osv and result.osv.disabled),
+            "osv_closed_count": osv_closed,
             "repeat_no_data": repeat_no_data, "sharp_drops": sharp_drops, "config_version": run.config_version,
             "early_warnings": warnings_since(s, previous_finished),
         }

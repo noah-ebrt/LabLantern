@@ -22,6 +22,7 @@ Edit `.env`:
 | `VULNWATCH_BIND_IP` | yes | LAN IP of this host. The stack refuses to start without it. |
 | `VULNWATCH_HOSTNAMES` | yes | Comma-separated names and IPs under which browsers and agents reach the master. Certificates are issued only for these. |
 | `VULNWATCH_PORT` | no | HTTPS port, default `8443`. |
+| `VULNWATCH_SCANNERS` | no | `grype+osv` (default): two scanners. `grype`: light mode, OSV is switched off and loads no databases. Reports show OSV as "off (light mode)", not as an error. Findings only OSV reported are closed without counting as resolved, and come back as new when OSV is switched on again. |
 | `VULNWATCH_TAG` | no | Image tag. Set it when you run a second stack on the same host, so the two do not overwrite each other's images. |
 | `VULNWATCH_EDGE_SUBNET`, `_PROXY_IP`, `_SERVER_IP` | no | Internal network between proxy and server. Change only on a collision. |
 

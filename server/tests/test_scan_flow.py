@@ -186,6 +186,23 @@ def test_findings_of_an_image_that_was_not_scanned_stay_open(ctx):
     assert [f.status for f in findings(ctx)] == ["resolved"]
 
 
+def test_light_mode_closes_osv_only_findings_quietly(ctx):
+    sid = make_system(ctx)
+    osv_only = {**raw(cve="CVE-2024-9999"), "source": "osv"}
+    run_once(ctx, [(sid, [{**raw(), "source": "both"}, osv_only], None)], osv={"ok": True})
+    _, run = run_once(ctx, [(sid, [raw()], None)], osv={"ok": True, "disabled": True, "reason": "light mode"})
+    by_cve = {f.cve_id: f for f in findings(ctx)}
+    assert by_cve["CVE-2024-9999"].status == "resolved" and by_cve["CVE-2024-1234"].source == "grype"
+    body = ctx.notifier.sent[-1][1]
+    assert "Resolved since last run" not in body
+    assert "1 OSV-only finding(s) closed: OSV is switched off (light mode)" in body
+    assert "Second source (OSV-Scanner): off (light mode)" in body
+    assert run.status == "success"
+    # wieder eingeschaltet: der Fund kommt als neu zurück, das ist richtig, er wurde ja nicht geprüft
+    run_once(ctx, [(sid, [raw(), osv_only], None)], osv={"ok": True})
+    assert "New findings" in ctx.notifier.sent[-1][1]
+
+
 def test_osv_only_findings_stay_open_while_osv_fails(ctx):
     sid = make_system(ctx)
     osv_only = {**raw(cve="CVE-2024-9999"), "source": "osv"}

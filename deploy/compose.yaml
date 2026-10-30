@@ -114,6 +114,7 @@ services:
     environment:
       VULNWATCH_SERVER_URL: http://server:8000
       VULNWATCH_WORKER_TOKEN_FILE: /worker_auth/worker.token
+      VULNWATCH_SCANNERS: ${VULNWATCH_SCANNERS:-grype+osv}
     volumes:
       # Kein data-Volume, kein keys-Volume: Der Worker sieht weder Datenbank noch Master-Schlüssel.
       - grype_cache:/home/vulnwatch/.cache

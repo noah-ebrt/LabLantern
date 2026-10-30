@@ -162,7 +162,9 @@ def run_report_html(subject: str, info: dict[str, Any], max_findings: int) -> st
 
     health = [_kv("Canary test", _state(info["canary_ok"], "Green", "Red", info.get("canary_message", ""))),
               _kv("Scanner database", _state(info["db_ok"], "Fresh", "Error", info.get("db_reason", "")))]
-    if "osv_ok" in info:
+    if info.get("osv_disabled"):
+        health.append(_kv("OSV-Scanner", f'<span style="color:{MUTED}">Off (light mode)</span>'))
+    elif "osv_ok" in info:
         health.append(_kv("OSV-Scanner", _state(info["osv_ok"], "OK", "Error", info.get("osv_reason", ""))))
     if info.get("config_version"):
         archive = f' <span style="color:{MUTED}">· raw data archive {e(info["archive_status"])}</span>' \
