@@ -113,9 +113,22 @@ describe('AiSettings', () => {
     expect(w.text()).toContain('HTTP 401')
   })
 
+  it('shows one provider at a time, starting with the first configured one', async () => {
+    const w = mount(AiSettings)
+    await flushPromises()
+    expect(w.get('button[data-test=tab-anthropic]').attributes('aria-selected')).toBe('true')
+    expect(w.find('form[data-test=form-anthropic]').exists()).toBe(true)
+    expect(w.find('form[data-test=form-openai]').exists()).toBe(false)
+    expect(w.find('form[data-test=form-c1]').exists()).toBe(false)
+    await w.get('button[data-test=tab-openai]').trigger('click')
+    expect(w.find('form[data-test=form-openai]').exists()).toBe(true)
+    expect(w.find('form[data-test=form-anthropic]').exists()).toBe(false)
+  })
+
   it('saves an OpenAI key and clears the field', async () => {
     const w = mount(AiSettings)
     await flushPromises()
+    await w.get('button[data-test=tab-openai]').trigger('click')
     await w.get('input[name=openai_key]').setValue('sk-test-123')
     await w.get('form[data-test=form-openai]').trigger('submit')
     await flushPromises()
@@ -128,6 +141,7 @@ describe('AiSettings', () => {
     ai.providers[2] = { id: 'c1', kind: 'compat', label: 'Custom endpoint', configured: false, key: { set: false, updated_at: null }, last_used: null, models: [] }
     const w = mount(AiSettings)
     await flushPromises()
+    await w.get('button[data-test=tab-c1]').trigger('click')
     expect(w.get('input[name=c1_base_url]').attributes('placeholder')).toBe('http://192.168.1.10:11434/v1')
     expect(w.text()).toContain('API key (optional)')
     await w.get('input[name=c1_name]').setValue('Ollama')

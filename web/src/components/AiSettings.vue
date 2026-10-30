@@ -41,6 +41,11 @@ async function load(adopt = false) {
 }
 
 const providers = computed(() => state.value.providers)
+// Immer nur ein Anbieter sichtbar; ohne Wahl der erste eingerichtete
+const picked = ref('')
+const active = computed(() => providers.value.find((p) => p.id === picked.value)
+  || providers.value.find((p) => p.configured) || providers.value[0])
+const tabLabel = (p) => (p.kind === 'compat' ? 'Ollama / compatible' : p.label)
 const anyConfigured = computed(() => providers.value.some((p) => p.configured))
 const status = computed(() => (anyConfigured.value ? { tone: 'ok', text: 'Configured' } : { tone: 'neutral', text: 'Not configured' }))
 
@@ -150,7 +155,14 @@ onMounted(() => load(true))
       <button type="button" class="btn-sm" data-test="load-retry" @click="load(true)"><Icon name="refresh" :size="14" />Retry</button>
     </p>
 
-    <SettingsSection v-for="p in providers" :key="p.id" :title="p.kind === 'compat' ? 'OpenAI-compatible (Ollama, LM Studio, OpenRouter …)' : p.label">
+    <div v-if="providers.length" class="seg provider-tabs" role="tablist" aria-label="AI provider">
+      <button v-for="q in providers" :key="q.id" type="button" role="tab" :aria-selected="active?.id === q.id"
+              :class="['seg-btn', { active: active?.id === q.id }]" :data-test="`tab-${q.id}`" @click="picked = q.id">
+        <span class="dot" :class="{ off: !q.configured }" :title="q.configured ? 'Configured' : 'Not configured'" />{{ tabLabel(q) }}
+      </button>
+    </div>
+
+    <SettingsSection v-for="p in active ? [active] : []" :key="p.id" :title="p.kind === 'compat' ? 'OpenAI-compatible (Ollama, LM Studio, OpenRouter …)' : p.label">
       <SettingsList :empty="!p.configured" empty-text="Not configured.">
         <SettingsEntry icon="key"
                        :title="p.kind === 'compat' ? `${p.label} · ${p.display_url}` : `${p.label} API key`"
@@ -217,4 +229,7 @@ onMounted(() => load(true))
 .task-row { display: flex; flex-direction: column; gap: 0.35rem; }
 .task-row label { display: flex; flex-direction: column; gap: 0.35rem; }
 .task-error { margin: 0; font-size: 0.82rem; }
+.provider-tabs { align-self: flex-start; }
+.provider-tabs .dot { background: var(--ok); }
+.provider-tabs .dot.off { background: var(--line-strong); }
 </style>
