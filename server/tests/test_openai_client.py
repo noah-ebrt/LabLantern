@@ -65,18 +65,18 @@ def test_compat_tool_call_is_not_strict_and_keeps_model_id():
 
 def test_openai_list_models_filters_non_chat():
     ids = [("gpt-5.2-mini", 20), ("text-embedding-3-large", 50), ("gpt-4o-audio-preview", 40), ("dall-e-3", 30),
-           ("gpt-5.2", 10)]
+           ("gpt-5.2", 10), ("gpt-5-pro", 60), ("gpt-5-codex", 70)]
     models = [SimpleNamespace(id=i, created=t) for i, t in ids]
     got = OpenAIProvider(Client(models=models), "openai", "OpenAI", False).list_models()
     assert [m["id"] for m in got] == ["gpt-5.2-mini", "gpt-5.2"]   # neueste zuerst
     assert got[0]["name"] == "gpt-5.2-mini" and got[0]["created_at"].startswith("1970-01-01T00:00:20")
     allm = OpenAIProvider(Client(models=models), "c1", "Ollama", True).list_models()
-    assert len(allm) == 5 and allm[0]["id"] == "text-embedding-3-large"
+    assert len(allm) == 7 and allm[0]["id"] == "gpt-5-codex"   # eigener Endpunkt: nichts wird gefiltert
 
 
 def test_openai_web_allow_list():
-    assert openai_web("gpt-5.2") and openai_web("o4-mini") and openai_web("gpt-4.1")
-    assert not openai_web("gpt-4.1-nano") and not openai_web("gpt-3.5-turbo") and not openai_web("qwen3.8:27b")
+    assert openai_web("gpt-5.2") and openai_web("o3") and openai_web("gpt-4.1")
+    assert not openai_web("o4-mini") and not openai_web("gpt-4.1-nano") and not openai_web("gpt-3.5-turbo") and not openai_web("qwen3.8:27b")
     assert chat_model("o3-mini") and not chat_model("gpt-4o-search-preview") and not chat_model("whisper-1")
 
 
@@ -163,3 +163,19 @@ def test_make_client_uses_factory_and_never_follows_redirects():
     real = make_openai_client(OPENAI_BASE, KEY)
     assert str(real.base_url).startswith(OPENAI_BASE) and real.max_retries == 2
     assert real._client.follow_redirects is False
+
+
+def test_empty_choices_never_raises_index_error():
+    empty = SimpleNamespace(id="c", model="m", usage=None, choices=[])
+    # OpenAI: kein Werkzeugaufruf -> AiError
+    with pytest.raises(AiError, match="OpenAI: answer without the expected tool call"):
+        OpenAIProvider(Client(chat=[empty]), "openai", "OpenAI", False).ask_tool("m", "s", "t", TOOL)
+    # eigener Endpunkt: erst JSON-Rückfall; liefert auch der nichts, ist es ein AiError
+    c = Client(chat=[empty, empty])
+    with pytest.raises(AiError, match="Ollama: answer is not valid JSON"):
+        OpenAIProvider(c, "c1", "Ollama", True).ask_tool("m", "s", "t", TOOL)
+    assert len(c.calls) == 2
+    # leere Auswahl im ersten, gültige Antwort im zweiten Aufruf
+    c = Client(chat=[empty, chat_reply(content='{"products": ["a"]}')])
+    args, archive = OpenAIProvider(c, "c1", "Ollama", True).ask_tool("m", "s", "t", TOOL)
+    assert args == {"products": ["a"]} and archive["stop_reason"] == "stop"

@@ -20,9 +20,10 @@ log = logging.getLogger("vulnwatch.openai")
 OPENAI_BASE = "https://api.openai.com/v1"
 # Chat-Modelle bei OpenAI (Präfixe); alles andere in der Modellliste (Bilder, Audio, Embeddings …) wird nicht angeboten
 CHAT_PREFIX = ("gpt-", "o1", "o3", "o4", "chatgpt-")
-NOT_CHAT = ("audio", "realtime", "transcribe", "tts", "image", "embedding", "search", "instruct", "moderation")
+NOT_CHAT = ("audio", "realtime", "transcribe", "tts", "image", "embedding", "search", "instruct", "moderation",
+            "-pro", "codex")   # -pro/codex: nur über die Responses-API, Chat Completions lehnt sie ab
 # Modelle mit dem `web_search`-Werkzeug der Responses-API (Präfixe, Stand der OpenAI-Doku); nano-Modelle nehmen es nicht
-OPENAI_WEB = ("gpt-4o", "gpt-4.1", "gpt-5", "gpt-6", "o3", "o4-mini")
+OPENAI_WEB = ("gpt-4o", "gpt-4.1", "gpt-5", "gpt-6", "o3")
 MAX_SOURCES = 50
 
 
@@ -40,6 +41,11 @@ def make_openai_client(base_url: str, key: str | None, factory: Callable[[str, s
     # Das SDK folgt Weiterleitungen von sich aus; hier nicht: Schlüssel und Anfrage gehen nur an die eingestellte Adresse
     return openai.OpenAI(api_key=key or "none", base_url=base_url, timeout=120.0, max_retries=2,
                          http_client=openai.DefaultHttpxClient(follow_redirects=False))
+
+
+def _message(resp):
+    """Die Antwortnachricht, oder None, wenn der Endpunkt keine Auswahl liefert (leeres `choices`)."""
+    return resp.choices[0].message if resp.choices else None
 
 
 def _usage(u) -> dict | None:
@@ -124,7 +130,8 @@ class OpenAIProvider:
             resp = self._chat(model=model, response_format={"type": "json_object"}, messages=[
                 {"role": "system", "content": f"{system}\n\nAnswer with one JSON object matching this schema: {schema}"},
                 {"role": "user", "content": text}])
-            args = _first_object(resp.choices[0].message.content or "")
+            msg = _message(resp)
+            args = _first_object(msg.content or "") if msg is not None else None
             if args is None:
                 raise AiError(f"{self.label}: answer is not valid JSON")
         if args is None:
@@ -132,7 +139,9 @@ class OpenAIProvider:
         return args, self._archive(resp)
 
     def _tool_arguments(self, resp, name: str) -> dict | None:
-        msg = resp.choices[0].message
+        msg = _message(resp)
+        if msg is None:
+            return None
         if getattr(msg, "refusal", None):
             raise AiError(f"{self.label} declined the request")
         call = next((c for c in (msg.tool_calls or []) if c.function.name == name), None)
@@ -149,7 +158,7 @@ class OpenAIProvider:
         return args
 
     def _archive(self, resp) -> dict:
-        return {"id": resp.id, "model": resp.model, "stop_reason": resp.choices[0].finish_reason,
+        return {"id": resp.id, "model": resp.model, "stop_reason": resp.choices[0].finish_reason if resp.choices else None,
                 "usage": _usage(resp.usage)}
 
     # ---------- Recherche (nur OpenAI selbst) ----------
