@@ -189,6 +189,27 @@ class Finding(Base):
     resolved_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True, default=None)
 
 
+class Snooze(Base):
+    """Zurückgestellter Fund (PLAN-extensions A2). Quelle der Wahrheit; Finding.status "accepted" folgt daraus."""
+    __tablename__ = "snoozes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    scope: Mapped[str] = mapped_column(String)                      # occurrence oder everywhere
+    cve_id: Mapped[str] = mapped_column(String)
+    component: Mapped[str] = mapped_column(String)
+    system_id: Mapped[int | None] = mapped_column(ForeignKey("systems.id", ondelete="CASCADE"), nullable=True)
+    target_key: Mapped[str] = mapped_column(String, default="")    # host oder image:<Registry/Repository>
+    reason: Mapped[str] = mapped_column(String)
+    until: Mapped[datetime] = mapped_column(UTCDateTime())
+    created_by: Mapped[str] = mapped_column(String, default="")
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
+    baseline_severity: Mapped[str] = mapped_column(String, default="info")
+    baseline_kev: Mapped[bool] = mapped_column(Boolean, default=False)
+    baseline_has_fix: Mapped[bool] = mapped_column(Boolean, default=False)
+    ended_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True, default=None)
+    end_reason: Mapped[str] = mapped_column(String, default="", server_default="")
+
+
 class SystemScanResult(Base):
     """Ergebnis der Paketprüfung je System und Lauf. Ohne Eintrag oder mit `fehler` gilt die Prüfung nicht als ok."""
 

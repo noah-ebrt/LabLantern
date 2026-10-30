@@ -28,3 +28,10 @@ def init_db(engine: Engine) -> None:
     from .migrate import add_missing_columns
 
     add_missing_columns(engine)
+    from sqlalchemy.orm import Session
+
+    from .snooze import transfer_accepted_findings
+
+    with Session(engine) as s:   # einmalig: altes "Accept" wird zum Snooze
+        if transfer_accepted_findings(s):
+            s.commit()
