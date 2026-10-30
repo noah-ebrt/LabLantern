@@ -1,0 +1,304 @@
+import http.server
+import socket
+import struct
+import threading
+
+import pytest
+from sqlalchemy import select
+
+from app import health
+from app.health import InlineExecutor, aggregate, apply_result, state_durations, uptime_of
+from app.healthprobes import ProbeResult, ProbeSpec, clean_params, run_probe
+from app.models import HealthCheck, HealthEvent, HealthMonitor, Setting, System
+
+
+class Probes:
+    """Ersetzt das Netz: Ergebnis je Host, Standard erreichbar."""
+
+    def __init__(self):
+        self.results: dict[str, ProbeResult] = {}
+        self.calls: list[ProbeSpec] = []
+
+    def __call__(self, spec: ProbeSpec) -> ProbeResult:
+        self.calls.append(spec)
+        return self.results.get(spec.host, ProbeResult(True, 3.0))
+
+
+@pytest.fixture
+def hw(admin):
+    """Admin, Engine mit Sofort-Ausführung und abgefangenem Alarm."""
+    env, client, h = admin
+    engine = env.app.state.health
+    probes = Probes()
+    engine.executor, engine.probe = InlineExecutor(), probes
+    sent = []
+    env.app.state.ctx.notifier = lambda title, body, html=None, kind="report": sent.append((title, body, kind)) or (True, None)
+    return env, client, h, engine, probes, sent
+
+
+def run(env, engine, ticks=1, step=31.0):
+    for _ in range(ticks):
+        engine.tick()
+        env.clock.advance(step)
+    engine.tick()
+
+
+def token(client, h, name="esp"):
+    r = client.post("/api/health/tokens", json={"name": name}, headers=h)
+    assert r.status_code == 200
+    return r.json()["token"]
+
+
+def create(client, h, **kw):
+    body = {"name": "NAS", "host": "192.0.2.20", "checks": [{"kind": "ping"}, {"kind": "tcp", "params": {"port": 445}}]}
+    body.update(kw)
+    r = client.post("/api/health/monitors", json=body, headers=h)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+# --- Zustandsmaschine und Zusammenfassung ---
+
+def test_check_needs_consecutive_failures_before_degraded_and_down():
+    c = HealthCheck(kind="tcp", fails=0, fails_degraded=2, fails_down=4, state="up")
+    states = []
+    for _ in range(4):
+        apply_result(c, ProbeResult(False, error="refused"), 100.0)
+        states.append(c.state)
+    assert states == ["up", "degraded", "degraded", "down"]
+    apply_result(c, ProbeResult(True, 2.0), 101.0)
+    assert (c.state, c.fails, c.error) == ("up", 0, "")
+
+
+def test_warning_and_inconclusive_results():
+    c = HealthCheck(kind="tls", fails=0, fails_degraded=2, fails_down=4, state="up")
+    apply_result(c, ProbeResult(True, 5.0, warn="certificate expires in 3 days"), 1.0)
+    assert (c.state, c.error) == ("degraded", "certificate expires in 3 days")
+    apply_result(c, ProbeResult(False, error="FRITZ!Box unreachable", inconclusive=True), 2.0)
+    assert c.state == "unknown" and c.fails == 0
+
+
+@pytest.mark.parametrize("checks, expected", [
+    ([("ping", "up"), ("agent", "up")], ("up", "")),
+    ([("ping", "up"), ("agent", "down")], ("up", "Agent not reporting")),
+    ([("ping", "down"), ("agent", "down")], ("down", "")),
+    ([("ping", "down"), ("agent", "up")], ("degraded", "Agent still reports: likely a network or firewall problem")),
+    ([("ping", "up"), ("http", "down")], ("degraded", "")),
+    ([("agent", "up")], ("up", "")),
+    ([("ping", "unknown")], ("unknown", "")),
+    ([], ("unknown", "")),
+])
+def test_aggregate(checks, expected):
+    assert aggregate(checks) == expected
+
+
+def test_params_are_validated():
+    assert clean_params("http", {"scheme": "https"})["port"] == 443
+    for kind, bad in [("http", {"path": "no-slash"}), ("http", {"expect": "abc"}), ("tcp", {"port": 70000}),
+                      ("dns", {"name": "bad..name"}), ("fritz_host", {"target": "not a mac"}),
+                      ("ping", {"target": "x; rm -rf /"})]:
+        with pytest.raises(ValueError):
+            clean_params(kind, bad)
+
+
+# --- Engine über die API ---
+
+def test_monitor_goes_down_alerts_once_and_recovers(hw):
+    env, client, h, engine, probes, sent = hw
+    create(client, h)
+    run(env, engine)
+    tok = token(client, h)
+    r = client.get("/api/health/states", headers={"Authorization": f"Bearer {tok}"})
+    assert r.json()["states"] == {"nas": "up"} and r.json()["engine_ok"] is True
+
+    probes.results["192.0.2.20"] = ProbeResult(False, error="timed out")
+    run(env, engine, ticks=6, step=11)
+    doc = client.get("/api/health/status/nas", headers={"Authorization": f"Bearer {tok}"}).json()
+    assert doc["state"] == "down"
+    assert {c["error"] for c in doc["checks"]} == {"timed out"}
+    assert len(sent) == 1 and "NAS is DOWN" in sent[0][0] and sent[0][2] == "alert"
+
+    mid = client.get("/api/health/overview").json()["monitors"][0]["id"]
+    for period in ("24h", "7d", "30d"):
+        hist = client.get(f"/api/health/monitors/{mid}/history?range={period}").json()
+        assert hist["range"] == period and len(hist["checks"]) == 2
+    assert any(v is not None for v in hist["checks"][0]["uptime"])
+
+    del probes.results["192.0.2.20"]
+    run(env, engine, ticks=2)
+    assert client.get("/api/health/states", headers={"Authorization": f"Bearer {tok}"}).json()["states"]["nas"] == "up"
+    assert "recovered" in sent[-1][0]
+    with env.app.state.ctx.session_factory() as s:
+        assert [e.state for e in s.scalars(select(HealthEvent).order_by(HealthEvent.ts))] == ["up", "degraded", "down", "up"]
+
+
+def test_many_hosts_down_at_once_is_one_outage_alert(hw):
+    env, client, h, engine, probes, sent = hw
+    for i in range(4):
+        create(client, h, name=f"Host {i}", host=f"192.0.2.{30 + i}", checks=[{"kind": "ping"}])
+    run(env, engine)
+    for i in range(4):
+        probes.results[f"192.0.2.{30 + i}"] = ProbeResult(False, error="no echo reply")
+    run(env, engine, ticks=6, step=11)
+    assert len(sent) == 1 and "network outage" in sent[0][0]
+
+
+def test_stale_engine_reports_unknown_not_up(hw):
+    env, client, h, engine, probes, sent = hw
+    create(client, h)
+    run(env, engine)
+    env.clock.advance(health.ENGINE_STALE + 1)
+    doc = client.get("/api/health/status", headers={"Authorization": f"Bearer {token(client, h)}"}).json()
+    assert doc["engine"]["ok"] is False and doc["monitors"][0]["state"] == "unknown"
+    assert all(c["stale"] for c in doc["monitors"][0]["checks"])
+
+
+def test_api_needs_a_valid_token_or_session(hw):
+    env, client, h, engine, probes, sent = hw
+    anon = env.new_client()
+    assert anon.get("/api/health/states").status_code == 401
+    assert anon.get("/api/health/states", headers={"Authorization": "Bearer wrong"}).status_code == 401
+    tok = token(client, h)
+    assert anon.get("/api/health/states", headers={"Authorization": f"Bearer {tok}"}).status_code == 200
+    assert client.get("/api/health/states").status_code == 200   # angemeldet
+    tid = client.get("/api/health/tokens").json()[0]["id"]
+    client.delete(f"/api/health/tokens/{tid}", headers=h)
+    assert anon.get("/api/health/states", headers={"Authorization": f"Bearer {tok}"}).status_code == 401
+
+
+def test_agents_are_monitored_automatically(hw):
+    env, client, h, engine, probes, sent = hw
+    ctx = env.app.state.ctx
+    with ctx.session_factory() as s:
+        s.add(System(name="pve", ip="192.0.2.5", status="active", last_contact=env.clock()))
+        s.add(System(name="waiting", ip="192.0.2.6", status="pending"))
+        s.commit()
+    run(env, engine)
+    mons = client.get("/api/health/overview").json()["monitors"]
+    assert [(m["name"], m["auto"], m["state"]) for m in mons] == [("pve", True, "up")]
+    assert sorted(c["kind"] for c in mons[0]["checks"]) == ["agent", "ping"]
+    assert client.delete(f"/api/health/monitors/{mons[0]['id']}", headers=h).status_code == 409
+
+    # Agent schweigt, Ping klappt: weiter up, aber mit Warnung (nach der Anlaufzeit)
+    env.clock.advance(health.AGENT_GRACE)
+    run(env, engine, ticks=5)
+    m = client.get("/api/health/overview").json()["monitors"][0]
+    assert (m["state"], m["warning"]) == ("up", "Agent not reporting")
+
+    with ctx.session_factory() as s:
+        s.scalars(select(System)).first().status = "revoked"
+        s.commit()
+    engine.last_sync = 0
+    run(env, engine)
+    assert client.get("/api/health/overview").json()["monitors"] == []
+
+
+def test_heartbeat_and_announced_shutdown(hw):
+    env, client, h, engine, probes, sent = hw
+    out = create(client, h, name="Laptop", host="", checks=[{"kind": "heartbeat", "interval_s": 60}])
+    beat_token = next(iter(out["heartbeat_tokens"].values()))
+    anon = env.new_client()
+    assert anon.get(f"/api/health/beat/{beat_token}").text == "ok\n"
+    run(env, engine)
+    assert client.get("/api/health/states").json()["states"]["laptop"] == "up"
+    assert anon.post(f"/api/health/beat/{beat_token}?state=down").text == "bye\n"
+    run(env, engine)
+    assert client.get("/api/health/states").json()["states"]["laptop"] == "down"
+    assert anon.get("/api/health/beat/nope").status_code == 404
+
+
+def test_fritz_checks_need_the_connector(hw):
+    env, client, h, engine, probes, sent = hw
+    r = client.post("/api/health/monitors", json={"name": "Phone", "checks": [{"kind": "fritz_host", "params": {"target": "REDACTED"}}]}, headers=h)
+    assert r.status_code == 422
+    kinds = {k["kind"]: k for k in client.get("/api/health/options").json()["kinds"]}
+    assert kinds["fritz_host"]["available"] is False and "FRITZ!Box" in kinds["fritz_host"]["reason"]
+
+    ctx = env.app.state.ctx
+    ctx.secrets.set("fritz.password", "pw")
+    with ctx.session_factory() as s:
+        s.add(Setting(key="fritz.config", value='{"url": "http://192.0.2.1", "user": "vw"}'))
+        s.commit()
+    create(client, h, name="Phone", host="", checks=[{"kind": "fritz_host", "params": {"target": "REDACTED"}}])
+    run(env, engine)
+    spec = probes.calls[-1]
+    assert spec.host == "REDACTED" and spec.fritz["password"] == "pw"
+    assert spec.fritz["url"] == "http://192.0.2.1:49000"
+
+
+def test_http_auth_is_stored_encrypted_and_never_returned(hw):
+    env, client, h, engine, probes, sent = hw
+    create(client, h, name="HA", checks=[{"kind": "http", "params": {"port": 8123}, "auth": "Bearer abc"}])
+    run(env, engine)
+    assert probes.calls[-1].auth == "Bearer abc"
+    mon = client.get("/api/health/overview").json()["monitors"][0]
+    assert mon["checks"][0]["has_auth"] is True and "abc" not in str(mon)
+
+
+def test_uptime_from_state_changes(session_factory):
+    with session_factory() as s:
+        s.add(HealthMonitor(id=1, name="x", slug="x"))
+        s.flush()
+        s.add_all([HealthEvent(monitor_id=1, ts=0, state="up"), HealthEvent(monitor_id=1, ts=75, state="down")])
+        s.commit()
+        d = state_durations(s, 1, 0, 100)[0]
+        assert uptime_of(d) == 75.0
+        halves = state_durations(s, 1, 0, 100, 2)
+        assert [uptime_of(x) for x in halves] == [100.0, 50.0]
+
+
+# --- echte Prüfungen gegen lokale Dienste ---
+
+def test_tcp_and_http_probes_against_local_servers():
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200 if self.path == "/" else 503)
+            self.end_headers()
+            self.wfile.write(b"hello healthy world")
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    port = srv.server_address[1]
+    try:
+        assert run_probe(ProbeSpec("tcp", "127.0.0.1", {"port": port}, 2)).ok
+        ok = run_probe(ProbeSpec("http", "127.0.0.1", clean_params("http", {"port": port, "match": "healthy"}), 2))
+        assert ok.ok and ok.latency_ms is not None
+        miss = run_probe(ProbeSpec("http", "127.0.0.1", clean_params("http", {"port": port, "match": "nope"}), 2))
+        assert not miss.ok and "expected text" in miss.error
+        bad = run_probe(ProbeSpec("http", "127.0.0.1", clean_params("http", {"port": port, "path": "/x"}), 2))
+        assert not bad.ok and "HTTP 503" in bad.error
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        closed = s.getsockname()[1]
+    r = run_probe(ProbeSpec("tcp", "127.0.0.1", {"port": closed}, 2))
+    assert not r.ok and r.error == "connection refused"
+
+
+def test_dns_probe_against_local_udp_server():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+
+    def answer(rcode, ancount):
+        data, addr = sock.recvfrom(512)
+        flags = 0x8180 | rcode
+        sock.sendto(data[:2] + struct.pack("!HHHHH", flags, 1, ancount, 0, 0) + data[12:], addr)
+
+    try:
+        t = threading.Thread(target=answer, args=(0, 1))
+        t.start()
+        assert run_probe(ProbeSpec("dns", "127.0.0.1", clean_params("dns", {"port": port}), 2)).ok
+        t.join()
+        t = threading.Thread(target=answer, args=(3, 0))
+        t.start()
+        r = run_probe(ProbeSpec("dns", "127.0.0.1", clean_params("dns", {"port": port}), 2))
+        t.join()
+        assert not r.ok and "does not exist" in r.error
+    finally:
+        sock.close()

@@ -20,6 +20,9 @@ reachable only in your LAN.
 - **Exposure:** reads your Nginx Proxy Manager and FRITZ!Box port forwardings (read-only) to learn which containers
   are reachable from the internet and rates their findings higher. It also checks the expiry of their TLS
   certificates.
+- **Health monitoring:** uptime and response times of every host. Agents are watched automatically; other devices
+  get ping, TCP, HTTP(S), TLS expiry, DNS, FRITZ!Box presence and internet or heartbeat checks. A read-only API
+  serves the states to status LEDs, Home Assistant or scripts.
 - **No silent gaps:** a coverage matrix shows every system × check as ok, finding, queued or error. A canary scan
   in every run proves the scanner still detects a known vulnerability.
 - **Reports and alerts:** daily report and immediate alerts through Apprise (mail, ntfy, Telegram, Signal, …),
@@ -86,6 +89,7 @@ offers the new version within a minute; **Update all** installs it on every host
 | --- | --- |
 | [docs/INSTALL.md](docs/INSTALL.md) | install, DNS and certificates, updates, backup and restore, moving to another host, troubleshooting |
 | [docs/AGENTS.md](docs/AGENTS.md) | adding hosts, what an agent collects, commands, updates, removal, changing the agent |
+| [docs/HEALTH.md](docs/HEALTH.md) | health monitoring: checks, thresholds, alerts, router checks, heartbeat, API for status LEDs and other devices |
 | [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) | notifications, schedule, offsite watchdog, Nginx Proxy Manager, TrueNAS and Home Assistant (devices without agent), version check, AI early warning, sharp drop alarm, configuration as JSON, Prometheus |
 | [SECURITY.md](SECURITY.md) | threat model: what a compromised master, agent or worker can and cannot do |
 | [docs/INTERNALS.md](docs/INTERNALS.md) | architecture and data flow for contributors |

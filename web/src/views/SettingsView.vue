@@ -10,62 +10,52 @@ import ConfigJsonSettings from '../components/ConfigJsonSettings.vue'
 import DropAlarmSettings from '../components/DropAlarmSettings.vue'
 import ProductsSettings from '../components/ProductsSettings.vue'
 import MetricsSettings from '../components/MetricsSettings.vue'
+import PageHeader from '../components/PageHeader.vue'
+import PageTabs from '../components/PageTabs.vue'
+
+// Reiter statt einer langen Seite; ?tab= in der Adresse, damit Verweise (z. B. aus „Health“) direkt hinführen
+const TABS = [
+  { key: 'general', label: 'Scans & alerts', icon: 'clock' },
+  { key: 'notifications', label: 'Notifications', icon: 'bell' },
+  { key: 'integrations', label: 'Integrations', icon: 'link' },
+  { key: 'access', label: 'Access & agents', icon: 'lock' },
+  { key: 'advanced', label: 'Advanced', icon: 'settings' },
+]
 </script>
 
 <template>
   <div class="settings-page">
-    <div class="header-row">
-      <div>
-        <h1>Settings</h1>
-        <p class="subtitle">Scan schedule, alert notifications, passkeys, AI integration, and agent releases</p>
-      </div>
-    </div>
+    <PageHeader title="Settings" subtitle="Scan schedule, alert notifications, integrations, passkeys and agent releases" />
 
-    <div class="settings-stack">
-      <!-- 1. Daily automated scan with dominant toggle switch -->
-      <ScheduleSettings />
-
-      <!-- 2. Notification channels list with collapsible add channel form -->
-      <NotificationSettings />
-
-      <!-- Offsite-Wächter: Healthchecks außer Haus alarmiert, wenn vulnwatch verstummt -->
-      <WatchdogSettings />
-
-      <!-- Produktstände und Internet-Erreichbarkeit (NPM) -->
-      <ProductsSettings />
-
-      <!-- Sofort-Alarm bei starkem Rückgang der Funde -->
-      <DropAlarmSettings />
-
-      <!-- 3. AI Early Warning Integration -->
-      <AiSettings />
-      <AiLevelSettings />
-
-      <!-- Passkeys: Login und Bestätigung gefährlicher Befehle -->
-      <PasskeySettings />
-
-      <!-- 4. Fleet Agent Distribution -->
-      <ReleaseSettings />
-
-      <!-- Prometheus (optional) -->
-      <MetricsSettings />
-
-      <!-- Alles in einem Dokument, zuletzt: für Fortgeschrittene -->
-      <ConfigJsonSettings />
-    </div>
+    <PageTabs :tabs="TABS" label="Settings sections">
+      <template #general>
+        <!-- Täglicher Lauf, Offsite-Wächter, Sofort-Alarm bei starkem Rückgang der Funde -->
+        <ScheduleSettings />
+        <WatchdogSettings />
+        <DropAlarmSettings />
+      </template>
+      <template #notifications>
+        <NotificationSettings />
+      </template>
+      <template #integrations>
+        <!-- Produktstände, Internet-Erreichbarkeit (NPM, FRITZ!Box, Cloudflare, Traefik) und KI -->
+        <ProductsSettings />
+        <AiSettings />
+        <AiLevelSettings />
+      </template>
+      <template #access>
+        <PasskeySettings />
+        <ReleaseSettings />
+        <MetricsSettings />
+      </template>
+      <template #advanced>
+        <!-- Alles in einem Dokument: für Fortgeschrittene -->
+        <ConfigJsonSettings />
+      </template>
+    </PageTabs>
   </div>
 </template>
 
 <style scoped>
-.settings-page {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-}
-
-.settings-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
+.settings-page { display: flex; flex-direction: column; gap: 1.25rem; }
 </style>

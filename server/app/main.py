@@ -23,6 +23,8 @@ from .connectors import build_connectors_router
 from .cftunnel import build_cftunnel_router
 from .traefik import build_traefik_router
 from .fritzbox import build_fritzbox_router
+from .health import HealthEngine
+from .health_api import build_health_router
 from .products import build_versions_router
 from .earlywarning import build_earlywarning_router
 from .metrics import build_metrics_router
@@ -93,18 +95,23 @@ def create_app(settings: Settings, clock: Callable[[], float] = time.time) -> Fa
     # Läuft nur im echten Serverprozess: Der Lebenszyklus startet ihn, Unit-Tests ohne Server lassen ihn aus.
     scheduler = build_scheduler(ctx)
     ctx.on_schedule_change = lambda: apply_schedule(scheduler, ctx)
+    # Gesundheitsüberwachung: eigener Thread mit Prüf-Pool, ebenfalls nur im echten Serverprozess
+    health = HealthEngine(ctx)
 
     @asynccontextmanager
     async def lifespan(_app):
         scheduler.start()
-        log.info("Scheduler started (daily run, maintenance, release check)")
+        health.start()
+        log.info("Scheduler started (daily run, maintenance, release check, health checks)")
         try:
             yield
         finally:
+            health.stop()
             scheduler.shutdown(wait=False)
 
     app = FastAPI(title="vulnwatch", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     app.state.scheduler = scheduler
+    app.state.health = health
     app.state.ctx = ctx
     # Live-Updates: jeder Commit meldet die berührten Themen an offene Browser-Ströme
     hub = EventHub()
@@ -134,7 +141,7 @@ def create_app(settings: Settings, clock: Callable[[], float] = time.time) -> Fa
         build_releases_router(ctx, guards), build_watchdog_router(ctx, guards), build_connectors_router(ctx, guards),
         build_appliances_router(ctx, guards), build_integrity_router(ctx, guards), build_versions_router(ctx, guards),
         build_earlywarning_router(ctx, guards), build_fritzbox_router(ctx, guards), build_cftunnel_router(ctx, guards),
-        build_traefik_router(ctx, guards),
+        build_traefik_router(ctx, guards), build_health_router(ctx, guards, health),
     ]
     # Konfiguration als JSON: schreibt über die Endpunkte der Router oben, mit deren Prüfung und Folgen
     api_routers.append(build_config_router(ctx, guards, list(api_routers)))
