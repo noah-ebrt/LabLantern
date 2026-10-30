@@ -100,7 +100,7 @@ def build_config_router(ctx: Context, guards: Guards, routers: list[APIRouter]) 
         if model != current["model"]:
             # Alte Exporte tragen das eine Modell; es wird zur Wahl für „classify“ (leer = automatisch). Direkt
             # geschrieben, ohne Abgleich mit der Modellliste: der Anbieter muss dafür nicht eingerichtet sein.
-            if model is not None and not (isinstance(model, str) and MODEL_ID.match(model)):
+            if model is not None and not (isinstance(model, str) and MODEL_ID.fullmatch(model)):
                 raise SectionError("model: invalid model id")
             with ctx.session_factory() as s:
                 tasks = {t: (setting(s, TASKS_KEY) or {}).get(t) or "" for t in TASKS}

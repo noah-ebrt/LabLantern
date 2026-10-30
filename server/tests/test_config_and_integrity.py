@@ -99,6 +99,8 @@ def test_an_old_export_still_imports_research_and_claude(admin):
     # eine ungültige Kennung wird abgelehnt, ohne sie zu wiederholen
     r = client.put("/api/settings/config", headers=h, json={"claude": {"model": "evil model\n", "api_key": None}}).json()
     assert r["results"]["claude"] == "error: model: invalid model id"
+    r = client.put("/api/settings/config", headers=h, json={"claude": {"model": "claude-haiku-5-5\n", "api_key": None}}).json()
+    assert r["results"]["claude"] == "error: model: invalid model id"   # auch kein Zeilenende am Schluss
 
 
 def test_config_document_needs_a_login(env):

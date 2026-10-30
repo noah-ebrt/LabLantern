@@ -530,3 +530,76 @@ def test_model_listing_and_check_use_a_short_timeout_and_no_retries():
         provider.list_models()
     assert provider.check()["ok"] is False
     assert len(requests) == 2 and all(t["connect"] == 10.0 and t["read"] == 10.0 for t in requests)   # je ein Versuch
+
+
+# ---------- Schlussprüfung: unbrauchbare Endpunkte, Web-Modelle, Adresswechsel ----------
+
+@pytest.mark.parametrize("bad", ["<html>Welcome to nginx</html>", AttributeError("kaputt")])
+def test_get_ai_survives_an_endpoint_that_answers_with_garbage(fakes, bad):
+    env, client, h, ctx = fakes
+    put(client, h, "c1", base_url="http://10.0.0.5:11434/v1", name="Ollama")
+
+    def listing():
+        if isinstance(bad, Exception):
+            raise bad
+        return bad
+
+    ctx.openai_factory = lambda base_url, key: SimpleNamespace(api_key=key, models=SimpleNamespace(list=listing))
+    r = client.get("/api/ai")
+    assert r.status_code == 200
+    row = r.json()["providers"][2]
+    assert row["configured"] is True and row["models"] == []   # Entfernen bleibt erreichbar
+    assert client.delete("/api/ai/providers/c1", headers=h).status_code == 200
+
+
+def test_models_for_never_raises_anything_but_handled_errors(fakes):
+    env, client, h, ctx = fakes
+    put(client, h, "c1", base_url="http://10.0.0.5:11434/v1")
+
+    def boom():
+        raise RuntimeError("unerwartet")
+
+    ctx.openai_factory = lambda base_url, key: SimpleNamespace(api_key=key, models=SimpleNamespace(list=boom))
+    assert aiproviders.models_for(ctx, "c1") == []
+    assert aiproviders.models_for(ctx, "c1", refresh=True) == []
+
+
+def test_explicit_research_ref_needs_a_web_capable_model(fakes):
+    from app.models import put_setting
+
+    env, client, h, ctx = fakes
+    ctx.claude_factory = FakeAnthropic(ids=["claude-3-haiku-20240307", "claude-sonnet-5-5"])
+    ctx.openai_factory = FakeOpenAI(ids=["gpt-5.2", "gpt-5-nano"])
+    put(client, h, "anthropic", api_key=AKEY)
+    put(client, h, "openai", api_key=OKEY)
+    for task in ("research", "verify"):
+        for ref in ("anthropic:claude-3-haiku-20240307", "openai:gpt-5-nano"):
+            with ctx.session_factory() as s:   # am Eingabepfad vorbei gespeichert (alter Stand, importiert)
+                put_setting(s, "ai.tasks", {"classify": "", "research": "", "verify": "", task: ref})
+                s.commit()
+            with pytest.raises(AiError, match="needs a provider with web search"):
+                aiproviders.resolve(ctx, task)
+    with ctx.session_factory() as s:
+        put_setting(s, "ai.tasks", {"classify": "", "research": "anthropic:claude-sonnet-5-5", "verify": "openai:gpt-5.2"})
+        s.commit()
+    assert aiproviders.resolve(ctx, "research")[1] == "claude-sonnet-5-5"
+    assert aiproviders.resolve(ctx, "verify")[1] == "gpt-5.2"
+
+
+def test_changing_the_custom_host_drops_the_stored_key(fakes):
+    env, client, h, ctx = fakes
+    put(client, h, "c1", base_url="http://old.lan:11434/v1", api_key="old-key-GEHEIM")
+    # gleicher Host, anderer Pfad: der Schlüssel bleibt
+    put(client, h, "c1", base_url="http://old.lan:11434/v2")
+    assert ctx.secrets.get("compat.c1.api_key") == "old-key-GEHEIM"
+    # anderer Host ohne neuen Schlüssel: der alte Schlüssel darf nicht mitgehen
+    assert put(client, h, "c1", base_url="http://evil.example:11434/v1").status_code == 200
+    assert client.get("/api/ai").json()["providers"][2]["key"]["set"] is False
+    assert ctx.secrets.get("compat.c1.api_key") is None
+    # anderer Host mit neuem Schlüssel: der neue gilt
+    put(client, h, "c1", base_url="http://new.lan:11434/v1", api_key="new-key-123")
+    put(client, h, "c1", base_url="http://other.lan:11434/v1", api_key="newer-key-456")
+    assert ctx.secrets.get("compat.c1.api_key") == "newer-key-456"
+    with ctx.session_factory() as s:
+        audit = [a.detail for a in s.scalars(select(AuditLog)) if a.action == "ai.provider.saved"]
+    assert "old-key-GEHEIM" not in repr(audit) and any("key removed" in d for d in audit)

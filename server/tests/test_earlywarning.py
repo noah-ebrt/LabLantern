@@ -814,3 +814,24 @@ def test_steps_name_the_fix_of_the_installed_line_and_floating_tags_just_pull():
               "pinned": True, "project": "gitlab-light"}
     ai = {"products": [{"product": "GitLab", "affected": [], "fixed_versions": ["19.5.2", "19.4.4"]}], "mitigations": []}
     assert ew.recommend(ai, [pinned])[0]["text"].startswith("Change the image tag to 19.5.2, then")
+
+
+TWO_RSS = RSS.replace(b"</channel>", b"""<item><guid>gl-2</guid><title>GitLab Patch Release: 19.5.3</title><link>https://example.org/gl2</link>
+<description>Fixes CVE-2026-110265 in GitLab CE/EE.</description></item></channel>""")
+
+
+def test_classify_commits_after_every_advisory(ctx, gitlab_host):
+    """Kein Schreibsperre über mehrere minutenlange Aufrufe: nach jeder Meldung ist ihr Ergebnis festgeschrieben."""
+    claude = use(ctx, Claude(), classify="anthropic:claude-haiku-5-5")
+    seen = []
+    real = claude.create
+
+    def create(**params):
+        with ctx.session_factory() as other:   # eine zweite Verbindung sieht nur Festgeschriebenes
+            seen.append(sorted(w.status for w in other.scalars(select(EarlyWarning))))
+        return real(**params)
+
+    claude.messages = SimpleNamespace(create=create)
+    ew.run_pass(ctx, fetch=lambda url: ew.parse_feed(TWO_RSS))
+    assert len(seen) == 2 and seen[0] == ["pending", "pending"]
+    assert seen[1] != ["pending", "pending"]   # die erste Meldung ist schon gespeichert, bevor die zweite gelesen wird

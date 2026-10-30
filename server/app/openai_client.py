@@ -6,6 +6,7 @@
 
 Texte aus Feeds und Webseiten sind Daten, keine Anweisungen: Sie gehen nur als Nachrichteninhalt hinein, und die
 Antwort wird ausschließlich über das Schema ausgewertet. Bewertet und verglichen wird im Code (earlywarning.py)."""
+import functools
 import json
 import logging
 from datetime import datetime, timezone
@@ -38,8 +39,13 @@ def openai_web(model_id: str) -> bool:
 def make_openai_client(base_url: str, key: str | None, factory: Callable[[str, str], Any] | None = None):
     if factory:
         return factory(base_url, key or "none")
+    # Eigene Endpunkte (Ollama auf schwacher Hardware: ein Aufruf dauert über eine Minute) bekommen eine lange Frist und
+    # keine Wiederholung: das SDK wiederholt auch Zeitüberschreitungen, ein langsamer Aufruf würde sonst 3× so lange
+    # laufen und als „nicht erreichbar“ enden. OpenAI selbst behält Frist und Wiederholungen.
+    own = base_url != OPENAI_BASE
     # Das SDK folgt Weiterleitungen von sich aus; hier nicht: Schlüssel und Anfrage gehen nur an die eingestellte Adresse
-    return openai.OpenAI(api_key=key or "none", base_url=base_url, timeout=120.0, max_retries=2,
+    return openai.OpenAI(api_key=key or "none", base_url=base_url, timeout=600.0 if own else 120.0,
+                         max_retries=0 if own else 2,
                          http_client=openai.DefaultHttpxClient(follow_redirects=False))
 
 
@@ -66,6 +72,22 @@ def _first_object(text: str) -> dict | None:
     return None
 
 
+def _guarded(fn):
+    """Jede Ausnahme eines Aufrufs wird zu AiError: ein Endpunkt, der 200 mit Nicht-JSON liefert (das SDK gibt dann den
+    rohen Text zurück), oder eine sonst unerwartete Antwort darf nie als AttributeError o. Ä. bis in die Oberfläche
+    oder den Lauf der Frühwarnung durchschlagen. Nur der Typ wird protokolliert: Texte können Schlüssel oder Adresse tragen."""
+    @functools.wraps(fn)
+    def wrapper(self, *args, **kwargs):
+        try:
+            return fn(self, *args, **kwargs)
+        except AiError:
+            raise
+        except Exception as e:   # noqa: BLE001 - bewusst alles: die Frühwarnung fängt nur AiError
+            log.warning("%s: unexpected %s from the endpoint", self.pid, type(e).__name__)
+            raise AiError(f"{self.label}: unexpected answer from the endpoint") from None
+    return wrapper
+
+
 class OpenAIProvider:
     """OpenAI oder ein OpenAI-kompatibler Endpunkt hinter der gemeinsamen Anbieter-Schnittstelle (aibase.Provider).
     `compat` = eigener Endpunkt: kein Strict-Schema, JSON-Rückfall ohne Werkzeuge, keine Websuche."""
@@ -89,19 +111,30 @@ class OpenAIProvider:
             raise AiError(short_error(self.label, e.status_code, e.body, self._secret())) from None
         except openai.APIStatusError as e:
             raise AiError(short_error(self.label, e.status_code, e.body, self._secret())) from None
+        except openai.APITimeoutError:
+            raise AiError(f"{self.label}: timed out") from None
         except openai.APIConnectionError:
             raise AiError(f"{self.label}: API unreachable") from None
 
+    @_guarded
+    def _models(self) -> list:
+        """Die Modellliste; eine Antwort, die keine Liste von Modellen ist (z. B. eine HTML-Seite), ist ein Fehler."""
+        models = self._call(lambda: list(quick(self.client).models.list()))
+        if not all(hasattr(m, "id") for m in models):
+            raise AiError(f"{self.label}: unexpected answer from the endpoint")
+        return models
+
     def check(self) -> dict:
         try:
-            self._call(lambda: list(quick(self.client).models.list()))
+            self._models()
             return {"ok": True}
         except AiError as e:
             return {"ok": False, "error": str(e)}
 
+    @_guarded
     def list_models(self) -> list[dict]:
         """Alle Chat-Modelle des Schlüssels (bei eigenen Endpunkten alle gelisteten), neueste zuerst."""
-        models = self._call(lambda: list(quick(self.client).models.list()))
+        models = self._models()
         rows = [(m.id, m.created or 0) for m in models if self.compat or chat_model(m.id)]
         rows.sort(key=lambda r: r[1], reverse=True)
         return [{"id": i, "name": i, "created_at": datetime.fromtimestamp(c, timezone.utc).isoformat() if c else ""}
@@ -114,6 +147,7 @@ class OpenAIProvider:
         limit = {"max_tokens": 8000} if self.compat else {"max_completion_tokens": 16000}
         return self._call(lambda: self.client.chat.completions.create(**params, **limit), soft)
 
+    @_guarded
     def ask_tool(self, model: str, system: str, text: str, tool: dict) -> tuple[dict, dict]:
         """Ein Aufruf mit genau einem Werkzeug. Liefert (Eingabe des Werkzeugs, Archiv ohne Inhalte).
         Eigene Endpunkte ohne Werkzeug-Unterstützung bekommen einmal den Rückfall auf JSON-Ausgabe."""
@@ -163,6 +197,7 @@ class OpenAIProvider:
 
     # ---------- Recherche (nur OpenAI selbst) ----------
 
+    @_guarded
     def research(self, model: str, system: str, text: str, tool: dict, max_searches: int = 15) -> tuple[dict, dict]:
         """Recherche mit Websuche (serverseitig bei OpenAI, Responses-API) in zwei Schritten: erst nur suchen (ohne
         Bericht-Werkzeug kann das Modell die Suche nicht überspringen), dann das Ergebnis über `tool` melden."""

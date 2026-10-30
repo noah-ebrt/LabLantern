@@ -4,6 +4,7 @@ Anbieter: `anthropic`, `openai` und ein eigener OpenAI-kompatibler Endpunkt `c1`
 Aufgaben: classify (Meldung lesen), research und verify (beide brauchen Websuche).
 Es gibt keinen stillen Wechsel zu einem anderen Anbieter: Scheitert eine Aufgabe, wird der Fehler festgehalten.
 """
+import logging
 import re
 import time
 from datetime import datetime, timezone
@@ -20,6 +21,8 @@ from .guards import Guards
 from .models import Setting, put_setting, setting
 from .openai_client import OPENAI_BASE, OpenAIProvider, make_openai_client, openai_web
 
+log = logging.getLogger("vulnwatch.ai")
+
 CLAUDE_SECRET = "claude.api_key"          # Name unverändert: bestehende Installationen behalten ihren Schlüssel
 OPENAI_SECRET = "openai.api_key"
 COMPAT_URL_SECRET = "compat.c1.url"       # die Adresse kann Zugangsdaten tragen (user:pw@, ?token=), ist also ein Geheimnis
@@ -33,11 +36,11 @@ FAILED_TTL = 300                          # nach einem Fehlschlag 5 Minuten nich
 
 CLAUDE_MODEL = "claude-haiku-5-5"         # nur Rückfall, wenn die Modellliste von Anthropic nicht erreichbar ist
 RESEARCH_MODEL = "claude-sonnet-5-5"      # Rückfall für die Web-Recherche
-MODEL_ID = re.compile(r"^claude-[a-z0-9.-]{3,80}$")
+MODEL_ID = re.compile(r"claude-[a-z0-9.-]{3,80}")   # nur mit fullmatch benutzen (`$` ließe ein Zeilenende zu)
 _ANTHROPIC_KEY = re.compile(r"[^\s]{20,400}")
 _OPENAI_KEY = re.compile(r"sk-[A-Za-z0-9_-]{20,300}")
 _COMPAT_KEY = re.compile(r"[^\s]{1,500}")
-_OPENAI_FLAGSHIP = re.compile(r"^gpt-\d+(\.\d+)?$")
+_OPENAI_FLAGSHIP = re.compile(r"gpt-\d+(\.\d+)?")
 
 TASKS = ("classify", "research", "verify")
 WEB_TASKS = ("research", "verify")        # nur mit Anbietern, die im Web suchen können
@@ -117,9 +120,11 @@ def models_for(ctx: Context, pid: str, refresh: bool = False) -> list[dict]:
         try:
             items = provider.list_models()
             if pid == "anthropic":
-                items = [m for m in items if MODEL_ID.match(m["id"])]
+                items = [m for m in items if MODEL_ID.fullmatch(m["id"])]
             cache = {"at": now, "items": items}
-        except AiError:
+        except Exception as e:   # noqa: BLE001 - AiError, aber auch jede Panne eines fremden Endpunkts: nie die Einstellungen sprengen
+            if not isinstance(e, AiError):
+                log.warning("%s: model list failed with %s", pid, type(e).__name__)
             cache = {**cache, "failed_at": now}   # alte Liste behalten, aber nicht bei jedem Aufruf neu anfragen
         with ctx.session_factory() as s:
             put_setting(s, key, cache)
@@ -150,8 +155,8 @@ def resolve(ctx: Context, task: str) -> tuple[Provider, str]:
         provider = provs.get(pid)
         if provider is None or not model:
             raise AiError("no model — provider removed")
-        if task in WEB_TASKS and not provider.web_search:
-            raise AiError("needs a provider with web search")
+        if task in WEB_TASKS and not (provider.web_search and _web(pid, model)):
+            raise AiError("needs a provider with web search")   # Anbieter UND Modell müssen suchen können
         return provider, model
     if not provs:
         raise AiError("no AI provider configured")
@@ -166,7 +171,7 @@ def resolve(ctx: Context, task: str) -> tuple[Provider, str]:
     if "openai" in provs:
         items = models_for(ctx, "openai")
         ids = [m["id"] for m in items if m["web"] or not web]
-        want = (lambda i: "-mini" in i) if task == "classify" else _OPENAI_FLAGSHIP.match
+        want = (lambda i: "-mini" in i) if task == "classify" else _OPENAI_FLAGSHIP.fullmatch
         model = next((i for i in ids if want(i)), None)
         if model:
             return provs["openai"], model
@@ -246,6 +251,12 @@ def clean_url(raw: str) -> tuple[str, str]:
     return raw.strip(), f"{parts.scheme}://{shown_host}{port}{parts.path}"
 
 
+def _host(url: str) -> tuple:
+    """Host und Port einer Adresse; wechselt er, gehört ein gespeicherter Schlüssel nicht mehr dazu."""
+    parts = urlsplit(url.strip())
+    return (parts.hostname or "").lower(), parts.port
+
+
 def _drop_settings(s: Session, *keys: str) -> None:
     for k in keys:
         row = s.get(Setting, k)
@@ -318,6 +329,10 @@ def build_ai_router(ctx: Context, guards: Guards) -> APIRouter:
             if any(c in name for c in "\r\n\t"):
                 raise _invalid("name", "Invalid name")
             if url is not None:
+                old = ctx.secrets.get(COMPAT_URL_SECRET) if ctx.secrets.meta(COMPAT_URL_SECRET)["set"] else None
+                if old is not None and key is None and _host(old) != _host(url) and ctx.secrets.meta(COMPAT_KEY_SECRET)["set"]:
+                    ctx.secrets.delete(COMPAT_KEY_SECRET)   # der alte Schlüssel gehört zum alten Host: nicht an einen neuen schicken
+                    changed.append("key removed")
                 ctx.secrets.set(COMPAT_URL_SECRET, url)
                 changed.append("address")
             if key:

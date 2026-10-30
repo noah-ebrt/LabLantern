@@ -179,3 +179,62 @@ def test_empty_choices_never_raises_index_error():
     c = Client(chat=[empty, chat_reply(content='{"products": ["a"]}')])
     args, archive = OpenAIProvider(c, "c1", "Ollama", True).ask_tool("m", "s", "t", TOOL)
     assert args == {"products": ["a"]} and archive["stop_reason"] == "stop"
+
+
+# ---------- Eigene Endpunkte mit unbrauchbaren Antworten, Zeitgrenzen ----------
+
+class NonJson:
+    """Was das SDK bei einer 200-Antwort ohne JSON liefert: den rohen Text statt eines Objekts."""
+    BODY = "<html>Welcome to nginx</html>"
+
+
+def raw_client(**kw):
+    c = Client(**kw)
+    c.models = SimpleNamespace(list=lambda: NonJson.BODY)
+    c.chat = SimpleNamespace(completions=SimpleNamespace(create=lambda **p: NonJson.BODY))
+    c.responses = SimpleNamespace(create=lambda **p: NonJson.BODY)
+    return c
+
+
+@pytest.mark.parametrize("compat", [True, False])
+def test_non_json_answers_become_ai_errors(compat):
+    p = OpenAIProvider(raw_client(), "c1", "Ollama", compat)
+    with pytest.raises(AiError, match="Ollama: unexpected answer"):
+        p.list_models()
+    assert p.check() == {"ok": False, "error": "Ollama: unexpected answer from the endpoint"}
+    with pytest.raises(AiError, match="Ollama: unexpected answer"):
+        p.ask_tool("m", "s", "t", TOOL)
+    if not compat:
+        with pytest.raises(AiError, match="Ollama: unexpected answer"):
+            p.research("m", "s", "t", TOOL)
+
+
+def test_unexpected_exceptions_become_ai_errors_without_leaking_details():
+    c = Client(chat=[AttributeError(f"'str' object has no attribute 'choices' {KEY}")])
+    with pytest.raises(AiError) as e:
+        OpenAIProvider(c, "c1", "Ollama", True).ask_tool("m", "s", "t", TOOL)
+    assert str(e.value) == "Ollama: unexpected answer from the endpoint" and KEY not in str(e.value)
+    c = Client(responses=[ValueError("kaputt")])
+    with pytest.raises(AiError, match="unexpected answer"):
+        OpenAIProvider(c, "openai", "OpenAI", False).research("gpt-5.2", "s", "t", TOOL)
+
+
+def test_timeout_is_its_own_message():
+    req = httpx2.Request("POST", "http://x/v1/chat/completions")
+    c = Client(chat=[openai.APITimeoutError(request=req)])
+    with pytest.raises(AiError) as e:
+        OpenAIProvider(c, "c1", "Ollama", True).ask_tool("m", "s", "t", TOOL)
+    assert str(e.value) == "Ollama: timed out"
+
+
+def test_custom_endpoints_get_a_long_timeout_and_no_retries_openai_keeps_its_defaults():
+    own = make_openai_client("http://10.0.0.5:11434/v1", None)
+    assert own.timeout == 600.0 and own.max_retries == 0
+    official = make_openai_client(OPENAI_BASE, KEY)
+    assert official.timeout == 120.0 and official.max_retries == 2
+
+
+def test_check_reports_a_garbled_answer_instead_of_raising():
+    c = Client()
+    c.models = SimpleNamespace(list=lambda: 5)   # nicht einmal iterierbar
+    assert OpenAIProvider(c, "c1", "Ollama", True).check() == {"ok": False, "error": "Ollama: unexpected answer from the endpoint"}

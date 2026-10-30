@@ -972,6 +972,7 @@ def run_pass(ctx: Context, fetch=fetch_feed, force_research: bool = False) -> di
                     w.affected, w.actions, w.severity = "[]", "[]", None
                     w.ai_json = json.dumps({**stored, "error": str(e), "at": time.time()})
                 w.classified_at = datetime.now(timezone.utc)
+                s.commit()   # nie eine Schreibsperre über die nächsten, womöglich minutenlangen Aufrufe halten (SQLite)
             state = {"at": time.time(), "feed_errors": feed_errors, "new": new, "ai_calls": calls,
                      "keywords": len({p["keyword"] for p in products})}
             s.commit()
