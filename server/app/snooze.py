@@ -5,7 +5,7 @@ ein Fix erscheint, wo vorher keiner war. Ein zurückgestellter Fund zählt nicht
 gezählt und gezeigt; Finding.status "accepted" ist nur das Abbild der aktiven Snoozes."""
 from datetime import datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 
 from .freshness import DOCKERHUB, parse_ref
 from .models import AuditLog, CoverageExclusion, Finding, Snooze, System
@@ -87,7 +87,9 @@ def apply_snoozes(s, now: datetime, system_id: int | None = None) -> list[dict]:
     by_key: dict[tuple[str, str], list[Snooze]] = {}
     for sn in active:
         by_key.setdefault((sn.cve_id, sn.component), []).append(sn)
-    q = select(Finding).where(Finding.status.in_(("open", "accepted")))
+    # Nur was ein Snooze betreffen kann: offene Funde seiner CVEs und alle zurückgestellten (die Tabelle ist groß)
+    q = select(Finding).where(or_(Finding.status == "accepted",
+                                  and_(Finding.status == "open", Finding.cve_id.in_({sn.cve_id for sn in active}))))
     if system_id is not None:
         q = q.where(Finding.system_id == system_id)
     findings = list(s.scalars(q))
