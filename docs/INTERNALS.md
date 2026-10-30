@@ -25,7 +25,7 @@ State: phase 2 plus rework v4 (2026-10-25).
 | Service | Image | Rights | Talks to |
 |---|---|---|---|
 | `proxy` | `caddy@sha256:…` | read-only, `cap_drop: ALL` + `NET_BIND_SERVICE` | LAN ↔ server; `:8081` (internal only) serves `ca.crt` to the server |
-| `server` | `deploy/Dockerfile` | uid 10001, read-only root fs, `cap_drop: ALL`, `no-new-privileges` | DB, master key, agent releases (read-only), Apprise targets, Anthropic API |
+| `server` | `deploy/Dockerfile` | uid 10001, read-only root fs, `cap_drop: ALL`, `no-new-privileges` | DB, master key, agent releases (read-only), Apprise targets, AI provider APIs (Anthropic, OpenAI, custom endpoint) |
 | `worker` | `deploy/Dockerfile.worker` | same | server API (`/api/worker/*`), Grype DB download |
 | `announce` | server image, `python -m app.announce` | host network (multicast), nothing mounted | LAN multicast |
 
@@ -80,7 +80,7 @@ Agent and worker endpoints don't use cookies. They authenticate with a bearer to
 | `runs_api.py` | findings list/accept, runs list/detail/trigger |
 | `schedule.py` | APScheduler: daily run, 60 s maintenance, hourly release sync; schedule settings API |
 | `releases.py` | take the signed agent releases from `agent-sign`, verify, and serve them |
-| `integrations.py`, `notify.py`, `mail.py` | Apprise channels (mail + push), legacy SMTP, Claude API key |
+| `integrations.py`, `notify.py`, `mail.py` | Apprise channels (mail + push), legacy SMTP, AI provider keys and endpoint |
 | `events.py` | Server-Sent Events: topic names only, published from DB commit hooks |
 | `internal.py` | `/api/internal/tls-allowed` for Caddy's `on_demand_tls ask` |
 | `announce.py` | mDNS announcement (separate container) |
@@ -126,7 +126,7 @@ credentials), then `POST /login/passkey` (assertion, UV required).
 - Each secret gets a fresh 32-byte data key (DEK). `wrapped_dek = AESGCM(master).encrypt(nonce, DEK, aad=name)`
   and `ciphertext = AESGCM(DEK).encrypt(nonce, value, aad=name)`. Using the name as AAD means you can't swap
   rows between names.
-- Contents: TOTP secrets, Apprise URLs, SMTP password, Claude API key, one-time pairing
+- Contents: TOTP secrets, Apprise URLs, SMTP password, AI provider keys and endpoint URL, one-time pairing
   tokens.
 - The API only ever returns `meta()` (`set`, `updated_at`), never values. The validation error handler strips
   submitted input from 422 responses.

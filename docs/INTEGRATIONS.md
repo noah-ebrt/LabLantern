@@ -183,23 +183,28 @@ immediately.
 
 ## AI early warning (optional)
 
-Needs an Anthropic API key (use a dedicated key with a spend limit). It watches what you actually run: container
+Needs an AI provider under **Settings → AI providers**: an Anthropic or OpenAI API key (use a dedicated key with a
+spend limit) or an OpenAI-compatible endpoint such as Ollama. Each task (read feeds, web research, vendor check) has
+its own provider and model under **Models per task**. Reading feeds works with any provider; web research and the
+vendor check need Anthropic or OpenAI, because they use the provider's web search. If a call fails, the task shows the
+provider's own error message (key and address removed). There is no automatic fallback to another provider, and
+entries that could not be read are marked **needs review**. It watches what you actually run: container
 images, operating systems and kernels, network-facing host packages from the agents' SBOMs (Tailscale, OpenSSH,
 OpenSSL, Docker, containerd, sudo, glibc, systemd, Samba, CUPS, nginx, Apache, WireGuard, …) and products you add by
 hand under **Early warnings → Feeds & products**.
 
 **Feeds**, every 2 hours and with every full run. The defaults are global: The Hacker News, BleepingComputer,
 SecurityWeek, oss-security, Tailscale security bulletins, GitLab security releases, heise Security. Only entries from
-the last 30 days that name one of your products go to Claude. Host packages and operating systems must appear in
+the last 30 days that name one of your products go to the AI. Host packages and operating systems must appear in
 the title, because curl or Ubuntu are mentioned in passing all the time. On a vendor's own feed (the feed's domain is
 the product's name, e.g. `tailscale.com`) every entry counts.
 
-**Web research**, once a day (on by default, **Research now** starts one): Claude searches the web worldwide for
+**Web research**, once a day (on by default, **Research now** starts one): the research model searches the web worldwide for
 advisories, security releases and exploitation reports on your products from the last days, so you hear about an
 issue before any feed you added carries it. Default model: latest Sonnet (web search needs a capable model). A pass
 runs up to 15 searches and costs about $0.20–0.40 with Sonnet (roughly $6–12 a month); Haiku is cheaper but finds less. Results that a feed already brought (same link or CVE) are skipped.
 
-For both, Claude only extracts facts through a fixed schema: affected and fixed versions, CVEs, exploited, public
+For both, the AI only extracts facts through a fixed schema: affected and fixed versions, CVEs, exploited, public
 exploit, the severity the source states, the worst impact, and the mitigations it recommends. Everything after that is code:
 
 | Step | Rule |
@@ -212,8 +217,23 @@ exploit, the severity the source states, the worst impact, and the mitigations i
 
 The AI never removes or downgrades a finding. Feed and web content is treated as data, never as instructions.
 
-Model for reading feeds: **Latest Haiku (automatic)** by default, or any model your key can use (Settings → AI). Model
-for the web research: Feeds & products → Daily web research.
+Model for reading feeds: **Latest Haiku (automatic)** by default, or any model your provider offers (Settings → AI
+providers → Models per task). The same page sets the models for the web research and the vendor check.
+
+### Local models with Ollama
+
+Ollama reads feeds on your own hardware, so nothing leaves your network. On the machine that runs Ollama:
+
+1. Make it listen on the network: `OLLAMA_HOST=0.0.0.0:11434` (for the systemd service: `systemctl edit ollama`, add
+   `Environment="OLLAMA_HOST=0.0.0.0:11434"`, restart). Pull a model that supports tool calls, e.g. `ollama pull <model>`.
+2. Allow port 11434 in the firewall for the private network only (never expose Ollama to the internet; it has no login).
+3. In vulnwatch, **Settings → AI providers → OpenAI-compatible**: Base URL `http://<ollama-host>:11434/v1` (note the
+   `/v1`), leave the API key empty, **Save**, then **Test**.
+4. Under **Models per task** pick the Ollama model for reading feeds.
+
+The base URL is stored like a key (the settings page shows only the host). Local models are slower (a 27B model needs a minute or more
+per entry) and read less reliably than the hosted ones; they do not offer web search, so research and the vendor
+check stay on Anthropic or OpenAI.
 
 ## Prometheus metrics (optional)
 
@@ -245,7 +265,7 @@ vulnwatch has no telemetry and no update check of its own. These are the outboun
 | api.cloudflare.com (with Cloudflare Tunnel connected) | every 6 hours | your API token and account ID; it reads the tunnel list and ingress rules |
 | cloudflare-dns.com (with NPM connected) | every 6 hours | the domain names of your proxy routes, except `.lan`, `.home.arpa`, `.local`, `.internal` |
 | Security feeds (AI early warning, optional) | every two hours | nothing: plain feed downloads |
-| Claude API (AI early warning, optional) | daily and per new feed entry | product names and versions, never secrets, addresses or host names |
+| AI provider (Anthropic, OpenAI or your own endpoint; AI early warning, optional) | daily and per new feed entry | product names and versions, never secrets, addresses or host names |
 | Your notification channels and offsite watchdog (optional) | per report, alert, ping | the report or alert text, the ping |
 
 Inside the LAN only: agents, Nginx Proxy Manager, FRITZ!Box, TrueNAS and Home Assistant. Building the images and the

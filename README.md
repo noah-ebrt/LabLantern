@@ -24,7 +24,7 @@ reachable only in your LAN.
   in every run proves the scanner still detects a known vulnerability.
 - **Reports and alerts:** daily report and immediate alerts through Apprise (mail, ntfy, Telegram, Signal, …),
   optional offsite watchdog (Healthchecks, Uptime Kuma or any URL), optional Prometheus metrics.
-- **AI early warning (optional):** global security feeds every two hours plus a daily web search by Claude, narrowed
+- **AI early warning (optional):** global security feeds every two hours plus a daily web search by AI (Anthropic, OpenAI or a local Ollama), narrowed
   to the images, OS and host packages you run. Versions are compared in code. A new hit arrives immediately with
   severity, the command to fix it per host, or the advisory's mitigation when there is no fix yet.
 
@@ -73,7 +73,7 @@ Then, in this order:
    trust the CA first.
 2. **Systems → Add Linux agent:** copy the setup command, run it on the host, compare the pairing code, approve.
 3. **Settings → Notification channels:** add a mail or push channel and send a test.
-4. Optional: offsite watchdog, Nginx Proxy Manager, Claude API key, Prometheus metrics.
+4. Optional: offsite watchdog, Nginx Proxy Manager, AI provider (Anthropic, OpenAI or Ollama), Prometheus metrics.
 
 The first full run starts at the scheduled time (default 03:00) or with **Scan now** on the overview.
 
