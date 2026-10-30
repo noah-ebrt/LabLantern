@@ -343,6 +343,22 @@ useLive(['systems', 'runs', 'findings', 'settings'], loadData, 1000)
           <span class="badge neutral">QUEUED</span> new data, checked in the next run · click a row for details
         </p>
       </div>
+      <div v-if="data.exposure_sources?.length" class="table-wrap" data-test="exposure-sources">
+        <table class="data-table">
+          <thead><tr><th>Exposure source</th><th>Status</th><th>Exposed</th><th>Not matched</th></tr></thead>
+          <tbody>
+            <tr v-for="src in data.exposure_sources" :key="src.key">
+              <td class="strong">{{ src.label }}</td>
+              <td>
+                <span :class="checkClass(src.status)">{{ label(src.status) }}</span>
+                <span class="subtext truncate" :title="src.detail">{{ src.detail }}</span>
+              </td>
+              <td>{{ src.exposed }}</td>
+              <td>{{ src.unmatched }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       <p v-else class="empty">No systems connected yet. <RouterLink to="/systeme">Add a Linux agent</RouterLink></p>
     </section>
   </template>

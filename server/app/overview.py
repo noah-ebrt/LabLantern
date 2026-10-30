@@ -100,6 +100,7 @@ def build_overview_router(ctx: Context, guards: Guards) -> APIRouter:
             "coverage": cov["systems"],
             "coverage_percent": cov["coverage_percent"],
             "excluded_count": cov["excluded_count"],
+            "exposure_sources": cov["exposure_sources"],
             "canary_status": cov["canary_status"],
             "last_run": last_run,
             "active_run": active_run,

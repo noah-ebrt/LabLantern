@@ -333,6 +333,8 @@ def build_agent_router(ctx: Context, guards: Guards) -> APIRouter:
                 raise HTTPException(404, "System not found")
             out = system_dict(system, detail=True, actions=pending_actions(ctx, s))
             out["exposed_auto"] = connector_exposed(s).get(system_id, {})   # NPM/Router: {Name: [Quellen]}
+            from .exposure import exposure_via
+            out["exposed_via"] = exposure_via(s).get(system_id, {})   # {Name: ["via NPM: app.example.com", …]}
             return out
 
     def set_status(system_id: int, status: str, action: str, text: str, found):

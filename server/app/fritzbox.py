@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from .connectors import _URL, PortIndex
+from .connectors import _URL, PortIndex, _note
 from .context import Context
 from .guards import Guards
 from .models import System, put_setting, setting
@@ -78,8 +78,9 @@ def fetch_forwards(url: str, user: str, password: str) -> list[dict]:
     return out
 
 
-def match_forwards(s, forwards: list[dict]) -> tuple[dict[int, list[str]], list[dict]]:
-    """{System-ID: [Containername oder HOST]} und die Freigaben ohne eindeutiges Ziel."""
+def match_forwards(s, forwards: list[dict],
+                   via: dict[int, dict[str, list[str]]] | None = None) -> tuple[dict[int, list[str]], list[dict]]:
+    """{System-ID: [Containername oder HOST]} und die Freigaben ohne eindeutiges Ziel. `via` sammelt die Ports."""
     index = PortIndex(s.scalars(select(System).where(System.status == "active")).all())
     exposed: dict[int, set[str]] = {}
     unmatched = []
@@ -89,6 +90,7 @@ def match_forwards(s, forwards: list[dict]) -> tuple[dict[int, list[str]], list[
         hit = index.match(f["internal_client"], f["internal_port"])
         if isinstance(hit, tuple):
             exposed.setdefault(hit[0], set()).add(hit[1])
+            _note(via, hit[0], hit[1], [f"port {f['external_port']}"])
             continue
         if hit == "no matching container":
             hit = "device is not monitored by vulnwatch"
@@ -99,6 +101,8 @@ def match_forwards(s, forwards: list[dict]) -> tuple[dict[int, list[str]], list[
 
 def refresh_fritz(ctx: Context) -> dict:
     """Liest die Freigaben und speichert die Zuordnung. Ohne Einrichtung: nichts zu tun (kein Fehler)."""
+    from .exposure import last_success
+
     with ctx.session_factory() as s:
         cfg = setting(s, FRITZ_CONFIG)
     password = ctx.secrets.get(FRITZ_SECRET)
@@ -108,15 +112,17 @@ def refresh_fritz(ctx: Context) -> dict:
     try:
         forwards = fetch_forwards(cfg["url"], cfg["user"], password)
         with ctx.session_factory() as s:
-            exposed, unmatched = match_forwards(s, forwards)
-        state.update(ok=True, error="", forwards=len(forwards), exposed={str(k): v for k, v in exposed.items()},
+            via: dict[int, dict[str, list[str]]] = {}
+            exposed, unmatched = match_forwards(s, forwards, via)
+        state.update(ok=True, error="", checked_at=state["at"], forwards=len(forwards),
+                     exposed={str(k): v for k, v in exposed.items()}, via={str(k): v for k, v in via.items()},
                      unmatched=unmatched[:200])
     except FritzError as e:
         with ctx.session_factory() as s:
             old = setting(s, FRITZ_STATE) or {}
         # alte Zuordnung behalten: ein kurzer Ausfall der Box soll nichts herabstufen
         state.update(ok=False, error=str(e)[:300], forwards=old.get("forwards", 0), exposed=old.get("exposed", {}),
-                     unmatched=old.get("unmatched", []))
+                     via=old.get("via", {}), checked_at=last_success(old), unmatched=old.get("unmatched", []))
         log.warning("FRITZ!Box connector: %s", e)
     with ctx.session_factory() as s:
         put_setting(s, FRITZ_STATE, state)

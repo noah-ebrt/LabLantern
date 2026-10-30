@@ -205,6 +205,11 @@ def calculate_coverage_matrix(session: Session, now: datetime | None = None, sbo
                                    .where(Finding.status == "accepted").group_by(Finding.system_id)).all())
     for entry in matrix:
         entry["snoozed"] = snoozed.get(entry["system_id"], 0)
+    # Jede Expositionsquelle ist eine Prüfung: fällt sie aus, ist das eine Lücke, kein "nicht erreichbar"
+    from .exposure import source_rows
+    sources = source_rows(session, now.timestamp())
+    total += len(sources)
+    ok_count += sum(r["status"] == "ok" for r in sources)
     canary_status = latest_run.canary_status if latest_run else "offen"
     return {
         "canary_status": canary_status,
@@ -214,4 +219,5 @@ def calculate_coverage_matrix(session: Session, now: datetime | None = None, sbo
         "excluded_count": excluded,
         "ok_checks": ok_count,
         "systems": matrix,
+        "exposure_sources": sources,
     }

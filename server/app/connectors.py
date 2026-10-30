@@ -155,8 +155,15 @@ class PortIndex:
                 "containers and host services), mark it by hand")
 
 
-def match_hosts(s, hosts: list[dict], npm_system_id: int | None) -> tuple[dict[int, list[str]], list[dict]]:
-    """{System-ID: [Containernamen]} und die Einträge ohne eindeutigen Container."""
+def _note(via: dict | None, sid: int, name: str, details: list[str]) -> None:
+    if via is not None:
+        known = via.setdefault(sid, {}).setdefault(name, [])
+        known.extend(d for d in details if d not in known)
+
+
+def match_hosts(s, hosts: list[dict], npm_system_id: int | None,
+                via: dict[int, dict[str, list[str]]] | None = None) -> tuple[dict[int, list[str]], list[dict]]:
+    """{System-ID: [Containernamen]} und die Einträge ohne eindeutigen Container. `via` sammelt die Domains je Ziel."""
     systems = s.scalars(select(System).where(System.status == "active")).all()
     by_name: dict[str, list[int]] = {}
     for sys in systems:
@@ -176,6 +183,7 @@ def match_hosts(s, hosts: list[dict], npm_system_id: int | None) -> tuple[dict[i
             owners = [npm_system_id]
         if len(owners) == 1:
             exposed.setdefault(owners[0], set()).add(target)
+            _note(via, owners[0], target, h["domains"])
             continue
         host = target
         if target in SAME_HOST and npm_system_id in ids:   # NPM leitet auf den eigenen Docker-Host
@@ -183,6 +191,7 @@ def match_hosts(s, hosts: list[dict], npm_system_id: int | None) -> tuple[dict[i
         hit = index.match(host, h["forward_port"])
         if isinstance(hit, tuple):
             exposed.setdefault(hit[0], set()).add(hit[1])
+            _note(via, hit[0], hit[1], h["domains"])
             continue
         why = "several systems have a container with this name" if owners else hit
         unmatched.append({"domains": h["domains"], "target": f"{target}:{h['forward_port']}", "reason": why})
@@ -191,6 +200,8 @@ def match_hosts(s, hosts: list[dict], npm_system_id: int | None) -> tuple[dict[i
 
 def refresh_npm(ctx: Context) -> dict:
     """Ruft NPM ab und speichert die Zuordnung. Ohne Einrichtung: nichts zu tun (kein Fehler)."""
+    from .exposure import last_success
+
     with ctx.session_factory() as s:
         cfg = setting(s, NPM_CONFIG)
     password = ctx.secrets.get(NPM_SECRET)
@@ -202,12 +213,14 @@ def refresh_npm(ctx: Context) -> dict:
         now = datetime.now(timezone.utc)
         overview, desired = certificate_status(hosts, certs, now)
         with ctx.session_factory() as s:
-            exposed, unmatched = match_hosts(s, hosts, cfg.get("system_id"))
+            via: dict[int, dict[str, list[str]]] = {}
+            exposed, unmatched = match_hosts(s, hosts, cfg.get("system_id"), via)
             npm_system = s.get(System, cfg["system_id"]) if cfg.get("system_id") else None
             if npm_system is not None:   # Funde hängen am Host, auf dem NPM läuft
                 sync_cert_findings(s, npm_system.id, desired, now)
                 s.commit()
-        state.update(ok=True, error="", hosts=len(hosts), exposed={str(k): v for k, v in exposed.items()},
+        state.update(ok=True, error="", checked_at=state["at"], hosts=len(hosts),
+                     exposed={str(k): v for k, v in exposed.items()}, via={str(k): v for k, v in via.items()},
                      unmatched=unmatched[:200], certificates=overview[:200],
                      cert_note="" if npm_system is not None else "choose the host running NPM to get certificate findings")
     except NpmError as e:
@@ -215,7 +228,8 @@ def refresh_npm(ctx: Context) -> dict:
             old = setting(s, NPM_STATE) or {}
         # alte Zuordnung behalten: ein kurzer Ausfall von NPM soll nichts herabstufen
         state.update(ok=False, error=str(e)[:300], hosts=old.get("hosts", 0), exposed=old.get("exposed", {}),
-                     unmatched=old.get("unmatched", []), certificates=old.get("certificates", []))
+                     via=old.get("via", {}), checked_at=last_success(old), unmatched=old.get("unmatched", []),
+                     certificates=old.get("certificates", []))
         log.warning("NPM connector: %s", e)
     with ctx.session_factory() as s:
         put_setting(s, NPM_STATE, state)
@@ -224,15 +238,10 @@ def refresh_npm(ctx: Context) -> dict:
 
 
 def connector_exposed(s) -> dict[int, dict[str, list[str]]]:
-    """{System-ID: {Containername oder HOST: [Quellen]}} aus NPM und Router: automatisch erkannte Erreichbarkeit."""
-    from .fritzbox import FRITZ_STATE
+    """{System-ID: {Containername oder HOST: [Quellen]}} aus allen Quellen (exposure.py)."""
+    from .exposure import connector_exposed as merged
 
-    out: dict[int, dict[str, list[str]]] = {}
-    for key, source in ((NPM_STATE, "NPM"), (FRITZ_STATE, "router")):
-        for sid, names in ((setting(s, key) or {}).get("exposed") or {}).items():
-            for name in names:
-                out.setdefault(int(sid), {}).setdefault(name, []).append(source)
-    return out
+    return merged(s)
 
 
 class NpmIn(BaseModel):

@@ -157,20 +157,11 @@ def sync_findings(s, system_id: int, desired: list[dict], now: datetime) -> tupl
 
 def refresh_versions(ctx: Context) -> dict:
     """Ein Durchgang: NPM- und Router-Expositionen, TrueNAS/Home Assistant, Registry, EOL. Liefert den gespeicherten Zustand."""
-    from .connectors import refresh_npm
-
     if not _lock.acquire(blocking=False):
         return {"busy": True}
     try:
-        try:
-            refresh_npm(ctx)
-        except Exception:  # NPM darf die Produktprüfung nie aufhalten
-            log.exception("NPM refresh failed")
-        try:
-            from .fritzbox import refresh_fritz
-            refresh_fritz(ctx)
-        except Exception:  # der Router ebenso wenig
-            log.exception("FRITZ!Box refresh failed")
+        from .exposure import refresh_all
+        refresh_all(ctx)   # NPM, Router …: jede Quelle für sich, ein Fehler steht dann in der Matrix
         try:
             from .appliances import refresh_appliances
             refresh_appliances(ctx)   # nach NPM: braucht dessen Zuordnung für die Internet-Erreichbarkeit

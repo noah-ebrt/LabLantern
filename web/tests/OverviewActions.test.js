@@ -62,6 +62,18 @@ describe('Overview: what to do and early warnings', () => {
     expect(w.get('[data-test=snoozed]').text()).toContain('3 findings snoozed')
   })
 
+  it('shows a failed exposure source as an error row', async () => {
+    const base = overview
+    const sources = [{ key: 'npm', label: 'NPM', status: 'fehler', detail: 'NPM unreachable; showing the last known mapping', exposed: 4, unmatched: 1 }]
+    vi.stubGlobal('fetch', vi.fn(async (url) => url === '/api/overview' ? json({ ...base(), exposure_sources: sources }) : json([])))
+    const w = mount(OverviewView, { global: { stubs: { RouterLink: true } } })
+    await flushPromises()
+    const row = w.get('[data-test=exposure-sources] tbody tr').text()
+    expect(row).toContain('NPM')
+    expect(row).toContain('ERROR')
+    expect(row).toContain('last known mapping')
+  })
+
   it('hides done steps, offers undo and shows affected early warnings as a bar', async () => {
     const w = mount(OverviewView, { global: { stubs } })
     await flushPromises()

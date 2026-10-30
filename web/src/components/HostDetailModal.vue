@@ -34,7 +34,7 @@ const diff = computed(() => system.value?.containers_expected || { missing: [], 
 const exposed = computed(() => new Set(system.value?.exposed_containers || []))
 // Von NPM bzw. der FRITZ!Box erkannt: gilt ohne Haken, von Hand nicht abwählbar
 const autoExposed = computed(() => system.value?.exposed_auto || {})
-const viaText = (name) => autoExposed.value[name] ? `Detected via ${autoExposed.value[name].join(' and ')}` : ''
+const viaTexts = (name) => system.value?.exposed_via?.[name] || autoExposed.value[name] || []
 function containerState(c) {
   if (diff.value.unknown.includes(c.name)) return { cls: 'warning', text: 'unexpected' }
   if (c.state !== 'running') return { cls: 'neutral', text: c.state }
@@ -178,9 +178,9 @@ useLive(['commands'], loadCommands)
         <span v-if="diff.unknown.length" class="badge warning">unexpected: {{ diff.unknown.join(', ') }}</span>
         <span v-if="!diff.missing.length && !diff.unknown.length" class="subtext">All {{ diff.expected.length }} expected containers are running.</span>
         <button v-if="diff.missing.length || diff.unknown.length" class="btn-sm" @click="acceptContainers">Accept running containers as expected</button>
-        <label class="chk" :title="viaText('(host)') || 'Services of the host itself (not in a container) are reachable from the internet'">
+        <label class="chk" :title="viaTexts('(host)').join(' · ') || 'Services of the host itself (not in a container) are reachable from the internet'">
           <input type="checkbox" :checked="exposed.has('(host)') || !!autoExposed['(host)']" :disabled="!!autoExposed['(host)']" @change="toggleExposed('(host)')" />Host internet-exposed
-          <span v-if="autoExposed['(host)']" class="via">{{ autoExposed['(host)'].join(' · ') }}</span>
+          <span v-if="autoExposed['(host)']" class="via">{{ viaTexts('(host)').join(' · ') }}</span>
         </label>
       </div>
       <p v-if="containerMsg" class="text-danger">{{ containerMsg }}</p>
@@ -207,10 +207,10 @@ useLive(['commands'], loadCommands)
                 </template>
                 <span v-else class="subtext">{{ c.state === 'running' ? 'not checked yet' : '–' }}</span>
               </td>
-              <td class="net" :title="viaText(c.name)">
+              <td class="net" :title="viaTexts(c.name).join(' · ')">
                 <input type="checkbox" :checked="exposed.has(c.name) || !!autoExposed[c.name]" :disabled="!!autoExposed[c.name]"
                        :aria-label="`${c.name} reachable from the internet`" @change="toggleExposed(c.name)" />
-                <span v-if="autoExposed[c.name]" class="via">{{ autoExposed[c.name].join(' · ') }}</span>
+                <span v-if="autoExposed[c.name]" class="via">{{ viaTexts(c.name).join(' · ') }}</span>
               </td>
             </tr>
             <tr v-for="name in diff.missing" :key="`missing-${name}`">
