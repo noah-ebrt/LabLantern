@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -9,8 +9,9 @@ from sqlalchemy.orm import aliased
 
 from .context import Context
 from .guards import Guards
-from .models import Finding, ScanRun, System, SystemScanResult
+from .models import Finding, ScanRun, Snooze, System, SystemScanResult
 from .scanrun import ScanAlreadyActive, enqueue_scan_run, request_scan_run
+from .snooze import apply_snoozes, create_snooze
 
 
 class TriggerIn(BaseModel):
@@ -19,9 +20,22 @@ class TriggerIn(BaseModel):
     mode: Literal["full", "latest"] = "full"
 
 
-class AcceptFindingIn(BaseModel):
+class SnoozeIn(BaseModel):
+    scope: Literal["occurrence", "everywhere"] = "occurrence"
+    until: date   # der Snooze endet am Beginn dieses Tages (UTC)
     reason: str = Field(min_length=3, max_length=500)
-    days: int = Field(default=30, ge=1, le=90)
+
+
+class SnoozeKeyIn(SnoozeIn):
+    """Snooze ohne Fund-ID (Konfiguration als JSON): CVE, Komponente und bei "occurrence" System und Ziel."""
+    cve_id: str = Field(min_length=1, max_length=200)
+    component: str = Field(min_length=1, max_length=300)
+    system_id: int | None = None
+    target: str = Field(default="host", max_length=300)
+
+
+def _until(d: date) -> datetime:
+    return datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
 
 
 def _loads(raw: str) -> dict:
@@ -130,18 +144,61 @@ def build_runs_router(ctx: Context, guards: Guards) -> APIRouter:
                 for f, name in rows
             ]
 
-    @router.post("/findings/{finding_id}/accept")
-    def accept_finding(finding_id: int, body: AcceptFindingIn, found=Depends(guards.require_admin)):
-        user, _ = found
+    # --- Snooze (PLAN-extensions A2): nur Admins, nie die KI ---
+
+    def _create(s, f: Finding, body: SnoozeIn, user) -> int:
+        now = datetime.now(timezone.utc)
+        try:
+            sn = create_snooze(s, f, body.scope, _until(body.until), body.reason, user.username, now)
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from None
+        apply_snoozes(s, now)
+        s.commit()
+        return sn.id
+
+    @router.post("/findings/{finding_id}/snooze")
+    def snooze_finding(finding_id: int, body: SnoozeIn, found=Depends(guards.require_admin)):
         with ctx.session_factory() as s:
             finding = s.get(Finding, finding_id)
-            if not finding:
+            if not finding or finding.status == "resolved":
                 raise HTTPException(404, "Finding not found")
-            finding.status = "accepted"
-            finding.accepted_reason = body.reason
-            finding.accepted_until = datetime.now(timezone.utc) + timedelta(days=body.days)
-            ctx.audit(s, user.username, "finding.accepted",
-                      f"{finding.cve_id} accepted for {body.days} days: {body.reason}")
+            return {"ok": True, "id": _create(s, finding, body, found[0])}
+
+    @router.post("/snoozes")
+    def snooze_by_key(body: SnoozeKeyIn, found=Depends(guards.require_admin)):
+        with ctx.session_factory() as s:
+            if body.scope == "occurrence" and (body.system_id is None or not s.get(System, body.system_id)):
+                raise HTTPException(422, "A snooze for one occurrence needs an existing system")
+            template = Finding(cve_id=body.cve_id, component=body.component, system_id=body.system_id,
+                               target=body.target, severity="info")   # nicht gespeichert, nur als Schlüssel
+            return {"ok": True, "id": _create(s, template, body, found[0])}
+
+    @router.get("/snoozes", dependencies=[Depends(guards.require_session)])
+    def list_snoozes():
+        with ctx.session_factory() as s:
+            names = {sid: name for sid, name in s.execute(select(System.id, System.name))}
+
+            def row(sn: Snooze) -> dict:
+                return {"id": sn.id, "scope": sn.scope, "cve_id": sn.cve_id, "component": sn.component,
+                        "system_id": sn.system_id, "target_key": sn.target_key,
+                        "system_name": "all systems" if sn.system_id is None else names.get(sn.system_id, "?"),
+                        "reason": sn.reason, "until": sn.until.isoformat(), "created_by": sn.created_by,
+                        "ended_at": sn.ended_at.isoformat() if sn.ended_at else None, "end_reason": sn.end_reason}
+            active = s.scalars(select(Snooze).where(Snooze.ended_at.is_(None)).order_by(Snooze.until))
+            ended = s.scalars(select(Snooze).where(Snooze.ended_at.is_not(None))
+                              .order_by(Snooze.ended_at.desc()).limit(20))
+            return {"active": [row(x) for x in active], "ended": [row(x) for x in ended]}
+
+    @router.delete("/snoozes/{snooze_id}")
+    def remove_snooze(snooze_id: int, found=Depends(guards.require_admin)):
+        now = datetime.now(timezone.utc)
+        with ctx.session_factory() as s:
+            sn = s.get(Snooze, snooze_id)
+            if not sn or sn.ended_at is not None:
+                raise HTTPException(404, "Snooze not found")
+            sn.ended_at, sn.end_reason = now, f"removed by {found[0].username}"
+            ctx.audit(s, found[0].username, "snooze.removed", f"{sn.cve_id} in {sn.component}: {sn.reason}")
+            apply_snoozes(s, now)
             s.commit()
         return {"ok": True}
 

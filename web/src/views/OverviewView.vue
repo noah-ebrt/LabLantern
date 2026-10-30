@@ -225,6 +225,10 @@ useLive(['systems', 'runs', 'findings', 'settings'], loadData, 1000)
       </div>
     </section>
 
+    <p v-if="data.snoozed_count" class="subtext snoozed-note" data-test="snoozed">
+      {{ fmt(data.snoozed_count) }} findings snoozed: not counted below, still listed in every report.
+      <RouterLink :to="{ path: '/funde', query: { status: 'accepted' } }">Show them</RouterLink>
+    </p>
     <section class="kpis">
       <RouterLink v-for="l in LEVELS" :key="l.key" :to="{ path: '/funde', query: { severity: l.key } }" class="kpi card" :class="l.key">
         <div class="kpi-header-row">

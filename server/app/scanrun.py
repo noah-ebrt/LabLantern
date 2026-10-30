@@ -22,6 +22,7 @@ from .mailtpl import run_report_html
 from .report import MAX_LISTED_FINDINGS, format_run_report, run_level
 from .reportpolicy import ALERT_LEVELS, get_report_policy, report_decision, set_report_policy
 from .rules import classify_severity
+from .snooze import apply_snoozes, ended_since, snoozed_summary
 
 log = logging.getLogger("vulnwatch.scanrun")
 
@@ -324,6 +325,7 @@ def short_run_notable(info: dict) -> bool:
 def process_scan_result(ctx: Context, job_id: int, result: WorkerResultIn) -> ScanRun:
     now = datetime.now(timezone.utc)
     new_findings: list[dict] = []
+    new_objs: list[Finding] = []
     resolved = reopened = changed = osv_closed = 0
     system_errors: list[tuple[str, str]] = []
     repeat_no_data: list[str] = []
@@ -401,9 +403,11 @@ def process_scan_result(ctx: Context, job_id: int, result: WorkerResultIn) -> Sc
                                   cvss_score=fi.cvss_score, epss_score=fi.epss_score, kev=fi.kev,
                                   source=fi.source, internet_exposed=internet, last_seen_run_id=run.id)
                     if f is None:
-                        s.add(Finding(scan_run_id=run.id, system_id=sid, cve_id=fi.cve_id, target=fi.target,
-                                      component=fi.component, installed_version=fi.installed_version,
-                                      status="open", **fields))
+                        nf = Finding(scan_run_id=run.id, system_id=sid, cve_id=fi.cve_id, target=fi.target,
+                                     component=fi.component, installed_version=fi.installed_version,
+                                     status="open", **fields)
+                        s.add(nf)
+                        new_objs.append(nf)
                         new_findings.append({"cve_id": fi.cve_id, "component": fi.component,
                                              "installed_version": fi.installed_version,
                                              "fixed_version": fi.fixed_version, "severity": sev,
@@ -413,9 +417,6 @@ def process_scan_result(ctx: Context, job_id: int, result: WorkerResultIn) -> Sc
                             changed += 1
                         for k, v in fields.items():
                             setattr(f, k, v)
-                        until = f.accepted_until
-                        if f.status == "accepted" and until is not None and until <= now:
-                            f.status, reopened = "open", reopened + 1
                 # Was in diesem Lauf nicht geprüft wurde, bleibt offen: Images ohne SBOM oder mit Fehler, und Funde nur
                 # aus OSV, wenn OSV ausfiel. Sonst wären sie jetzt „behoben“ und kämen im nächsten Lauf als „neu“.
                 errors = r.image_errors if r else {}
@@ -440,6 +441,11 @@ def process_scan_result(ctx: Context, job_id: int, result: WorkerResultIn) -> Sc
             run.status = "partial" if system_errors else "success"
             if system_errors:
                 run.error = f"{len(system_errors)} system(s) not checked"
+        # Snoozes nach dem Abgleich: neue Funde unter einem Snooze sind nicht "neu", beendete kommen zurück
+        apply_snoozes(s, now)
+        new_findings = [d for d, nf in zip(new_findings, new_objs) if nf.status == "open"]
+        snooze_ended = ended_since(s, previous_finished, now)
+        reopened = len(snooze_ended)
         s.flush()
         run.summary_counts = json.dumps(_counts(s))
         run.config_version = config_version(s)
@@ -456,6 +462,7 @@ def process_scan_result(ctx: Context, job_id: int, result: WorkerResultIn) -> Sc
             "osv_closed_count": osv_closed,
             "repeat_no_data": repeat_no_data, "sharp_drops": sharp_drops, "config_version": run.config_version,
             "early_warnings": warnings_since(s, previous_finished),
+            "snoozed": snoozed_summary(s), "snooze_ended": snooze_ended,
         }
         run_id = run.id
     info["archive_status"] = archive_run(ctx, run_id, result.model_dump_json().encode(),

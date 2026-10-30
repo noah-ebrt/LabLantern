@@ -5,6 +5,7 @@ import pytest
 from sqlalchemy import select
 
 from app.models import Finding, ScanJob, ScanRun, System, SystemScanResult
+from app.snooze import apply_snoozes, create_snooze
 from app.scanrun import (
     JOB_TIMEOUT,
     JobStateError,
@@ -221,7 +222,9 @@ def test_accepted_finding_that_disappears_is_resolved_too(ctx):
     run_once(ctx, [(sid, [raw()], None)])
     with ctx.session_factory() as s:
         f = s.scalar(select(Finding))
-        f.status, f.accepted_until = "accepted", datetime.now(timezone.utc) + timedelta(days=5)
+        create_snooze(s, f, "occurrence", datetime.now(timezone.utc) + timedelta(days=5), "patch planned", "noah",
+                      datetime.now(timezone.utc))
+        apply_snoozes(s, datetime.now(timezone.utc))
         s.commit()
     run_once(ctx, [(sid, [], None)])
     assert findings(ctx)[0].status == "resolved"
@@ -232,7 +235,10 @@ def test_accepted_finding_reappears_after_expiry(ctx):
     run_once(ctx, [(sid, [raw()], None)])
     with ctx.session_factory() as s:
         f = s.scalar(select(Finding))
-        f.status, f.accepted_until = "accepted", datetime.now(timezone.utc) - timedelta(days=1)
+        sn = create_snooze(s, f, "occurrence", datetime.now(timezone.utc) + timedelta(days=1), "patch planned", "noah",
+                           datetime.now(timezone.utc))
+        apply_snoozes(s, datetime.now(timezone.utc))
+        sn.until = datetime.now(timezone.utc) - timedelta(days=1)   # inzwischen abgelaufen
         s.commit()
     run_once(ctx, [(sid, [raw()], None)])
     assert findings(ctx)[0].status == "open"
@@ -243,7 +249,9 @@ def test_still_valid_acceptance_stays_accepted(ctx):
     run_once(ctx, [(sid, [raw()], None)])
     with ctx.session_factory() as s:
         f = s.scalar(select(Finding))
-        f.status, f.accepted_until = "accepted", datetime.now(timezone.utc) + timedelta(days=5)
+        create_snooze(s, f, "occurrence", datetime.now(timezone.utc) + timedelta(days=5), "patch planned", "noah",
+                      datetime.now(timezone.utc))
+        apply_snoozes(s, datetime.now(timezone.utc))
         s.commit()
     run_once(ctx, [(sid, [raw()], None)])
     assert findings(ctx)[0].status == "accepted"

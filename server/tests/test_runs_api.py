@@ -70,13 +70,16 @@ def test_findings_list_and_filters(admin):
     assert [f["cve_id"] for f in client.get("/api/findings?severity=kritisch").json()] == ["CVE-2021-44228"]
 
 
-def test_accept_requires_reason_and_limits_days(admin):
+def test_snooze_requires_reason_and_limits_days(admin):
+    from datetime import date, timedelta
     env, client, h = admin
     finished_run(env)
     fid = client.get("/api/findings").json()[0]["id"]
-    assert client.post(f"/api/findings/{fid}/accept", headers=h, json={"reason": "x", "days": 30}).status_code == 422
-    assert client.post(f"/api/findings/{fid}/accept", headers=h, json={"reason": "Wartungsfenster", "days": 91}).status_code == 422
-    r = client.post(f"/api/findings/{fid}/accept", headers=h, json={"reason": "Wartungsfenster", "days": 14})
+    day = lambda n: (date.today() + timedelta(days=n)).isoformat()   # noqa: E731
+    assert client.post(f"/api/findings/{fid}/snooze", headers=h, json={"reason": "x", "until": day(30)}).status_code == 422
+    assert client.post(f"/api/findings/{fid}/snooze", headers=h,
+                       json={"reason": "Wartungsfenster", "until": day(182)}).status_code == 422
+    r = client.post(f"/api/findings/{fid}/snooze", headers=h, json={"reason": "Wartungsfenster", "until": day(14)})
     assert r.status_code == 200
     acc = client.get("/api/findings?status=accepted").json()
     assert len(acc) == 1 and acc[0]["accepted_until"] and "Wartungsfenster" in acc[0]["accepted_reason"]

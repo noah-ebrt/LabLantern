@@ -20,7 +20,7 @@ const loading = ref(false)
 const error = ref('')
 
 const filterSeverity = ref(route.query.severity || '')
-const filterStatus = ref('open')
+const filterStatus = ref(route.query.status || 'open')
 const filterSource = ref(route.query.source || '')
 const onlyKev = ref(route.query.kev === 'true')
 const onlyExposed = ref(false)
@@ -47,13 +47,15 @@ async function copyCommand(f) {
   } catch { /* ohne Clipboard-Rechte bleibt der Befehl markierbar */ }
 }
 
-// Accept Modal State
-const showAcceptModal = ref(false)
+// Snooze: zurückstellen bis zu einem Datum (max. 180 Tage), mit Grund; endet von selbst bei KEV, höherer Einstufung, Fix
+const showSnoozeModal = ref(false)
 const selectedFinding = ref(null)
-const acceptReason = ref('')
-const acceptDays = ref(30)
-const acceptError = ref('')
-const acceptSaving = ref(false)
+const snoozeReason = ref('')
+const snoozeScope = ref('occurrence')
+const snoozeUntil = ref('')
+const snoozeError = ref('')
+const snoozeSaving = ref(false)
+const isoDay = (days) => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10)
 
 async function loadFindings() {
   loading.value = true
@@ -78,32 +80,34 @@ async function loadFindings() {
   }
 }
 
-function openAccept(finding) {
+function openSnooze(finding) {
   selectedFinding.value = finding
-  acceptReason.value = ''
-  acceptDays.value = 30
-  acceptError.value = ''
-  showAcceptModal.value = true
+  snoozeReason.value = ''
+  snoozeScope.value = 'occurrence'
+  snoozeUntil.value = isoDay(30)
+  snoozeError.value = ''
+  showSnoozeModal.value = true
 }
 
-async function submitAccept() {
-  if (!acceptReason.value || acceptReason.value.length < 3) {
-    acceptError.value = 'Please give a meaningful reason.'
+async function submitSnooze() {
+  if (!snoozeReason.value || snoozeReason.value.length < 3) {
+    snoozeError.value = 'Please give a meaningful reason.'
     return
   }
-  acceptSaving.value = true
-  acceptError.value = ''
+  snoozeSaving.value = true
+  snoozeError.value = ''
   try {
-    await api.post(`/api/findings/${selectedFinding.value.id}/accept`, {
-      reason: acceptReason.value,
-      days: Number(acceptDays.value),
+    await api.post(`/api/findings/${selectedFinding.value.id}/snooze`, {
+      scope: snoozeScope.value,
+      until: snoozeUntil.value,
+      reason: snoozeReason.value,
     })
-    showAcceptModal.value = false
+    showSnoozeModal.value = false
     await loadFindings()
   } catch (e) {
-    acceptError.value = e.message
+    snoozeError.value = e.message
   } finally {
-    acceptSaving.value = false
+    snoozeSaving.value = false
   }
 }
 
@@ -172,7 +176,7 @@ onMounted(async () => {
       </form>
       <select v-model="filterStatus" aria-label="Status" @change="applyFilters">
         <option value="open">Open</option>
-        <option value="accepted">Accepted</option>
+        <option value="accepted">Snoozed</option>
         <option value="all">All</option>
       </select>
       <select v-model="filterSource" aria-label="Source" @change="applyFilters">
@@ -231,12 +235,12 @@ onMounted(async () => {
               <span v-else class="text-muted">none yet</span>
             </td>
             <td>
-              <span v-if="f.status === 'accepted'" class="badge accepted" :title="`Until ${f.accepted_until?.slice(0, 10)}: ${f.accepted_reason}`">Accepted</span>
+              <span v-if="f.status === 'accepted'" class="badge accepted" :title="`Until ${f.accepted_until?.slice(0, 10)}: ${f.accepted_reason}`">Snoozed</span>
               <span v-else class="badge open">Open</span>
             </td>
             <td class="row-action">
               <button v-if="f.action" class="btn-sm" :aria-expanded="openAction === f.id" @click="openAction = openAction === f.id ? null : f.id">How to fix</button>
-              <button v-if="f.status === 'open'" class="btn-sm" @click="openAccept(f)">Accept</button>
+              <button v-if="f.status === 'open'" class="btn-sm" data-test="snooze" @click="openSnooze(f)">Snooze</button>
               <span v-else class="subtext">until {{ f.accepted_until?.slice(0, 10) }}</span>
             </td>
           </tr>
@@ -265,34 +269,38 @@ onMounted(async () => {
     </footer>
   </section>
 
-  <!-- Accept Risk Modal -->
-  <Modal v-if="showAcceptModal" :footer="false" @close="showAcceptModal = false">
-    <h2>Accept risk: {{ selectedFinding?.cve_id }}</h2>
+  <!-- Snooze -->
+  <Modal v-if="showSnoozeModal" :footer="false" @close="showSnoozeModal = false">
+    <h2>Snooze {{ selectedFinding?.cve_id }}</h2>
     <p class="subtitle">System: {{ selectedFinding?.system_name }} · Component: {{ selectedFinding?.component }}</p>
 
-    <p v-if="acceptError" class="message error">{{ acceptError }}</p>
+    <p v-if="snoozeError" class="message error">{{ snoozeError }}</p>
 
-    <form @submit.prevent="submitAccept">
+    <form class="snooze" @submit.prevent="submitSnooze">
+      <fieldset>
+        <legend>Applies to</legend>
+        <label class="radio"><input v-model="snoozeScope" type="radio" name="snooze_scope" value="occurrence" />
+          only this occurrence ({{ selectedFinding?.system_name }}{{ selectedFinding?.target !== 'host' ? ', this image in any version' : '' }})</label>
+        <label class="radio"><input v-model="snoozeScope" type="radio" name="snooze_scope" value="everywhere" />
+          everywhere: this CVE in {{ selectedFinding?.component }} on all systems, also new ones</label>
+      </fieldset>
+
       <label>
-        Required reason (why can this stay open for now?):
-        <textarea v-model="acceptReason" rows="3" required placeholder="e.g. service only reachable in an isolated VLAN; patch planned for next maintenance window." />
+        Until (max. 180 days):
+        <input v-model="snoozeUntil" type="date" name="snooze_until" required :min="isoDay(1)" :max="isoDay(180)" />
       </label>
 
       <label>
-        Valid for (max. 90 days):
-        <select v-model="acceptDays">
-          <option :value="7">7 days</option>
-          <option :value="14">14 days</option>
-          <option :value="30">30 days</option>
-          <option :value="60">60 days</option>
-          <option :value="90">90 days (maximum)</option>
-        </select>
+        Required reason (why can this wait?):
+        <textarea v-model="snoozeReason" name="snooze_reason" rows="3" required placeholder="e.g. service only reachable in an isolated VLAN; patch planned for next maintenance window." />
       </label>
+
+      <p class="subtext">The finding stays in every report under "Snoozed" and no longer raises the alert level. It comes back by itself on that date, or earlier if the CVE lands on the KEV list, its rating goes up, or a fix appears.</p>
 
       <div class="modal-actions">
-        <button type="button" class="secondary" @click="showAcceptModal = false">Cancel</button>
-        <button type="submit" class="primary" :disabled="acceptSaving">
-          {{ acceptSaving ? 'Saving…' : 'Confirm risk' }}
+        <button type="button" class="secondary" @click="showSnoozeModal = false">Cancel</button>
+        <button type="submit" class="primary" :disabled="snoozeSaving">
+          {{ snoozeSaving ? 'Saving…' : 'Snooze' }}
         </button>
       </div>
     </form>
@@ -300,6 +308,10 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.snooze fieldset { border: 0; padding: 0; margin: 0 0 0.9rem; }
+.snooze legend { font-size: 0.85rem; margin-bottom: 0.35rem; }
+.snooze .radio { display: flex; gap: 0.5rem; align-items: baseline; font-size: 0.88rem; margin-bottom: 0.3rem; }
+.snooze .radio input { width: auto; }
 .toolbar { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin-bottom: 1.1rem; }
 .toolbar select { width: auto; }
 .chk { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.85rem; color: var(--muted); white-space: nowrap; }

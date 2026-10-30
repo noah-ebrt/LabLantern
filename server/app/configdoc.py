@@ -15,6 +15,8 @@ from pydantic import ValidationError
 
 from .context import Context
 from .guards import Guards
+from sqlalchemy import select
+
 from .models import setting
 
 
@@ -38,7 +40,7 @@ def build_config_router(ctx: Context, guards: Guards, routers: list[APIRouter]) 
     from .fritzbox import FRITZ_CONFIG, FRITZ_SECRET
     from .integrations import MODEL_KEY
     from .integrity import drop_config
-    from .models import System
+    from .models import Snooze, System
     from .notify import load_channels
     from .reportpolicy import get_report_policy
     from .schedule import get_schedule, get_short_schedule, get_timezone
@@ -157,6 +159,34 @@ def build_config_router(ctx: Context, guards: Guards, routers: list[APIRouter]) 
             elif c != now[sid]:
                 call(found, "PUT", "/settings/appliances/{sid}", body, sid=sid)
 
+    def read_snoozes(s):
+        names = {x.id: x.name for x in s.scalars(select(System))}
+        return [{"id": sn.id, "scope": sn.scope, "cve_id": sn.cve_id, "component": sn.component,
+                 "system": names.get(sn.system_id) if sn.system_id else None, "target": sn.target_key or "host",
+                 "until": sn.until.date().isoformat(), "reason": sn.reason}
+                for sn in s.scalars(select(Snooze).where(Snooze.ended_at.is_(None)).order_by(Snooze.id))]
+
+    def write_snoozes(found, value, current):
+        """Mit id: bleibt (unverändert), ohne id: neu, fehlende: entfernt. Ändern = id weglassen und neu anlegen."""
+        if not isinstance(value, list) or not all(isinstance(x, dict) for x in value):
+            raise SectionError("must be a list of objects")
+        now = {x["id"]: x for x in current}
+        keep = {x["id"] for x in value if x.get("id") is not None}
+        for x in value:
+            if x.get("id") is not None and now.get(x["id"]) != x:
+                raise SectionError(f"snooze {x['id']} cannot be changed: leave out its id to create it anew")
+        for sid in now.keys() - keep:
+            call(found, "DELETE", "/snoozes/{snooze_id}", snooze_id=sid)
+        with ctx.session_factory() as s:
+            ids = {x.name: x.id for x in s.scalars(select(System))}
+        for x in value:
+            if x.get("id") is None:
+                if x.get("system") is not None and x["system"] not in ids:
+                    raise SectionError(f"no system named {x['system']!r}")
+                body = {k: x.get(k) for k in ("scope", "cve_id", "component", "until", "reason")}
+                call(found, "POST", "/snoozes", {**body, "target": x.get("target") or "host",
+                                                 "system_id": ids.get(x.get("system"))})
+
     sections = {   # Name: (lesen, schreiben); Reihenfolge = Reihenfolge im Dokument
         "schedule": (lambda s: {k: get_schedule(ctx)[k] for k in ("enabled", "time")}, simple("/settings/schedule")),
         "short_schedule": (lambda s: {k: get_short_schedule(ctx)[k] for k in ("enabled", "hours")},
@@ -174,6 +204,7 @@ def build_config_router(ctx: Context, guards: Guards, routers: list[APIRouter]) 
         "npm": (read_npm, write_npm),
         "fritzbox": (read_fritzbox, write_fritzbox),
         "appliances": (read_appliances, write_appliances),
+        "snoozes": (read_snoozes, write_snoozes),
     }
 
     def document() -> dict:

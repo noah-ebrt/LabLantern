@@ -101,8 +101,16 @@ def format_run_report(info: dict[str, Any]) -> tuple[str, str]:
         if len(shown_pool) > MAX_LISTED_FINDINGS:
             lines.append(f"  … and {len(shown_pool) - MAX_LISTED_FINDINGS} more critical/high findings (see the web UI)")
         lines.append("")
-    if info.get("reopened_count"):
-        lines.append(f"Reopened (acceptance expired): {info['reopened_count']}")
+    snoozed = info.get("snoozed") or {}
+    if snoozed.get("count") or snoozed.get("items"):
+        # Zurückgestellt heißt nicht erledigt: jeder Snooze steht mit Grund und Ablauf im Bericht
+        lines.append(f"Snoozed ({snoozed.get('count', 0)}):")
+        lines += [f"  - {x['cve_id']} in {x['component']} on {x['system_name']} ({x['findings']} finding(s)) "
+                  f"until {x['until']}: {x['reason']}" for x in snoozed.get("items") or []]
+        lines.append("")
+    for x in info.get("snooze_ended") or []:
+        lines.append(f"Back: {x['cve_id']} in {x['component']} on {x['system_name']} – snooze ended: "
+                     f"{x['end_reason']} (reason was: {x['reason']})")
     if info.get("resolved_count"):
         lines.append(f"Resolved since last run: {info['resolved_count']}")
     if info.get("osv_closed_count"):

@@ -46,6 +46,7 @@ def build_overview_router(ctx: Context, guards: Guards) -> APIRouter:
                                     .where(Finding.status == "open").group_by(Finding.severity)):
                 if sev in counts:
                     counts[sev] = n
+            snoozed_count = s.scalar(select(func.count(Finding.id)).where(Finding.status == "accepted"))
             from .runs_api import fixable_now
             fixable = dict.fromkeys(counts, 0)   # davon jetzt per Update behebbar, siehe fixable_now
             for sev, n in s.execute(select(Finding.severity, func.count(Finding.id))
@@ -94,6 +95,7 @@ def build_overview_router(ctx: Context, guards: Guards) -> APIRouter:
             "early_warning_hits": warnings_hit,   # eigene Leiste auf der Übersicht
             "updates": pending_updates(ctx),      # ebenso: Agent-Updates und Sicherheitsupdates der Hosts
             "findings": counts,
+            "snoozed_count": snoozed_count,
             "fixable": fixable,
             "coverage": cov["systems"],
             "coverage_percent": cov["coverage_percent"],

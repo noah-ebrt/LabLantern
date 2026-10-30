@@ -146,12 +146,12 @@ def sync_findings(s, system_id: int, desired: list[dict], now: datetime) -> tupl
         else:
             for k, v in d.items():
                 setattr(f, k, v)
-            if f.status == "accepted" and f.accepted_until is not None and f.accepted_until <= now:
-                f.status = "open"
     for key, f in existing.items():
         if key not in seen:
             f.status, f.resolved_at = "resolved", now
             resolved += 1
+    from .snooze import apply_snoozes
+    apply_snoozes(s, now, system_id)
     return new, resolved
 
 

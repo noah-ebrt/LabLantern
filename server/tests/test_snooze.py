@@ -121,3 +121,117 @@ def test_migrate_accepted_findings(tmp_path):
             ("occurrence", "old accept", "image:docker.io/library/nginx", "hoch")
         assert abs((sn.until - until).total_seconds()) < 1
     assert transfer_accepted_findings is not None
+
+
+# ---------- im Lauf, im Bericht, in der API (Task 2.2) ----------
+
+from test_scan_flow import Notes, make_system, raw, run_once  # noqa: E402
+
+
+def _snooze_api(client, h, finding_id, days=30, scope="occurrence", reason="isolated VLAN, patch planned"):
+    until = (datetime.now(timezone.utc) + timedelta(days=days)).date().isoformat()
+    return client.post(f"/api/findings/{finding_id}/snooze", headers=h,
+                       json={"scope": scope, "until": until, "reason": reason})
+
+
+def _first_finding(ctx):
+    with ctx.session_factory() as s:
+        return s.scalar(select(Finding))
+
+
+def test_snoozed_not_in_alert_rating_but_in_report(admin):
+    env, client, h = admin
+    ctx = env.app.state.ctx
+    ctx.notifier = Notes()
+    sid = make_system(ctx)
+    critical = raw(kev=True, cvss=10, cve="CVE-2021-44228")
+    run_once(ctx, [(sid, [critical], None)])
+    assert ctx.notifier.sent[-1][0].startswith("[ALERT]")
+    assert _snooze_api(client, h, _first_finding(ctx).id).status_code == 200
+    run_once(ctx, [(sid, [critical], None)])
+    title, body = ctx.notifier.sent[-1]
+    assert title.startswith("[OK]")
+    assert "Snoozed (1)" in body and "isolated VLAN, patch planned" in body
+    assert _first_finding(ctx).status == "accepted"
+
+
+def test_snooze_ended_in_report(admin):
+    env, client, h = admin
+    ctx = env.app.state.ctx
+    ctx.notifier = Notes()
+    sid = make_system(ctx)
+    run_once(ctx, [(sid, [raw(cvss=5.0, label="Medium")], None)])
+    assert _snooze_api(client, h, _first_finding(ctx).id).status_code == 200
+    run_once(ctx, [(sid, [raw(cvss=5.0, label="Medium", kev=True)], None)])
+    body = ctx.notifier.sent[-1][1]
+    assert "snooze ended: now on the KEV list" in body and _first_finding(ctx).status == "open"
+
+
+def test_everywhere_snooze_hides_new_host_finding_from_new_findings(admin):
+    env, client, h = admin
+    ctx = env.app.state.ctx
+    ctx.notifier = Notes()
+    a = make_system(ctx, "host-a")
+    run_once(ctx, [(a, [raw()], None)])
+    assert _snooze_api(client, h, _first_finding(ctx).id, scope="everywhere").status_code == 200
+    b = make_system(ctx, "host-b")
+    run_once(ctx, [(a, [raw()], None), (b, [raw()], None)])
+    body = ctx.notifier.sent[-1][1]
+    assert "New findings" not in body and "Snoozed (2)" in body
+
+
+def test_snooze_limits_and_rights(admin):
+    env, client, h = admin
+    ctx = env.app.state.ctx
+    ctx.notifier = Notes()
+    run_once(ctx, [(make_system(ctx), [raw()], None)])
+    fid = _first_finding(ctx).id
+    assert _snooze_api(client, h, fid, days=181).status_code == 422
+    assert _snooze_api(client, h, fid, reason="x").status_code == 422
+    assert _snooze_api(client, h, 99999).status_code == 404
+    assert _snooze_api(env.new_client(), {}, fid).status_code in (401, 403)
+    assert client.post(f"/api/findings/{fid}/accept", headers=h, json={"reason": "old", "days": 5}).status_code == 404
+
+
+def test_list_and_remove_snooze(admin):
+    env, client, h = admin
+    ctx = env.app.state.ctx
+    ctx.notifier = Notes()
+    run_once(ctx, [(make_system(ctx), [raw()], None)])
+    assert _snooze_api(client, h, _first_finding(ctx).id).status_code == 200
+    [sn] = client.get("/api/snoozes").json()["active"]
+    assert sn["system_name"] == "host-c" and sn["scope"] == "occurrence"
+    assert client.delete(f"/api/snoozes/{sn['id']}", headers=h).status_code == 200
+    assert client.get("/api/snoozes").json()["active"] == []
+    assert _first_finding(ctx).status == "open"
+    with ctx.session_factory() as s:
+        assert {a.action for a in s.scalars(select(AuditLog))} >= {"finding.snoozed", "snooze.removed"}
+
+
+def test_overview_counts_snoozed(admin):
+    env, client, h = admin
+    ctx = env.app.state.ctx
+    ctx.notifier = Notes()
+    run_once(ctx, [(make_system(ctx), [raw(kev=True, cvss=10)], None)])
+    assert _snooze_api(client, h, _first_finding(ctx).id).status_code == 200
+    ov = client.get("/api/overview").json()
+    assert ov["snoozed_count"] == 1 and ov["findings"]["kritisch"] == 0
+    assert ov["coverage"][0]["snoozed"] == 1
+
+
+def test_configdoc_roundtrip_snoozes(admin):
+    env, client, h = admin
+    ctx = env.app.state.ctx
+    ctx.notifier = Notes()
+    run_once(ctx, [(make_system(ctx), [raw(), raw(cve="CVE-2026-7777")], None)])
+    assert _snooze_api(client, h, _first_finding(ctx).id).status_code == 200
+    doc = client.get("/api/settings/config").json()
+    [sn] = doc["snoozes"]
+    assert sn["system"] == "host-c" and sn["cve_id"] == "CVE-2024-1234" and sn["id"]
+    until = (datetime.now(timezone.utc) + timedelta(days=10)).date().isoformat()
+    doc["snoozes"] = [{"scope": "everywhere", "cve_id": "CVE-2026-7777", "component": "libtest", "system": None,
+                       "target": "host", "until": until, "reason": "imported from the backup"}]
+    r = client.put("/api/settings/config", headers=h, json=doc).json()
+    assert r["ok"], r
+    active = client.get("/api/snoozes").json()["active"]
+    assert [(x["cve_id"], x["scope"]) for x in active] == [("CVE-2026-7777", "everywhere")]

@@ -157,7 +157,7 @@ def run_report_html(subject: str, info: dict[str, Any], max_findings: int) -> st
     if info.get("resolved_count"):
         lede_bits.append(f'{info["resolved_count"]:,} resolved since the last run')
     if info.get("reopened_count"):
-        lede_bits.append(f'{info["reopened_count"]:,} reopened after their acceptance expired')
+        lede_bits.append(f'{info["reopened_count"]:,} snooze(s) ended')
     sections = [section("Open findings", _severity_row(summary, per_new))]
 
     health = [_kv("Canary test", _state(info["canary_ok"], "Green", "Red", info.get("canary_message", ""))),
@@ -193,6 +193,17 @@ def run_report_html(subject: str, info: dict[str, Any], max_findings: int) -> st
             rows += (f'<tr><td></td><td style="padding:10px 0;border-top:1px solid {LINE};font-size:13px;color:{MUTED}">'
                      f'{len(pool) - max_findings:,} more critical or high findings in the web UI</td></tr>')
         sections.append(section("New critical and high findings", _table(rows), f"{len(pool):,}"))
+
+    snoozed = info.get("snoozed") or {}
+    back = info.get("snooze_ended") or []
+    if snoozed.get("items") or back:
+        rows = "".join(_kv(f'{x["cve_id"]} · {x["system_name"]}',
+                           f'<span style="color:{CRIT}">snooze ended: {e(x["end_reason"])}</span>'
+                           f' <span style="color:{MUTED}">· {e(x["reason"])}</span>') for x in back)
+        rows += "".join(_kv(f'{x["cve_id"]} · {x["system_name"]}',
+                            f'until {e(x["until"])} <span style="color:{MUTED}">· {e(x["reason"])}</span>')
+                        for x in snoozed.get("items") or [])
+        sections.append(section("Snoozed", _table(rows), f'{snoozed.get("count", 0):,}'))
 
     ew = info.get("early_warnings") or {}
     c = ew.get("counts") or {}

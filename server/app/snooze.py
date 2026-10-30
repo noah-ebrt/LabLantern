@@ -75,14 +75,18 @@ def create_snooze(s, f: Finding, scope: str, until: datetime, reason: str, actor
     return sn
 
 
-def apply_snoozes(s, now: datetime) -> list[dict]:
+def apply_snoozes(s, now: datetime, system_id: int | None = None) -> list[dict]:
     """Beendet fällige Snoozes und setzt jeden offenen oder zurückgestellten Fund auf den passenden Status.
-    Gibt die beendeten Snoozes für den Bericht zurück."""
+    Mit `system_id` nur die Funde dieses Systems (Connectoren). Gibt die beendeten Snoozes zurück."""
+    s.flush()
     active = list(s.scalars(select(Snooze).where(Snooze.ended_at.is_(None))))
     by_key: dict[tuple[str, str], list[Snooze]] = {}
     for sn in active:
         by_key.setdefault((sn.cve_id, sn.component), []).append(sn)
-    findings = list(s.scalars(select(Finding).where(Finding.status.in_(("open", "accepted")))))
+    q = select(Finding).where(Finding.status.in_(("open", "accepted")))
+    if system_id is not None:
+        q = q.where(Finding.system_id == system_id)
+    findings = list(s.scalars(q))
     covered: dict[int, list[Finding]] = {sn.id: [] for sn in active}
     for f in findings:
         for sn in by_key.get((f.cve_id, f.component), ()):
@@ -98,9 +102,7 @@ def apply_snoozes(s, now: datetime) -> list[dict]:
             continue
         sn.ended_at, sn.end_reason = now, reason
         _audit(s, now, "system", "snooze.ended", f"{sn.cve_id} in {sn.component}: {reason}")
-        ended.append({"cve_id": sn.cve_id, "component": sn.component,
-                      "system_name": "all systems" if sn.system_id is None else names.get(sn.system_id, "?"),
-                      "reason": sn.reason, "end_reason": reason})
+        ended.append(_row(sn, names) | {"end_reason": reason})
     still = {sn.id: sn for sn in active if sn.ended_at is None}
     snoozed: dict[int, Snooze] = {}
     for sid, fs in covered.items():
@@ -114,6 +116,31 @@ def apply_snoozes(s, now: datetime) -> list[dict]:
         elif f.status == "accepted":
             f.status = "open"
     return ended
+
+
+def _row(sn: Snooze, names: dict[int, str]) -> dict:
+    return {"cve_id": sn.cve_id, "component": sn.component,
+            "system_name": "all systems" if sn.system_id is None else names.get(sn.system_id, "?"),
+            "reason": sn.reason}
+
+
+def snoozed_summary(s) -> dict:
+    """Für den Bericht: zurückgestellte Funde gesamt und je aktivem Snooze (mit Grund und Ablauf)."""
+    names = {sid: name for sid, name in s.execute(select(System.id, System.name))}
+    accepted = list(s.scalars(select(Finding).where(Finding.status == "accepted")))
+    items = []
+    for sn in s.scalars(select(Snooze).where(Snooze.ended_at.is_(None)).order_by(Snooze.until)):
+        n = sum(1 for f in accepted if matches(sn, f))
+        items.append(_row(sn, names) | {"until": sn.until.date().isoformat(), "findings": n})
+    return {"count": len(accepted), "items": items}
+
+
+def ended_since(s, since: datetime | None, now: datetime) -> list[dict]:
+    """Seit dem letzten Lauf beendete Snoozes, auch die von Connectoren oder von Hand entfernten."""
+    names = {sid: name for sid, name in s.execute(select(System.id, System.name))}
+    start = since or now - timedelta(days=1)
+    return [_row(sn, names) | {"end_reason": sn.end_reason}
+            for sn in s.scalars(select(Snooze).where(Snooze.ended_at > start).order_by(Snooze.ended_at))]
 
 
 def transfer_accepted_findings(s) -> int:

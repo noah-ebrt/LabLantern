@@ -186,6 +186,11 @@ def calculate_coverage_matrix(session: Session, now: datetime | None = None, sbo
         if sec[0] == "fund" and sec_command:
             matrix[-1]["checks"]["sicherheitsupdates"]["command"] = sec_command
 
+    # Zurückgestellte Funde zählen eigens, nie als ok (PLAN-extensions A2)
+    snoozed = dict(session.execute(select(Finding.system_id, func.count(Finding.id))
+                                   .where(Finding.status == "accepted").group_by(Finding.system_id)).all())
+    for entry in matrix:
+        entry["snoozed"] = snoozed.get(entry["system_id"], 0)
     canary_status = latest_run.canary_status if latest_run else "offen"
     return {
         "canary_status": canary_status,
