@@ -6,12 +6,14 @@ Zuordnung: Ziel = Containername auf einem System -> dieser Container. Ziel = IP 
 der den Port veröffentlicht oder im Host-Netz auf ihm lauscht, sonst ein Dienst des Hosts auf dem Port (Agent ab
 0.14). Was so nicht eindeutig wird, erscheint als „nicht zugeordnet“ und lässt sich unter Systeme von Hand
 markieren. Nichts fällt still weg."""
+import functools
 import json
 import logging
 import re
 import time
 import urllib.error
 from datetime import datetime, timezone
+from typing import Annotated, Literal
 import urllib.request
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -22,6 +24,7 @@ from .containers import HOST, containers_of, host_ports_of
 from .context import Context
 from .guards import Guards
 from .models import Finding, System, put_setting, setting
+from .publicdns import CHECK_FAILED, OVERRIDES_KEY, classify_hostname, decide, load_overrides
 from .rules import classify_certificate
 
 log = logging.getLogger("vulnwatch.connectors")
@@ -198,6 +201,23 @@ def match_hosts(s, hosts: list[dict], npm_system_id: int | None,
     return {k: sorted(v) for k, v in exposed.items()}, unmatched
 
 
+def split_public(hosts: list[dict], overrides: dict) -> tuple[list[dict], list[dict], list[str]]:
+    """Aktive Routen, die aus dem Internet erreichbar sind; die nur im LAN; die Namen, deren DNS-Prüfung fehlschlug."""
+    classify = functools.lru_cache(maxsize=None)(classify_hostname)   # je Abgleich jeden Namen nur einmal
+    public, lan_only, failed = [], [], []
+    for h in hosts:
+        if not h["enabled"]:
+            continue
+        verdicts = [(d, *decide(d, [], overrides, classify)) for d in h["domains"]]
+        failed += [d for d, _, why in verdicts if why == CHECK_FAILED and d not in failed]
+        if not verdicts or any(exp for _, exp, _ in verdicts):
+            public.append(h)
+        else:
+            lan_only.append({"domains": h["domains"], "target": f"{h['forward_host']}:{h['forward_port']}",
+                             "reason": verdicts[0][2]})
+    return public, lan_only, failed
+
+
 def refresh_npm(ctx: Context) -> dict:
     """Ruft NPM ab und speichert die Zuordnung. Ohne Einrichtung: nichts zu tun (kein Fehler)."""
     from .exposure import last_success
@@ -213,15 +233,16 @@ def refresh_npm(ctx: Context) -> dict:
         now = datetime.now(timezone.utc)
         overview, desired = certificate_status(hosts, certs, now)
         with ctx.session_factory() as s:
+            public, lan_only, dns_failed = split_public(hosts, load_overrides(s))
             via: dict[int, dict[str, list[str]]] = {}
-            exposed, unmatched = match_hosts(s, hosts, cfg.get("system_id"), via)
+            exposed, unmatched = match_hosts(s, public, cfg.get("system_id"), via)
             npm_system = s.get(System, cfg["system_id"]) if cfg.get("system_id") else None
             if npm_system is not None:   # Funde hängen am Host, auf dem NPM läuft
                 sync_cert_findings(s, npm_system.id, desired, now)
                 s.commit()
         state.update(ok=True, error="", checked_at=state["at"], hosts=len(hosts),
                      exposed={str(k): v for k, v in exposed.items()}, via={str(k): v for k, v in via.items()},
-                     unmatched=unmatched[:200], certificates=overview[:200],
+                     lan_only=lan_only[:200], dns_failed=dns_failed[:50], unmatched=unmatched[:200], certificates=overview[:200],
                      cert_note="" if npm_system is not None else "choose the host running NPM to get certificate findings")
     except NpmError as e:
         with ctx.session_factory() as s:
@@ -229,6 +250,7 @@ def refresh_npm(ctx: Context) -> dict:
         # alte Zuordnung behalten: ein kurzer Ausfall von NPM soll nichts herabstufen
         state.update(ok=False, error=str(e)[:300], hosts=old.get("hosts", 0), exposed=old.get("exposed", {}),
                      via=old.get("via", {}), checked_at=last_success(old), unmatched=old.get("unmatched", []),
+                     lan_only=old.get("lan_only", []), dns_failed=old.get("dns_failed", []),
                      certificates=old.get("certificates", []))
         log.warning("NPM connector: %s", e)
     with ctx.session_factory() as s:
@@ -242,6 +264,14 @@ def connector_exposed(s) -> dict[int, dict[str, list[str]]]:
     from .exposure import connector_exposed as merged
 
     return merged(s)
+
+
+Mark = Literal["public", "lan"]
+
+
+class OverridesIn(BaseModel):
+    hosts: dict[Annotated[str, Field(min_length=1, max_length=253)], Mark] = Field(default_factory=dict, max_length=500)
+    entrypoints: dict[Annotated[str, Field(min_length=1, max_length=100)], Mark] = Field(default_factory=dict, max_length=100)
 
 
 class NpmIn(BaseModel):
@@ -259,7 +289,19 @@ def build_connectors_router(ctx: Context, guards: Guards) -> APIRouter:
         with ctx.session_factory() as s:
             cfg = setting(s, NPM_CONFIG)
             state = setting(s, NPM_STATE) or {}
-        return {"config": cfg, "password": ctx.secrets.meta(NPM_SECRET), "state": state}
+            overrides = load_overrides(s)
+        return {"config": cfg, "password": ctx.secrets.meta(NPM_SECRET), "state": state, "overrides": overrides}
+
+    @router.put("/exposure-overrides")
+    def write_overrides(body: OverridesIn, found=Depends(guards.require_admin)):
+        """Von Hand: dieser Name / Entrypoint ist öffentlich oder nur im LAN. Gilt ab dem nächsten Abgleich."""
+        data = {"hosts": {k.strip().lower(): v for k, v in body.hosts.items()}, "entrypoints": body.entrypoints}
+        with ctx.session_factory() as s:
+            put_setting(s, OVERRIDES_KEY, data)
+            ctx.audit(s, found[0].username, "exposure.overrides.saved",
+                      ", ".join(f"{k}={v}" for k, v in {**data["hosts"], **data["entrypoints"]}.items())[:500] or "none")
+            s.commit()
+        return data
 
     @router.put("/npm")
     def write(body: NpmIn, found=Depends(guards.require_admin)):

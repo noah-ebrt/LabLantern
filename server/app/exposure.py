@@ -96,6 +96,9 @@ def source_rows(s, now: float) -> list[dict]:
             status, detail = "fehler", f"{state.get('error') or 'read failed'}{known}"
         elif age is None or age > STALE_HOURS:
             status, detail = "fehler", f"last successful read {round(age) if age else '?'} h ago"
+        elif state.get("dns_failed"):   # sicher im Zweifel: als erreichbar gezählt, aber nicht still
+            names = ", ".join(state["dns_failed"][:5])
+            status, detail = "fehler", f"public DNS check failed for {names}; counted as exposed"
         else:
             status, detail = "ok", f"read {round(age)} h ago" if age >= 1 else "read just now"
         rows.append({"key": src.key, "label": src.label, "status": status, "detail": detail,

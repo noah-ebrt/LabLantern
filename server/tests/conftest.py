@@ -166,3 +166,12 @@ def admin(env):
     secret = env.complete_setup()
     csrf = env.login(env.client, secret).json()["csrf_token"]
     return env, env.client, {"X-CSRF-Token": csrf}
+
+
+@pytest.fixture(autouse=True)
+def no_public_dns(monkeypatch):
+    """Tests fragen nie das öffentliche DNS: jeder Name gilt dann als "Prüfung fehlgeschlagen", also erreichbar."""
+    def offline(name, rtype):
+        raise OSError("public DNS disabled in tests")
+
+    monkeypatch.setattr("app.publicdns.doh_query", offline)

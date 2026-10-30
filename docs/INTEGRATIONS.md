@@ -47,6 +47,11 @@ vulnwatch then reads every 6 hours:
 - **Exposure:** proxy targets are mapped to containers by container name or by host IP and published port.
   Findings of internet-exposed containers are rated higher (CVSS 9+ critical, CVSS 7+ with fix high). Targets it
   cannot map are listed. Mark those containers by hand in the host dialog.
+- **Public DNS check:** a proxy route only counts as internet-exposed if one of its domains resolves to a public
+  address in public DNS (asked via Cloudflare DNS-over-HTTPS). Routes whose names only resolve to LAN addresses, or
+  not at all, are listed as "only reachable in the LAN". Names ending in `.lan`, `.home.arpa`, `.local` or
+  `.internal` are never sent. If the check fails, the route counts as exposed and NPM shows as an error in the
+  coverage matrix. In the NPM card you can mark a name as public or LAN only by hand; that wins over DNS.
 - **TLS certificates** of active proxy hosts: under 20 days left is a medium finding (NPM renews at 30 days), under 7
   days or expired is high.
 
@@ -214,6 +219,7 @@ vulnwatch has no telemetry and no update check of its own. These are the outboun
 | Grype and OSV-Scanner databases (Anchore, osv.dev) | every run | nothing about you: the worker downloads the databases and scans offline |
 | Container registries of your images (Docker Hub, ghcr.io, …) | every run | image names and tags, to compare digests |
 | endoflife.date | daily | product names (e.g. `debian`, `postgres`) |
+| cloudflare-dns.com (with NPM connected) | every 6 hours | the domain names of your proxy routes, except `.lan`, `.home.arpa`, `.local`, `.internal` |
 | Security feeds (AI early warning, optional) | every two hours | nothing: plain feed downloads |
 | Claude API (AI early warning, optional) | daily and per new feed entry | product names and versions, never secrets, addresses or host names |
 | Your notification channels and offsite watchdog (optional) | per report, alert, ping | the report or alert text, the ping |

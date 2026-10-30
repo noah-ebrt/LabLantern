@@ -61,6 +61,26 @@ async function saveNpm() {
   }
 }
 
+const marked = computed(() => Object.entries(npm.value?.overrides?.hosts || {}))
+
+async function setMark(names, mark) {
+  const hosts = { ...(npm.value?.overrides?.hosts || {}) }
+  for (const n of names) {
+    if (mark) hosts[n.toLowerCase()] = mark
+    else delete hosts[n.toLowerCase()]
+  }
+  busy.value = true
+  try {
+    await api.put('/api/settings/exposure-overrides', { hosts, entrypoints: npm.value?.overrides?.entrypoints || {} })
+  } catch (e) {
+    message.value = { kind: 'error', text: e.message }
+    busy.value = false
+    return
+  }
+  busy.value = false
+  await testNpm()   // gilt erst nach dem nächsten Abgleich: gleich neu lesen
+}
+
 async function testNpm() {
   busy.value = true
   message.value = null
@@ -172,6 +192,22 @@ useLive(['settings', 'findings'], load, 3000)
           <details v-if="npm.state?.unmatched?.length" class="more">
             <summary>{{ npm.state.unmatched.length }} proxy targets without a clear container – mark them on the host</summary>
             <span v-for="u in npm.state.unmatched" :key="u.target + u.domains[0]" class="more-line"><span class="mono">{{ u.domains.join(', ') }} → {{ u.target }}</span> · {{ u.reason }}</span>
+          </details>
+          <p v-if="npm.state?.dns_failed?.length" class="message error" data-test="npm-dns-failed">
+            Public DNS check failed for
+            <span v-for="n in npm.state.dns_failed" :key="n"><span class="mono">{{ n }}</span>
+              (<button type="button" class="link" :disabled="busy" @click="setMark([n], 'lan')">LAN only</button>) </span>
+            – counted as internet-exposed.
+          </p>
+          <details v-if="npm.state?.lan_only?.length" class="more" data-test="npm-lan-only">
+            <summary>{{ npm.state.lan_only.length }} proxy hosts only reachable in the LAN – not counted as internet-exposed</summary>
+            <span v-for="u in npm.state.lan_only" :key="u.target + u.domains[0]" class="more-line"><span class="mono">{{ u.domains.join(', ') }} → {{ u.target }}</span> · {{ u.reason }}
+              · <button type="button" class="link" :disabled="busy" @click="setMark(u.domains, 'public')">Count as public</button></span>
+          </details>
+          <details v-if="marked.length" class="more" data-test="npm-marked">
+            <summary>{{ marked.length }} names marked by hand</summary>
+            <span v-for="[n, m] in marked" :key="n" class="more-line"><span class="mono">{{ n }}</span> · {{ m === 'public' ? 'public' : 'LAN only' }}
+              · <button type="button" class="link" :disabled="busy" @click="setMark([n], null)">Undo</button></span>
           </details>
         </SettingsEntry>
       </SettingsList>
