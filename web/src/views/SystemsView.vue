@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { api } from '../api.js'
 import Icon from '../components/Icon.vue'
 import { useLive } from '../live.js'
@@ -167,6 +167,7 @@ const HOST_KINDS = [
   { kind: 'linux', title: 'Linux server', text: 'Agent with pairing: packages, containers, images, updates, reboot. Needs systemd and curl.' },
   { kind: 'truenas', title: 'TrueNAS', text: 'Read through the TrueNAS API: version, system update, apps, alerts. No agent on the NAS.' },
   { kind: 'homeassistant', title: 'Home Assistant', text: 'Read through the Home Assistant API: Core, OS, add-ons and firmware updates.' },
+  { kind: 'collector', title: 'Other device (collector script)', text: 'Unraid, Synology, OpenWrt …: a small cron script sends packages and containers. No agent, no commands.' },
 ]
 const addKind = ref(null)
 const connectorId = ref(null)   // Detailansicht eines Geräts ohne Agent
@@ -188,7 +189,35 @@ function openAddModal() {
 
 function chooseKind(kind) {
   addKind.value = kind
+  Object.assign(collector, { name: '', error: '', data: null })
   if (kind === 'linux') startLinux()
+}
+
+// Collector-Gerät (PLAN-extensions C): Token nur einmal sichtbar, danach nur ein neues ausstellbar
+const collector = reactive({ name: '', busy: false, error: '', data: null })
+
+async function createCollector() {
+  collector.busy = true
+  collector.error = ''
+  try {
+    collector.data = await api.post('/api/collector/systems', { name: collector.name.trim() })
+    await loadSystems(true)
+  } catch (e) {
+    collector.error = e.message
+  } finally {
+    collector.busy = false
+  }
+}
+
+async function collectorToken(s) {
+  if (!confirm(`Create a new token for ${s.name}? The current one stops working.`)) return
+  try {
+    Object.assign(collector, { name: s.name, error: '', data: await api.post(`/api/collector/systems/${s.id}/token`) })
+    addKind.value = 'collector'
+    showAddModal.value = true
+  } catch (e) {
+    error.value = e.message
+  }
 }
 
 function editAppliance(s) {
@@ -406,6 +435,7 @@ onMounted(() => {
           <td class="strong">
             <a href="#" @click.prevent="s.connector ? (connectorId = s.id) : viewDetails(s.id)">{{ s.name }}</a>
             <span v-if="s.connector" class="subtext">{{ hostVersion(s) }} · read via API<template v-if="applianceOf(s)"> · {{ applianceOf(s).url }}</template></span>
+            <span v-else-if="s.host_type === 'collector'" class="subtext">collector script, no agent</span>
             <span v-else class="subtext">v{{ s.agent_version || '0.1.0' }}<template v-if="s.agent_outdated"> · outdated</template><template v-if="s.online"> · connected</template></span>
           </td>
           <td>{{ s.ip || '–' }}</td>
@@ -429,6 +459,7 @@ onMounted(() => {
                 <button v-if="s.collection_errors?.connector?.includes('certificate changed')" class="btn-sm" @click="trustCertificate(s)">Trust new certificate</button>
                 <button class="btn-sm" @click="editAppliance(s)">Edit</button>
               </template>
+              <button v-if="s.host_type === 'collector'" class="btn-sm" data-test="collector-token" @click="collectorToken(s)">New token</button>
               <button v-if="s.status === 'active'" class="btn-sm" @click="viewDetails(s.id)">Manage</button>
               <button v-if="s.status === 'pending'" class="btn-sm btn-approve" @click="approveSystem(s.id)">Approve</button>
               <button v-if="s.status === 'active'" class="btn-sm btn-revoke" @click="revokeSystem(s.id)">Revoke</button>
@@ -456,6 +487,47 @@ onMounted(() => {
           <strong>{{ k.title }}</strong><span class="subtext">{{ k.text }}</span>
         </button>
       </div>
+    </template>
+
+    <template v-else-if="addKind === 'collector'">
+      <button v-if="!collector.data" type="button" class="link back" @click="addKind = null">← Other kind of host</button>
+      <h2>Add a device with a collector script</h2>
+      <p class="subtitle">For devices where the agent can't run. A cron script on the device sends its OS version, packages
+        and containers to vulnwatch. vulnwatch never sends anything back: no commands, no updates.
+        Examples for Unraid, Synology and OpenWrt are in <code>collectors/</code> in the repository; the format is
+        <code>docs/collector-schema.json</code>.</p>
+      <form v-if="!collector.data" class="collector-form" data-test="collector-form" @submit.prevent="createCollector">
+        <label>Device name <input v-model="collector.name" name="collector_name" required maxlength="100" pattern="[A-Za-z0-9][A-Za-z0-9._\-]*" placeholder="unraid" /></label>
+        <button class="primary" :disabled="collector.busy || !collector.name.trim()">Create token</button>
+        <p v-if="collector.error" class="text-danger">{{ collector.error }}</p>
+      </form>
+      <ol v-else class="steps" data-test="collector-setup">
+        <li>
+          <div class="step-head">
+            <strong>Run this once on {{ collector.data.name }}</strong>
+            <span class="subtext">Fetches the root certificate, checks its fingerprint and stores address and token in
+              <code>/etc/vulnwatch-collector</code> (Unraid: set <code>VW_DIR=/boot/config/vulnwatch</code> first, /etc is lost on reboot).
+              The token is shown only now.</span>
+          </div>
+          <div v-if="collector.data.setup_cmd" class="cmd-block">
+            <div class="cmd-bar-top">
+              <span class="mono">sh</span>
+              <button class="btn-sm" @click="copyCommand(collector.data.setup_cmd)">
+                <Icon :name="copied ? 'check' : 'copy'" :size="14" />{{ copied ? 'Copied' : 'Copy' }}
+              </button>
+            </div>
+            <pre class="cmd-text">{{ collector.data.setup_cmd }}</pre>
+          </div>
+          <p v-else class="text-danger">Root certificate unreadable: token <code>{{ collector.data.token }}</code>, address {{ collector.data.server_url }}.</p>
+        </li>
+        <li>
+          <div class="step-head">
+            <strong>Copy the collector script for the device and add its cron line</strong>
+            <span class="subtext">The script's header has the cron line. Reports more often than every 5 minutes are refused;
+              no report for 24 hours shows as an error.</span>
+          </div>
+        </li>
+      </ol>
     </template>
 
     <template v-else-if="addKind !== 'linux'">
@@ -539,6 +611,8 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.collector-form { display: flex; gap: 0.75rem; align-items: flex-end; flex-wrap: wrap; }
+.collector-form label { display: flex; flex-direction: column; gap: 0.25rem; }
 .pairings .pairing, .modal-pairings .pairing { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; padding: 0.7rem 0; border-top: 1px solid var(--line); }
 .pairing-main { flex: 1; min-width: 180px; display: flex; flex-direction: column; }
 .pair-code { font: 600 1.35rem/1 var(--mono); letter-spacing: 0.12em; color: var(--text); padding: 0.35rem 0.7rem; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--ground); }

@@ -1,0 +1,9 @@
+{
+  "schema": "v1",
+  "os": {"id": "openwrt", "name": "OpenWrt", "version": "23.05.5"},
+  "packages": [
+    {"ecosystem": "opkg", "name": "busybox", "version": "1.36.1-1"},
+    {"ecosystem": "opkg", "name": "dropbear", "version": "2022.82-6"},
+    {"ecosystem": "opkg", "name": "libopenssl3", "version": "3.0.15-1"}
+  ]
+}

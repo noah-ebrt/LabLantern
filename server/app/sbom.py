@@ -52,3 +52,41 @@ def build_cyclonedx(system_name: str, os_id: str, os_version_id: str, os_name: s
         "metadata": {"component": {"type": "operating-system", "name": system_name, "version": os_name}},
         "components": components,
     }
+
+
+# Collector-API (PLAN-extensions C): nur diese PURL-Typen gleichen Grype oder OSV gegen eine Datenbank ab. Pakete
+# anderer Ökosysteme (opkg, Slackware, Synology …) landen nicht in der SBOM; die Matrix zeigt sie als n/a mit Grund.
+SCANNABLE_PURL_TYPES = ("deb", "rpm", "apk", "npm", "pypi", "golang", "cargo", "gem", "nuget", "composer", "maven")
+_LANGUAGE = ("npm", "pypi", "golang", "cargo", "gem", "nuget", "composer")
+
+
+def collector_purl(pkg: dict[str, Any], os_id: str, os_version: str) -> str | None:
+    if pkg.get("purl"):
+        kind = pkg["purl"].removeprefix("pkg:").split("/", 1)[0]
+        return pkg["purl"] if kind in SCANNABLE_PURL_TYPES else None
+    eco, name, version = pkg["ecosystem"], pkg["name"], pkg["version"]
+    if eco in ("deb", "rpm"):
+        return purl_for({"type": eco, "name": name, "version": version}, os_id, os_version)
+    if eco == "apk" and os_id:
+        distro = f"{os_id}-{os_version}" if os_version else os_id
+        return f"pkg:apk/{_enc(os_id)}/{_enc(name)}@{_enc(version)}?distro={_enc(distro)}"
+    if eco in _LANGUAGE:
+        return f"pkg:{eco}/{_enc(name)}@{_enc(version)}"
+    return None
+
+
+def packages_to_sbom(system_name: str, os_id: str, os_name: str, os_version: str,
+                     packages: list[dict[str, Any]]) -> tuple[dict[str, Any], dict[str, list[int]]]:
+    """CycloneDX wie beim Agenten, dazu je Ökosystem [gemeldet, abgleichbar]. Die SBOM entsteht immer, auch ohne
+    abgleichbares Paket: Dann findet der Scan eben nichts, und die Matrix sagt n/a statt eines Fehlers."""
+    sbom = build_cyclonedx(system_name, os_id, os_version, os_name, [])
+    ecosystems: dict[str, list[int]] = {}
+    for pkg in packages:
+        purl = collector_purl(pkg, os_id, os_version)
+        count = ecosystems.setdefault(pkg["ecosystem"], [0, 0])
+        count[0] += 1
+        if purl is None:
+            continue
+        count[1] += 1
+        sbom["components"].append({"type": "library", "name": pkg["name"], "version": pkg["version"], "purl": purl})
+    return sbom, ecosystems

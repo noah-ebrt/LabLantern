@@ -146,7 +146,7 @@ useLive(['commands'], loadCommands)
 
       <HostCoverage :system-id="systemId" />
 
-      <template v-if="system.status === 'active'">
+      <template v-if="system.status === 'active' && system.host_type !== 'collector'">
         <h3>Actions</h3>
         <div class="cmd-bar">
           <button class="btn-sm primary" @click="sendCommand('report_now')">Report now</button>

@@ -50,6 +50,11 @@ def system_state(ctx: Context, r: System) -> str:
     return "offline" if (datetime.now(timezone.utc) - seen).total_seconds() > STALE_HOURS * 3600 else "online"
 
 
+def has_agent(r: System) -> bool:
+    """Connectors (TrueNAS, Home Assistant) und Collector-Geräte haben keinen Agenten zum Aktualisieren."""
+    return r.status != "connector" and r.host_type != "collector"
+
+
 def is_connected(ctx: Context, r: System) -> bool:
     return r.last_contact is not None and ctx.clock() - r.last_contact < ONLINE_WINDOW
 
@@ -230,7 +235,7 @@ def agent_system(s, authorization: str | None) -> System:
         raise HTTPException(401, "Authorization header with bearer token required")
     token_hash = auth.sha256_hex(authorization.removeprefix("Bearer ").strip())
     system = s.scalar(select(System).where(System.agent_token_hash == token_hash))
-    if not system:
+    if not system or system.host_type == "collector":   # Collector-Token gelten nur für /api/collector/v1
         raise HTTPException(401, "Invalid agent token")
     if system.status == "pending":
         raise HTTPException(403, "System is waiting for approval by the administrator")
@@ -290,11 +295,11 @@ def build_agent_router(ctx: Context, guards: Guards) -> APIRouter:
             "collection_errors": json.loads(r.collection_errors or "{}"),
             "sbom_updated_at": r.sbom_updated_at.isoformat() if r.sbom_updated_at else None,
             # Connectors (Home Assistant, TrueNAS) haben keinen Agenten
-            "agent_outdated": r.status != "connector" and _version(r.agent_version) < _version(ctx.settings_agent_version()),
+            "agent_outdated": has_agent(r) and _version(r.agent_version) < _version(ctx.settings_agent_version()),
             # hält gerade eine Long-Poll-Verbindung (ab 0.7): Befehle kommen in Sekunden an
             "online": is_connected(ctx, r),
             # vor 0.3.0: kein CA-Pinning und kein systemd-Dienst, ein Binary-Update reicht nicht
-            "needs_reenroll": r.status != "connector" and _version(r.agent_version) < (0, 3, 0),
+            "needs_reenroll": has_agent(r) and _version(r.agent_version) < (0, 3, 0),
         }
         if r.status == "connector":
             data = json.loads(r.inventory_json or "{}").get("connector") or {}

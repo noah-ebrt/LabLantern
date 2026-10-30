@@ -75,6 +75,38 @@ def _image_check(session, sys, last, stale, stale_detail, image_has_sbom):
     return ("fund" if bad else "ok", f"{len(images)} images, {bad} critical/high")
 
 
+def _collector_checks(session, sys, last, stale, stale_detail, image_has_sbom, cve, container) -> dict:
+    """Collector-Geräte (PLAN-extensions C): bewertet wird nur, was der Report hergibt, der Rest ist n/a."""
+    from .scanrun import system_images
+
+    inv = json.loads(sys.inventory_json or "{}")
+    na = ("na", "not reported by the collector")
+    if not stale and cve[0] != "fehler":
+        ecosystems = (inv.get("collector") or {}).get("ecosystems") or {}
+        unmatched = sorted(e for e, (_total, scannable) in ecosystems.items() if not scannable)
+        if not any(scannable for _total, scannable in ecosystems.values()):
+            n = sum(total for total, _ in ecosystems.values())
+            what = ", ".join(unmatched) or "no"
+            cve = ("na", f"no vulnerability database covers {what} packages ({n} recorded)")
+        elif unmatched:
+            cve = (cve[0], f"{cve[1]}; not checkable: {', '.join(unmatched)} packages")
+    images = system_images(sys)
+    if not images:
+        return {"paket_cve": cve, "sicherheitsupdates": na, "reboot": na,
+                "container": ("na", "no containers reported"), "images": ("na", "no containers reported")}
+    hint = "install syft on the device to scan images"
+    missing = [i for i in images if not image_has_sbom(sys.id, i["id"])]
+    if len(missing) == len(images) and not stale:
+        image = ("na", f"{len(missing)} image(s) without SBOM: {hint}")
+    else:
+        image = _image_check(session, sys, last, stale, stale_detail, lambda *_: True)
+        if missing and image[0] == "ok":   # nie ok, solange ein Image ungeprüft ist
+            image = ("na", f"{image[1]}; {len(missing)} image(s) without SBOM: {hint}")
+        elif missing:
+            image = (image[0], f"{image[1]}; {len(missing)} image(s) without SBOM: {hint}")
+    return {"paket_cve": cve, "sicherheitsupdates": na, "reboot": na, "container": container, "images": image}
+
+
 def latest_finished_run(session: Session) -> ScanRun | None:
     return session.scalar(
         select(ScanRun).where(ScanRun.status.in_(FINISHED)).order_by(ScanRun.started_at.desc(), ScanRun.id.desc()).limit(1)
@@ -134,7 +166,9 @@ def calculate_coverage_matrix(session: Session, now: datetime | None = None, sbo
             continue
 
         stale = age is None or age > AGENT_STALE_HOURS
-        stale_detail = "agent has not reported for over 24 h" if age is not None else "agent has never reported"
+        collector = sys.host_type == "collector"
+        who = "collector" if collector else "agent"
+        stale_detail = f"{who} has not reported for over 24 h" if age is not None else f"{who} has never reported"
 
         errors = json.loads(sys.collection_errors or "{}")
         sec_command = ""
@@ -184,8 +218,10 @@ def calculate_coverage_matrix(session: Session, now: datetime | None = None, sbo
                                                                          now.timestamp())
         checks = {"paket_cve": cve, "sicherheitsupdates": sec, "reboot": reboot, "container": container,
                   "images": images, "versionen": versions}
+        if collector:
+            checks.update(_collector_checks(session, sys, last, stale, stale_detail, image_has_sbom, cve, container))
         for status, _ in checks.values():
-            total += 1
+            total += status != "na"
             ok_count += status in ("ok", "fund")  # Abdeckung = geprüft; ein Fund ist geprüft
         matrix.append({
             "system_id": sys.id, "system_name": sys.name, "status": sys.status, "age_hours": age,

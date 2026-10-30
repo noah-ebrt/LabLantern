@@ -1,0 +1,12 @@
+{
+  "schema": "v1",
+  "os": {"id": "dsm", "name": "Synology DSM", "version": "7.2.2-72806"},
+  "packages": [
+    {"ecosystem": "synology", "name": "ContainerManager", "version": "24.0.2-1535"},
+    {"ecosystem": "synology", "name": "HyperBackup", "version": "4.1.1-3767"}
+  ],
+  "containers": [
+    {"name": "jellyfin", "image": "jellyfin/jellyfin:10.10.3",
+     "image_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111"}
+  ]
+}

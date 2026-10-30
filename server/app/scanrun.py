@@ -31,6 +31,7 @@ COLLECT_TIMEOUT = 10 * 60      # so lange wird auf frische Agentendaten gewartet
 REPORT_INTERVAL = 55 * 60      # ohne Anforderung meldet ein Agent etwa stündlich
 REFRESH_KEY = "refresh.requested"
 NO_DATA_HOURS = 2              # Agent länger still: der Lauf hat für diesen Host keine frischen Daten
+COLLECTOR_HOURS = 24           # Collector-Geräte melden per Cron, oft nur täglich: so alt darf ihr Report sein
 
 
 class ScanAlreadyActive(Exception):
@@ -169,6 +170,8 @@ def refresh_request(s) -> dict | None:
 
 def _system_ready(ctx: Context, s, system: System, since: datetime) -> bool:
     seen = system.last_seen
+    if system.host_type == "collector":   # lässt sich nicht anstoßen; Image-SBOMs kommen im Report mit
+        return seen is not None and (datetime.now(timezone.utc) - seen).total_seconds() <= COLLECTOR_HOURS * 3600
     if seen is None or seen < since:
         return False
     for img in system_images(system):
@@ -379,7 +382,8 @@ def process_scan_result(ctx: Context, job_id: int, result: WorkerResultIn) -> Sc
                 else:
                     status, err, items = "ok", "", r.findings
                 seen_at = system.last_seen if system else None
-                no_data = status == "fehler" or seen_at is None or (now - seen_at).total_seconds() > NO_DATA_HOURS * 3600
+                limit = COLLECTOR_HOURS if system and system.host_type == "collector" else NO_DATA_HOURS
+                no_data = status == "fehler" or seen_at is None or (now - seen_at).total_seconds() > limit * 3600
                 prev = s.scalar(select(SystemScanResult).where(SystemScanResult.system_id == sid)
                                 .order_by(SystemScanResult.id.desc()).limit(1))
                 if no_data and prev is not None and prev.no_data:
