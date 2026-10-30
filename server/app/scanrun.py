@@ -6,6 +6,7 @@ import re
 import shutil
 from datetime import datetime, timezone
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, update
@@ -18,7 +19,8 @@ from .models import Finding, ImageSbom, ScanJob, ScanRun, System, SystemScanResu
 from .archive import archive_run, config_version
 from .earlywarning import warnings_since
 from .mailtpl import run_report_html
-from .report import MAX_LISTED_FINDINGS, format_run_report
+from .report import MAX_LISTED_FINDINGS, format_run_report, run_level
+from .reportpolicy import ALERT_LEVELS, get_report_policy, report_decision, set_report_policy
 from .rules import classify_severity
 
 log = logging.getLogger("vulnwatch.scanrun")
@@ -275,23 +277,40 @@ def _send(ctx: Context, run_id: int, info: dict) -> None:
     with ctx.session_factory() as s:
         s.get(ScanRun, run_id).coverage_percent = info["coverage"].get("coverage_percent")
         s.commit()
-    subject, body = format_run_report(info)
-    html = run_report_html(subject, info, MAX_LISTED_FINDINGS)
     notifier = ctx.notifier
     if info.get("trigger") == "short" and not short_run_notable(info):
         # Kurzlauf: nur melden, wenn er etwas Neues findet; sonst kämen vier gleiche Berichte am Tag
-        with ctx.session_factory() as s:
-            s.get(ScanRun, run_id).notify_status = "skipped: short run, nothing new"
-            s.commit()
+        _set_notify_status(ctx, run_id, "skipped: short run, nothing new")
         return
+    # Ein Kurzlauf meldet nur Auffälliges, das ist ein Alarm; sonst entscheidet die Stufe
+    kind = "alert" if info.get("trigger") == "short" or run_level(info) in ALERT_LEVELS else "report"
+    policy = get_report_policy(ctx)
+    regular = info.get("trigger") == "scheduled" and kind == "report"
+    if regular:
+        # Häufigkeit und Pause gelten nur für den Bericht des geplanten Laufs; Handläufe meldet vulnwatch immer
+        from .schedule import get_timezone
+        now_local = datetime.fromtimestamp(ctx.clock(), ZoneInfo(get_timezone(ctx)))
+        decision = report_decision(policy, info, now_local)
+        if decision != "send":
+            _set_notify_status(ctx, run_id, decision)
+            return
+    if info.get("trigger") == "scheduled" and policy["frequency"] == "weekly":
+        info["period"] = "weekly"
+    subject, body = format_run_report(info)
+    html = run_report_html(subject, info, MAX_LISTED_FINDINGS)
     try:
-        ok, err = notifier(subject, body, html) if notifier else (False, "no notification channel")
+        ok, err = notifier(subject, body, html, kind=kind) if notifier else (False, "no notification channel")
     except Exception as e:  # ein kaputter Kanal darf die Auswertung nie kippen
         log.exception("Notification failed")
         ok, err = False, type(e).__name__
+    _set_notify_status(ctx, run_id, "sent" if ok else f"failed: {err}")
+    if ok and regular:
+        set_report_policy(ctx, {"last_regular_sent": datetime.fromtimestamp(ctx.clock(), timezone.utc).isoformat()})
+
+
+def _set_notify_status(ctx: Context, run_id: int, status: str) -> None:
     with ctx.session_factory() as s:
-        run = s.get(ScanRun, run_id)
-        run.notify_status = "sent" if ok else f"failed: {err}"
+        s.get(ScanRun, run_id).notify_status = status
         s.commit()
 
 
@@ -304,7 +323,7 @@ def short_run_notable(info: dict) -> bool:
 def process_scan_result(ctx: Context, job_id: int, result: WorkerResultIn) -> ScanRun:
     now = datetime.now(timezone.utc)
     new_findings: list[dict] = []
-    resolved = reopened = 0
+    resolved = reopened = changed = 0
     system_errors: list[tuple[str, str]] = []
     repeat_no_data: list[str] = []
     sharp_drops: list[tuple[str, int, int]] = []   # (Host, Funde vorher, nachher)
@@ -388,6 +407,8 @@ def process_scan_result(ctx: Context, job_id: int, result: WorkerResultIn) -> Sc
                                              "fixed_version": fi.fixed_version, "severity": sev,
                                              "kev": fi.kev, "system_name": meta["name"], "target": fi.target})
                     else:
+                        if f.severity != sev or f.fixed_version != fi.fixed_version:
+                            changed += 1
                         for k, v in fields.items():
                             setattr(f, k, v)
                         until = f.accepted_until
@@ -424,6 +445,7 @@ def process_scan_result(ctx: Context, job_id: int, result: WorkerResultIn) -> Sc
             "osv_reason": (result.osv.reason if result.osv else "worker without OSV-Scanner"),
             "summary": json.loads(run.summary_counts), "system_errors": system_errors,
             "new_findings": new_findings, "resolved_count": resolved, "reopened_count": reopened,
+            "changed_count": changed,
             "repeat_no_data": repeat_no_data, "sharp_drops": sharp_drops, "config_version": run.config_version,
             "early_warnings": warnings_since(s, previous_finished),
         }

@@ -88,6 +88,11 @@ class SmtpIn(BaseModel):
 class NotificationIn(BaseModel):
     name: str = Field(min_length=1, max_length=60, pattern=r"^[^\r\n\t]+$")
     url: str = Field(max_length=2000)  # bewusst ohne Muster: Fehlermeldungen von Pydantic würden die URL wiederholen
+    gets: Literal["both", "report", "alerts"] = "both"
+
+
+class ChannelGetsIn(BaseModel):
+    gets: Literal["both", "report", "alerts"]
 
 
 class SmtpChannelIn(BaseModel):
@@ -177,7 +182,7 @@ def build_integrations_router(ctx: Context, guards: Guards) -> APIRouter:
 
     @router.get("/notifications", dependencies=[Depends(guards.require_session)])
     def get_notifications():
-        channels = [{"index": i, "name": c["name"], "scheme": scheme_of(c["url"])}
+        channels = [{"index": i, "name": c["name"], "scheme": scheme_of(c["url"]), "gets": c["gets"]}
                     for i, c in enumerate(load_channels(ctx))]
         return {"configured": bool(channels), "channels": channels}
 
@@ -189,7 +194,7 @@ def build_integrations_router(ctx: Context, guards: Guards) -> APIRouter:
         channels = load_channels(ctx)
         if any(c["url"] == url for c in channels):
             raise HTTPException(409, "This channel already exists")
-        channels.append({"name": body.name, "url": url})
+        channels.append({"name": body.name, "url": url, "gets": body.gets})
         save_channels(ctx, channels)
         with ctx.session_factory() as s:
             ctx.audit(s, found[0].username, "integration.notifications.added", f"{body.name} ({scheme_of(url)})")
@@ -207,6 +212,19 @@ def build_integrations_router(ctx: Context, guards: Guards) -> APIRouter:
         with ctx.session_factory() as s:
             ctx.audit(s, found[0].username, "integration.notifications.added",
                       f"{body.name} (mail {body.host}:{body.port}, password {'set' if body.password else 'empty'})")
+            s.commit()
+        return {"ok": True}
+
+    @router.put("/notifications/{index}")
+    def set_notification_gets(index: int, body: ChannelGetsIn, found=Depends(guards.require_admin)):
+        channels = load_channels(ctx)
+        if not 0 <= index < len(channels):
+            raise HTTPException(404, "Channel not found")
+        channels[index]["gets"] = body.gets
+        save_channels(ctx, channels)
+        with ctx.session_factory() as s:
+            ctx.audit(s, found[0].username, "integration.notifications.changed",
+                      f"{channels[index]['name']} gets {body.gets}")
             s.commit()
         return {"ok": True}
 

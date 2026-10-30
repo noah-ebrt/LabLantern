@@ -43,7 +43,7 @@ def test_config_document_reads_without_secrets_and_writes_through_the_endpoints(
     assert client.post("/api/integrations/notifications", headers=h, json={"name": "Push", "url": url}).status_code == 200
     doc = client.get("/api/settings/config").json()
     assert "geheimes-thema" not in json.dumps(doc)
-    assert doc["notifications"] == [{"name": "Push", "url": None}]
+    assert doc["notifications"] == [{"name": "Push", "url": None, "gets": "both"}]
     assert doc["finding_drop"] == DEFAULTS
 
     doc["schedule"]["time"] = "04:30"

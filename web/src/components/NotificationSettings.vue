@@ -97,6 +97,11 @@ const remove = (ch) => {
   }, 'Channel removed.')
 }
 
+const setGets = (ch) => run(async () => {
+  await api.put(`/api/integrations/notifications/${ch.index}`, { gets: ch.gets })
+  await load()
+}, 'Channel updated.')
+
 const addMail = () => run(async () => {
   await api.post('/api/integrations/notifications/smtp', { ...mail, port: Number(mail.port) })
   mail.password = ''
@@ -139,6 +144,11 @@ onMounted(() => run(load))
                        :title="ch.name">
           <template #badge><span class="badge neutral mono">{{ ch.scheme }}</span></template>
           <template #actions>
+            <select v-model="ch.gets" data-test="channel-gets" :aria-label="`What ${ch.name} gets`" class="gets" :disabled="busy" @change="setGets(ch)">
+              <option value="both">report and alerts</option>
+              <option value="report">only the report</option>
+              <option value="alerts">only alerts</option>
+            </select>
             <button type="button" class="btn-sm btn-delete" data-test="remove-channel" :disabled="busy" @click="remove(ch)">
               <Icon name="trash" :size="14" />Remove
             </button>
@@ -321,6 +331,7 @@ onMounted(() => run(load))
 </template>
 
 <style scoped>
+.gets { width: auto; min-height: 30px; padding-top: 0.2rem; padding-bottom: 0.2rem; font-size: 0.82rem; }
 /* Add Channel Form Panel */
 .add-channel-panel {
   padding: 1.1rem 1.15rem;

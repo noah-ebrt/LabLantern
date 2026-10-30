@@ -23,11 +23,13 @@ class Notes:
     def __init__(self, ok=True):
         self.sent = []
         self.html = []
+        self.kinds = []
         self.ok = ok
 
-    def __call__(self, title, body, html=None):
+    def __call__(self, title, body, html=None, kind="report"):
         self.sent.append((title, body))
         self.html.append(html)
+        self.kinds.append(kind)
         return (self.ok, None if self.ok else "kaputt")
 
 
@@ -325,7 +327,7 @@ def test_failed_delivery_is_recorded_not_swallowed(env):
 
 def test_no_channel_configured_is_recorded(env):
     ctx = env.app.state.ctx
-    ctx.notifier = lambda t, b, h=None: (False, "kein Kanal")
+    ctx.notifier = lambda t, b, h=None, kind="report": (False, "kein Kanal")
     sid = make_system(ctx)
     _, run = run_once(ctx, [(sid, [], None)])
     assert "kein Kanal" in run.notify_status

@@ -17,6 +17,7 @@ beforeEach(() => {
     if (url === '/api/integrations/notifications' && method === 'GET') return json({ configured: true, channels })
     if (url.startsWith('/api/integrations/notifications') && method === 'POST') return json({ ok: true })
     if (url.startsWith('/api/integrations/notifications/') && method === 'DELETE') return json({ ok: true })
+    if (url.startsWith('/api/integrations/notifications/') && method === 'PUT') return json({ ok: true })
     if (url === '/api/integrations/claude' && method === 'GET') return json({ configured: true, api_key: { set: true, updated_at: '2026-10-24T10:00:00Z' }, model: 'claude-haiku-5-5' })
     if (url === '/api/integrations/claude/test') return json({ ok: false, error: 'Schlüssel ungültig (HTTP 401)' })
     return json({}, 404)
@@ -96,6 +97,16 @@ describe('NotificationSettings', () => {
     await w.findAll('button[data-test=remove-channel]').at(0).trigger('click')
     await flushPromises()
     expect(calls.some((c) => c.method === 'DELETE' && c.url === '/api/integrations/notifications/0')).toBe(true)
+  })
+
+  it('stellt pro Kanal ein, ob er Bericht, Alarme oder beides bekommt', async () => {
+    channels = [{ index: 0, name: 'Handy', scheme: 'ntfy', gets: 'both' }]
+    const w = mount(NotificationSettings)
+    await flushPromises()
+    await w.get('select[data-test=channel-gets]').setValue('alerts')
+    await flushPromises()
+    const put = calls.find((c) => c.method === 'PUT')
+    expect(put).toEqual({ url: '/api/integrations/notifications/0', method: 'PUT', body: { gets: 'alerts' } })
   })
 })
 

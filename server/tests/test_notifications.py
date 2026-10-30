@@ -46,7 +46,7 @@ def test_no_part_of_any_channel_url_is_ever_shown(admin):
     assert [c["scheme"] for c in body.json()["channels"]] == ["tgram", "slack", "discord", "mailto", "ntfy"]
     for part in SECRET_PARTS + ["smtp.example.org", "ntfy.example.org", "987654", "noah@example.org"]:
         assert part not in body.text, part
-    assert all(set(c) == {"index", "name", "scheme"} for c in body.json()["channels"])
+    assert all(set(c) == {"index", "name", "scheme", "gets"} for c in body.json()["channels"])
 
 
 def test_urls_are_stored_encrypted_and_not_in_the_audit_log(admin):

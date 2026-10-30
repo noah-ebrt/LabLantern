@@ -18,6 +18,9 @@ const message = ref(null)
 const saving = ref(false)
 // Kurzlauf: scannt zwischen den täglichen Läufen mit vorhandenen Agentendaten, meldet nur Neues
 const short = reactive({ enabled: true, hours: 12, choices: [2, 3, 4, 6, 8, 12], agent_report_minutes: 55 })
+// Bericht des täglichen Laufs: Alarme und Fehler gehen immer am selben Tag raus, egal was hier steht
+const report = reactive({ frequency: 'daily', weekday: 0, paused_until: '' })
+const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 async function load() {
   const s = await api.get('/api/settings/schedule')
@@ -27,6 +30,8 @@ async function load() {
   clock.timeZone = savedTz.value
   nextRun.value = s.next_run
   Object.assign(short, await api.get('/api/settings/short-schedule').catch(() => ({})))
+  const p = await api.get('/api/settings/report-policy').catch(() => ({}))
+  Object.assign(report, { frequency: p.frequency || 'daily', weekday: p.weekday ?? 0, paused_until: p.paused_until || '' })
 }
 
 async function save() {
@@ -36,6 +41,8 @@ async function save() {
     if (form.timezone !== savedTz.value) await api.put('/api/settings/timezone', { timezone: form.timezone })
     await api.put('/api/settings/schedule', { enabled: form.enabled, time: form.time })
     await api.put('/api/settings/short-schedule', { enabled: short.enabled, hours: Number(short.hours) })
+    await api.put('/api/settings/report-policy', { frequency: report.frequency, weekday: Number(report.weekday),
+                                                   paused_until: report.paused_until || null })
     await load()
     message.value = { kind: 'ok', text: 'Schedule settings saved successfully.' }
   } catch (e) {
@@ -76,6 +83,31 @@ onMounted(load)
             </template>
             <span class="subtext">Scans the latest agent data against a fresh database between daily runs and only notifies when something new is critical or high, or a check fails.</span>
             <span class="subtext">Agents report on their own about every {{ short.agent_report_minutes }} minutes, so a short run scans data at most about that old. They stay connected for commands, so a full run gets fresh data within seconds.</span>
+          </SettingsEntry>
+        </SettingsList>
+      </SettingsSection>
+
+      <SettingsSection title="Report">
+        <SettingsList>
+          <SettingsEntry icon="mail" title="Report frequency"
+                         :meta="report.paused_until ? `Paused until ${report.paused_until}` : report.frequency === 'weekly' ? `Weekly on ${weekdays[report.weekday]}` : report.frequency === 'on_change' ? 'Only on change' : 'Daily'">
+            <template #actions>
+              <select v-model="report.frequency" name="report_frequency" aria-label="Report frequency" class="interval">
+                <option value="daily">daily</option>
+                <option value="weekly">weekly</option>
+                <option value="on_change">only on change</option>
+              </select>
+              <select v-if="report.frequency === 'weekly'" v-model.number="report.weekday" name="report_weekday" aria-label="Weekday" class="interval">
+                <option v-for="(d, i) in weekdays" :key="d" :value="i">{{ d }}</option>
+              </select>
+            </template>
+            <span class="subtext">Applies to the report of the daily run when everything is OK or only warnings are open. "Only on change" sends it when findings are new, resolved, reopened or changed, or a system could not be checked.</span>
+            <span class="subtext">Immediate alerts, alerts and errors always go out on the day they happen, whatever is set here. Runs started by hand always report.</span>
+            <label class="time-field">
+              <span class="field-label">Pause reports until (optional)</span>
+              <input v-model="report.paused_until" type="date" name="paused_until" class="mono" />
+            </label>
+            <span class="subtext">For a vacation or a rebuild. Only the regular report pauses, alerts still go out.</span>
           </SettingsEntry>
         </SettingsList>
       </SettingsSection>

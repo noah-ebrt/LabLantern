@@ -24,6 +24,12 @@ beforeEach(() => {
     if (url === '/api/settings/short-schedule' && method === 'PUT') {
       return json({ ok: true })
     }
+    if (url === '/api/settings/report-policy' && method === 'GET') {
+      return json({ frequency: 'daily', weekday: 0, paused_until: null })
+    }
+    if (url === '/api/settings/report-policy' && method === 'PUT') {
+      return json({ ok: true })
+    }
     return json({}, 404)
   }))
 })
@@ -63,5 +69,28 @@ describe('ScheduleSettings', () => {
     const short = calls.find((c) => c.method === 'PUT' && c.url === '/api/settings/short-schedule')
     expect(short.body).toEqual({ enabled: true, hours: 12 })
     expect(w.text()).toContain('Schedule settings saved successfully.')
+  })
+
+  it('speichert Berichtshäufigkeit mit Wochentag und Pause', async () => {
+    const w = mount(ScheduleSettings)
+    await flushPromises()
+    expect(w.text()).toContain('Report frequency')
+    await w.get('select[name=report_frequency]').setValue('weekly')
+    await w.get('select[name=report_weekday]').setValue('4')
+    await w.get('input[name=paused_until]').setValue('2026-12-24')
+    await w.find('form').trigger('submit')
+    await flushPromises()
+    const put = calls.find((c) => c.url === '/api/settings/report-policy' && c.method === 'PUT')
+    expect(put.body).toEqual({ frequency: 'weekly', weekday: 4, paused_until: '2026-12-24' })
+  })
+
+  it('leere Pause wird als null gespeichert', async () => {
+    const w = mount(ScheduleSettings)
+    await flushPromises()
+    expect(w.find('select[name=report_weekday]').exists()).toBe(false)
+    await w.find('form').trigger('submit')
+    await flushPromises()
+    const put = calls.find((c) => c.url === '/api/settings/report-policy' && c.method === 'PUT')
+    expect(put.body).toEqual({ frequency: 'daily', weekday: 0, paused_until: null })
   })
 })

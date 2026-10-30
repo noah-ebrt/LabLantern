@@ -773,7 +773,7 @@ def notify_new(ctx: Context, s) -> int:
     if not rows or ctx.notifier is None:
         return 0
     rows.sort(key=lambda w: (w.status != "betroffen", w.severity != "hoch"))
-    ok, _ = ctx.notifier(*alert_text(rows))
+    ok, _ = ctx.notifier(*alert_text(rows), kind="alert")
     if not ok:
         return 0
     now = datetime.now(timezone.utc)

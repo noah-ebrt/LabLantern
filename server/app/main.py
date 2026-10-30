@@ -76,7 +76,7 @@ def create_app(settings: Settings, clock: Callable[[], float] = time.time) -> Fa
         login_ip_limiter=RateLimiter(clock, max_failures=20, window=900),
     )
     ctx.worker_token = ensure_worker_token(settings.worker_token_path)
-    ctx.notifier = lambda title, body, html=None: notify_via_apprise(ctx, title, body, html)
+    ctx.notifier = lambda title, body, html=None, kind="report": notify_via_apprise(ctx, title, body, html, kind)
     _prepare_setup_token(ctx)
 
     # Täglicher Lauf, Wartung (Läufe weiterschalten, hängende Jobs) und stündlicher Release-Abgleich.

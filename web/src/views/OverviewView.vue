@@ -143,6 +143,11 @@ useLive(['systems', 'runs', 'findings', 'settings'], loadData, 1000)
   <RunProgress ref="progress" @done="loadData" />
 
   <template v-if="data">
+    <section v-if="data.reports_paused_until" class="notice" data-test="reports-paused">
+      <strong>Reports paused until {{ data.reports_paused_until }}.</strong>
+      Alerts and errors still go out.
+      <RouterLink to="/einstellungen">Change</RouterLink>
+    </section>
     <section v-for="h in data.setup_hints.filter((x) => !x.done)" :key="h.id" class="notice">
       <strong>Next step:</strong>
       <template v-if="h.id === 'notifications'">set up a notification channel so reports and alerts reach you.</template>

@@ -1,16 +1,18 @@
 import logging
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
+from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .context import Context
 from .guards import Guards
 from .models import put_setting, setting
+from .reportpolicy import get_report_policy, set_report_policy
 from .scanrun import ScanAlreadyActive, advance_collecting_runs, expire_stale_jobs, request_scan_run
 
 log = logging.getLogger("vulnwatch.schedule")
@@ -253,6 +255,12 @@ class ShortScheduleIn(BaseModel):
     hours: int
 
 
+class ReportPolicyIn(BaseModel):
+    frequency: Literal["daily", "weekly", "on_change"] = "daily"
+    weekday: int = Field(default=0, ge=0, le=6)   # 0 = Montag
+    paused_until: date | None = None
+
+
 class TimezoneIn(BaseModel):
     timezone: str
 
@@ -299,6 +307,22 @@ def build_schedule_router(ctx: Context, guards: Guards) -> APIRouter:
             s.commit()
         if ctx.on_schedule_change:
             ctx.on_schedule_change()
+        return {"ok": True}
+
+    @router.get("/report-policy", dependencies=[Depends(guards.require_session)])
+    def read_report_policy():
+        p = get_report_policy(ctx)
+        return {k: p[k] for k in ("frequency", "weekday", "paused_until", "last_regular_sent")}
+
+    @router.put("/report-policy")
+    def write_report_policy(body: ReportPolicyIn, found=Depends(guards.require_admin)):
+        until = body.paused_until.isoformat() if body.paused_until else None
+        set_report_policy(ctx, {"frequency": body.frequency, "weekday": body.weekday, "paused_until": until})
+        with ctx.session_factory() as s:
+            ctx.audit(s, found[0].username, "settings.report_policy",
+                      f"report {body.frequency}" + (f" on weekday {body.weekday}" if body.frequency == "weekly" else "")
+                      + (f", paused until {until}" if until else ""))
+            s.commit()
         return {"ok": True}
 
     @router.get("/timezone", dependencies=[Depends(guards.require_session)])

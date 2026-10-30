@@ -40,6 +40,7 @@ def build_config_router(ctx: Context, guards: Guards, routers: list[APIRouter]) 
     from .integrity import drop_config
     from .models import System
     from .notify import load_channels
+    from .reportpolicy import get_report_policy
     from .schedule import get_schedule, get_short_schedule, get_timezone
     from .watchdog import get_config as watchdog_config
 
@@ -82,7 +83,7 @@ def build_config_router(ctx: Context, guards: Guards, routers: list[APIRouter]) 
         return {**cfg, "password": None} if cfg else None
 
     def read_notifications(s):
-        return [{"name": c["name"], "url": None} for c in load_channels(ctx)]
+        return [{"name": c["name"], "url": None, "gets": c["gets"]} for c in load_channels(ctx)]
 
     def read_appliances(s):
         return [{"system_id": int(sid), "kind": c["kind"], "name": s.get(System, int(sid)).name, "url": c["url"],
@@ -129,6 +130,11 @@ def build_config_router(ctx: Context, guards: Guards, routers: list[APIRouter]) 
         for c in value:
             if isinstance(c, dict) and c.get("url") is not None:
                 call(found, "POST", "/integrations/notifications", c)
+        # Was ein bestehender Kanal bekommt; Positionen erst nach dem Entfernen und Anlegen bestimmen
+        wanted = {c["name"]: c["gets"] for c in value if isinstance(c, dict) and c.get("url") is None and "gets" in c}
+        for i, c in enumerate(load_channels(ctx)):
+            if c["name"] in wanted and wanted[c["name"]] != c["gets"]:
+                call(found, "PUT", "/integrations/notifications/{index}", {"gets": wanted[c["name"]]}, index=i)
 
     def write_appliances(found, value, current):
         """Mit system_id: ändern, ohne: neu anlegen, fehlende: entfernen (samt System und Funden)."""
@@ -156,6 +162,8 @@ def build_config_router(ctx: Context, guards: Guards, routers: list[APIRouter]) 
         "short_schedule": (lambda s: {k: get_short_schedule(ctx)[k] for k in ("enabled", "hours")},
                            simple("/settings/short-schedule")),
         "timezone": (lambda s: {"timezone": get_timezone(ctx)}, simple("/settings/timezone")),
+        "report_policy": (lambda s: {k: get_report_policy(ctx)[k] for k in ("frequency", "weekday", "paused_until")},
+                          simple("/settings/report-policy")),
         "finding_drop": (drop_config, simple("/settings/finding-drop")),
         "notifications": (read_notifications, write_notifications),
         "watchdog": (read_watchdog, simple("/settings/watchdog")),

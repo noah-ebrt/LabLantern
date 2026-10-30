@@ -8,13 +8,11 @@ EN = {"kritisch": "critical", "hoch": "high", "mittel": "medium", "info": "info"
 
 
 
-def format_run_report(info: dict[str, Any]) -> tuple[str, str]:
-    """Titel und Klartext-Bericht eines Laufs. `info` kommt aus scanrun.process_scan_result / expire_stale_jobs."""
+def _subject(info: dict[str, Any]) -> str:
     summary = info.get("summary") or {}
     errors = info.get("system_errors") or []
     invalid = info["status"] == "failed" or not info["canary_ok"] or not info["db_ok"]
     kritisch, hoch = summary.get("kritisch", 0), summary.get("hoch", 0)
-
     repeat = info.get("repeat_no_data") or []
     drops = info.get("sharp_drops") or []
     if invalid:
@@ -33,7 +31,23 @@ def format_run_report(info: dict[str, Any]) -> tuple[str, str]:
     elif hoch:
         subject = f"[WARNING] vulnwatch: {hoch} high vulnerabilit{'y' if hoch == 1 else 'ies'} open"
     else:
-        subject = "[OK] vulnwatch: daily report – all systems as expected"
+        subject = f"[OK] vulnwatch: {info.get('period', 'daily')} report – all systems as expected"
+    return subject
+
+
+def run_level(info: dict[str, Any]) -> str:
+    """Stufe aus dem Betreff: IMMEDIATE ALERT, ALERT, ERROR, WARNING oder OK."""
+    return _subject(info)[1:].split("]", 1)[0]
+
+
+def format_run_report(info: dict[str, Any]) -> tuple[str, str]:
+    """Titel und Klartext-Bericht eines Laufs. `info` kommt aus scanrun.process_scan_result / expire_stale_jobs."""
+    summary = info.get("summary") or {}
+    errors = info.get("system_errors") or []
+    kritisch, hoch = summary.get("kritisch", 0), summary.get("hoch", 0)
+    repeat = info.get("repeat_no_data") or []
+    drops = info.get("sharp_drops") or []
+    subject = _subject(info)
 
     lines = [
         f"vulnwatch run #{info['run_id']} ({info.get('trigger', 'manual')}) – status: {info['status']}",
@@ -89,6 +103,8 @@ def format_run_report(info: dict[str, Any]) -> tuple[str, str]:
         lines.append(f"Reopened (acceptance expired): {info['reopened_count']}")
     if info.get("resolved_count"):
         lines.append(f"Resolved since last run: {info['resolved_count']}")
+    if info.get("changed_count"):
+        lines.append(f"Changed since last run (rating or fix): {info['changed_count']}")
     ew = info.get("early_warnings") or {}
     if any((ew.get("counts") or {}).values()):
         c = ew["counts"]

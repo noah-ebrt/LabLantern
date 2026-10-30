@@ -46,6 +46,14 @@ afterEach(() => {
 const stubs = { RouterLink: { props: ['to'], template: '<a><slot /></a>' }, PipelineFlow: true, RunProgress: true, LineChart: true }
 
 describe('Overview: what to do and early warnings', () => {
+  it('shows paused reports as a notice', async () => {
+    const base = overview
+    vi.stubGlobal('fetch', vi.fn(async (url) => url === '/api/overview' ? json({ ...base(), reports_paused_until: '2026-12-24' }) : json([])))
+    const w = mount(OverviewView, { global: { stubs: { RouterLink: true } } })
+    await flushPromises()
+    expect(w.get('[data-test=reports-paused]').text()).toContain('Reports paused until 2026-12-24')
+  })
+
   it('hides done steps, offers undo and shows affected early warnings as a bar', async () => {
     const w = mount(OverviewView, { global: { stubs } })
     await flushPromises()

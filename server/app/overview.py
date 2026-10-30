@@ -1,5 +1,6 @@
 import json
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -10,6 +11,7 @@ from .coverage import SCAN_MAX_AGE_HOURS, calculate_coverage_matrix, latest_fini
 from .guards import Guards
 from .models import Finding, ScanJob, ScanRun, System
 from .notify import load_notification_urls
+from .reportpolicy import reports_paused_until
 from .scanrun import collection_progress, image_sbom_path
 from .worker_api import worker_last_seen
 
@@ -81,7 +83,7 @@ def build_overview_router(ctx: Context, guards: Guards) -> APIRouter:
                         active_run["progress"] = json.loads(job.progress or "{}")
                         active_run["claimed_at"] = job.claimed_at
         from .earlywarning import overview_summary
-        from .schedule import get_short_schedule, next_run_iso, next_short_iso
+        from .schedule import get_short_schedule, get_timezone, next_run_iso, next_short_iso
         with ctx.session_factory() as s:
             early = overview_summary(ctx, s)
         return {
@@ -102,6 +104,7 @@ def build_overview_router(ctx: Context, guards: Guards) -> APIRouter:
             "worker": worker_last_seen(ctx),
             "watchdog": {"configured": False},
             "setup_hints": [{"id": "notifications", "done": notifications_done}],
+            "reports_paused_until": reports_paused_until(ctx, datetime.now(ZoneInfo(get_timezone(ctx))).date()),
         }
 
     class DoneIn(BaseModel):
