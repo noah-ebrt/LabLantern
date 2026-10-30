@@ -31,6 +31,7 @@ from .auth import RateLimiter, new_token, sha256_hex
 from .config import Settings
 from .context import Context
 from .guards import make_guards
+from .aiproviders import build_ai_router
 from .integrations import build_integrations_router
 from .internal import build_internal_router
 from .overview import build_overview_router
@@ -119,7 +120,8 @@ def create_app(settings: Settings, clock: Callable[[], float] = time.time) -> Fa
         )
     guards = make_guards(ctx)
     api_routers = [
-        build_router(ctx, guards), build_integrations_router(ctx, guards), build_overview_router(ctx, guards),
+        build_router(ctx, guards), build_integrations_router(ctx, guards), build_ai_router(ctx, guards),
+        build_overview_router(ctx, guards),
         build_agent_router(ctx, guards), build_commands_router(ctx, guards), build_passkeys_router(ctx, guards),
         build_pairing_router(ctx, guards), build_runs_router(ctx, guards), build_schedule_router(ctx, guards),
         build_releases_router(ctx, guards), build_watchdog_router(ctx, guards), build_connectors_router(ctx, guards),

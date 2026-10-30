@@ -95,9 +95,9 @@ def build_config_router(ctx: Context, guards: Guards, routers: list[APIRouter]) 
     def write_claude(found, value, current):
         value = value or {}
         if value.get("model") != current["model"]:
-            call(found, "PUT", "/integrations/claude/model", {"model": value.get("model")})
+            raise SectionError("the model is chosen per task under AI now (PUT /api/ai/tasks)")
         if value.get("api_key"):
-            call(found, "PUT", "/integrations/claude", {"api_key": value["api_key"]})
+            call(found, "PUT", "/ai/providers/{pid}", {"api_key": value["api_key"]}, pid="anthropic")
 
     def write_npm(found, value, current):
         if value is None:
