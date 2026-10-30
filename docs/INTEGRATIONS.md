@@ -72,6 +72,15 @@ A tunnel route is public by definition, so there is no DNS check. Tunnels manage
 readable rules; they are listed as not matched, as are origins vulnwatch cannot map. Mark those by hand in the host
 dialog. If the API fails, the last mapping stays and Cloudflare Tunnel shows as an error in the coverage matrix.
 
+## Traefik (Docker labels, built in)
+
+Agents from 0.17 report the router labels of their containers (`traefik.enable`, `traefik.http.routers.*`,
+`traefik.tcp.routers.*`), never middlewares or services, which often carry credentials. Each `Host()` or `HostSNI()`
+name goes through the same public DNS check as NPM, and the container is marked "via Traefik: app.example.com".
+In Settings › Traefik you can mark an entrypoint such as `lan` as LAN only or always public; a name marked by hand
+still wins. Rules that cannot be checked (`HostRegexp`, ``HostSNI(`*`)``, no rule) are listed there too. Only the
+Docker provider on the same host is visible; routes from Traefik's file provider are missing.
+
 ## Devices without agent: TrueNAS and Home Assistant
 
 Added under **Systems → Add host**, not in the settings: each device becomes a host of its own, with findings, a

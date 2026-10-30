@@ -15,6 +15,7 @@ const versions = ref(null)
 const npm = ref(null)
 const fritz = ref(null)
 const cf = ref(null)
+const traefik = ref(null)
 const cform = reactive({ account_id: '', token: '' })
 const fform = reactive({ url: '', user: '', password: '' })
 const systems = ref([])
@@ -26,6 +27,7 @@ async function load() {
   const [v, n, s, f, c] = await Promise.all([api.get('/api/versions'), api.get('/api/settings/npm'), api.get('/api/systems'),
     api.get('/api/settings/fritzbox'), api.get('/api/settings/cftunnel')])
   cf.value = c
+  traefik.value = (await api.get('/api/settings/traefik').catch(() => null))?.state || null
   if (c.config && !cform.account_id) cform.account_id = c.config.account_id
   versions.value = v
   npm.value = n
@@ -83,6 +85,22 @@ async function setMark(names, mark) {
   }
   busy.value = false
   await testNpm()   // gilt erst nach dem nächsten Abgleich: gleich neu lesen
+}
+
+async function setEntrypoint(name, mark) {
+  const entrypoints = { ...(npm.value?.overrides?.entrypoints || {}) }
+  if (mark) entrypoints[name] = mark
+  else delete entrypoints[name]
+  busy.value = true
+  try {
+    await api.put('/api/settings/exposure-overrides', { hosts: npm.value?.overrides?.hosts || {}, entrypoints })
+    message.value = { kind: 'ok', text: `Entrypoint ${name} saved; applies with the next scan or version check.` }
+    await load()
+  } catch (e) {
+    message.value = { kind: 'error', text: e.message }
+  } finally {
+    busy.value = false
+  }
 }
 
 async function testNpm() {
@@ -338,6 +356,27 @@ useLive(['settings', 'findings'], load, 3000)
       </form>
     </SettingsSection>
 
+    <SettingsSection v-if="traefik?.configured" title="Traefik (Docker labels)" data-test="traefik">
+      <p class="subtext">Read from the router labels the agents report: {{ traefik.routers }} routers, {{ Object.values(traefik.exposed || {}).flat().length }} containers internet-exposed. Only the Docker provider on the same host is visible; routes from Traefik's file provider are not.</p>
+      <p v-if="traefik.dns_failed?.length" class="message error">Public DNS check failed for {{ traefik.dns_failed.join(', ') }} – counted as internet-exposed.</p>
+      <details v-if="traefik.lan_only?.length" class="more">
+        <summary>{{ traefik.lan_only.length }} routers only reachable in the LAN – not counted as internet-exposed</summary>
+        <span v-for="u in traefik.lan_only" :key="u.what + u.router" class="more-line"><span class="mono">{{ u.domains.join(', ') }}</span> → {{ u.what }} · {{ u.reason }}
+          · <button type="button" class="link" :disabled="busy" @click="setMark(u.domains, 'public')">Count as public</button></span>
+      </details>
+      <div v-if="traefik.entrypoints?.length" class="entrypoints" data-test="traefik-entrypoints">
+        <label v-for="e in traefik.entrypoints" :key="e"><span class="field-label mono">{{ e }}</span>
+          <select :name="`ep_${e}`" :value="npm?.overrides?.entrypoints?.[e] || ''" :disabled="busy" @change="setEntrypoint(e, $event.target.value)">
+            <option value="">decide by public DNS</option><option value="public">always public</option><option value="lan">LAN only</option>
+          </select>
+        </label>
+      </div>
+      <details v-if="traefik.unmatched?.length" class="more" data-test="traefik-unmatched">
+        <summary>{{ traefik.unmatched.length }} routers that cannot be checked – mark them on the host</summary>
+        <span v-for="u in traefik.unmatched" :key="u.what + (u.router || '')" class="more-line"><span class="mono">{{ u.what }}{{ u.router ? ` (router ${u.router})` : '' }}</span> · {{ u.why }}</span>
+      </details>
+    </SettingsSection>
+
     <SettingsSection v-if="npm?.state?.certificates?.length" title="TLS certificates in use" :count="npm.state.certificates.length"
                      hint="NPM renews 30 days ahead · under 20 days medium · under 7 days or expired high">
       <SettingsList>
@@ -367,4 +406,5 @@ useLive(['settings', 'findings'], load, 3000)
 .days.warning { color: var(--med); }
 .days.danger { color: var(--crit); font-weight: 600; }
 .version-entry .subtext a { color: var(--text-2); }
+.entrypoints { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 0.5rem 0; }
 </style>

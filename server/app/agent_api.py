@@ -27,7 +27,9 @@ ARCHES = ("amd64", "arm64")
 PACKAGES = tuple(f"{a}.{p}" for a in ARCHES for p in ("deb", "rpm"))
 DOWNLOADS = ARCHES + PACKAGES
 ERROR_KEYS = ("packages", "containers", "security_updates")
-SAFE_LABEL_PREFIXES = ("com.docker.compose.", "org.opencontainers.")   # gleiche Liste im Agenten (collector)
+# gleiche Liste im Agenten (collector): Traefik-Router ja, Middlewares und Services nie (Basic-Auth …)
+SAFE_LABEL_PREFIXES = ("com.docker.compose.", "org.opencontainers.", "traefik.http.routers.", "traefik.tcp.routers.")
+SAFE_LABEL_KEYS = frozenset({"traefik.enable"})
 INIT_WINDOW = 180.0     # so lange darf ein frisch freigegebener Agent bis zum ersten Report brauchen
 STALE_HOURS = 24
 ONLINE_WINDOW = 120.0   # letzter Long-Poll jünger als das: verbunden
@@ -96,7 +98,7 @@ class ContainerInfo(BaseModel):
     @classmethod
     def _harmless_labels(cls, v: dict[str, str]) -> dict[str, str]:
         # Labels tragen oft Zugangsdaten (Traefik-Basic-Auth, OAuth …); gespeichert wird nur Unverfängliches.
-        return {k: val for k, val in v.items() if k.startswith(SAFE_LABEL_PREFIXES)}
+        return {k: val for k, val in v.items() if k in SAFE_LABEL_KEYS or k.startswith(SAFE_LABEL_PREFIXES)}
     created: str = Field(default="", max_length=40)
     state: str = Field(default="running", max_length=40)
 

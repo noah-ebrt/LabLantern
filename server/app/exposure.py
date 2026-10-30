@@ -23,16 +23,19 @@ class ExposureSource:
     short: str                        # Quelle in exposed_auto ("NPM", "router")
     state_key: str
     refresh: Callable[[Context], dict]   # liest und speichert; {"configured": False} ohne Einrichtung
+    matrix_label: str = ""               # Name in der Abdeckungsmatrix, sonst label
 
 
 def sources() -> list[ExposureSource]:
     from .cftunnel import CF_STATE, refresh_cftunnel
     from .connectors import NPM_STATE, refresh_npm
     from .fritzbox import FRITZ_STATE, refresh_fritz
+    from .traefik import TRAEFIK_STATE, refresh_traefik
 
     return [ExposureSource("npm", "NPM", "NPM", NPM_STATE, refresh_npm),
             ExposureSource("fritzbox", "FRITZ!Box", "router", FRITZ_STATE, refresh_fritz),
-            ExposureSource("cftunnel", "Cloudflare Tunnel", "Cloudflare", CF_STATE, refresh_cftunnel)]
+            ExposureSource("cftunnel", "Cloudflare Tunnel", "Cloudflare", CF_STATE, refresh_cftunnel),
+            ExposureSource("traefik", "Traefik", "Traefik", TRAEFIK_STATE, refresh_traefik, "Traefik (Docker labels)")]
 
 
 def refresh_all(ctx: Context) -> None:
@@ -103,7 +106,7 @@ def source_rows(s, now: float) -> list[dict]:
             status, detail = "fehler", f"public DNS check failed for {names}; counted as exposed"
         else:
             status, detail = "ok", f"read {round(age)} h ago" if age >= 1 else "read just now"
-        rows.append({"key": src.key, "label": src.label, "status": status, "detail": detail,
+        rows.append({"key": src.key, "label": src.matrix_label or src.label, "status": status, "detail": detail,
                      "exposed": sum(len(v) for v in (state.get("exposed") or {}).values()),
                      "unmatched": len(state.get("unmatched") or [])})
     return rows

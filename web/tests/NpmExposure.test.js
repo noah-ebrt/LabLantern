@@ -63,4 +63,20 @@ describe('NPM exposure from public DNS', () => {
     await flushPromises()
     expect(calls.find((c) => c.url === '/api/settings/cftunnel' && c.method === 'PUT').body).toEqual({ account_id: 'a'.repeat(32), token: null })
   })
+
+  it('shows Traefik routers and marks an entrypoint LAN only', async () => {
+    const base = fetch.getMockImplementation()
+    vi.stubGlobal('fetch', vi.fn(async (url, init = {}) => {
+      if (url === '/api/settings/traefik') return json({ state: { configured: true, routers: 3, exposed: { 1: ['app'] }, entrypoints: ['lan', 'websecure'],
+        unmatched: [{ what: 'wiki on host-c', router: 'wiki', why: 'HostRegexp rules cannot be checked, mark it by hand' }] } })
+      return base(url, init)
+    }))
+    const w = mount(ProductsSettings, { global: { stubs: { SecretField: true } } })
+    await flushPromises()
+    expect(w.get('[data-test=traefik]').text()).toContain('3 routers, 1 containers internet-exposed')
+    expect(w.get('[data-test=traefik-unmatched]').text()).toContain('wiki on host-c (router wiki)')
+    await w.get('select[name=ep_lan]').setValue('lan')
+    await flushPromises()
+    expect(calls.find((c) => c.method === 'PUT').body).toEqual({ hosts: { 'old.example.org': 'public' }, entrypoints: { lan: 'lan' } })
+  })
 })

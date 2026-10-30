@@ -158,6 +158,20 @@ def test_container_labels_are_reduced_to_harmless_ones(admin):
     assert stored == {"com.docker.compose.project": "web"}
 
 
+def test_middleware_label_never_stored(admin):
+    env, client, h = admin
+    sid, bearer = activate(env, client, h)
+    labels = {"traefik.enable": "true", "traefik.http.routers.app.rule": "Host(`app.example.org`)",
+              "traefik.http.routers.app.entrypoints": "websecure",
+              "traefik.http.middlewares.auth.basicauth.users": "noah:$apr1$x",
+              "traefik.http.services.app.loadbalancer.server.port": "80", "traefik.enabled": "true"}
+    env.new_client().post("/api/agent/report", headers=bearer,
+                          json=report(containers=[{**CONTAINERS[0], "labels": labels}]))
+    stored = client.get(f"/api/systems/{sid}").json()["inventory"]["containers"][0]["labels"]
+    assert stored == {"traefik.enable": "true", "traefik.http.routers.app.rule": "Host(`app.example.org`)",
+                      "traefik.http.routers.app.entrypoints": "websecure"}
+
+
 def test_outdated_agents_are_flagged_and_an_update_command_is_offered(admin):
     env, client, h = admin
     sid, bearer = activate(env, client, h)

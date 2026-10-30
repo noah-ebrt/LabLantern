@@ -324,6 +324,11 @@ def short_run_notable(info: dict) -> bool:
 
 def process_scan_result(ctx: Context, job_id: int, result: WorkerResultIn) -> ScanRun:
     now = datetime.now(timezone.utc)
+    try:   # Traefik-Labels kommen mit jedem Agenten-Report: vor der Bewertung frisch auswerten
+        from .traefik import refresh_traefik
+        refresh_traefik(ctx)
+    except Exception:  # noqa: BLE001 (bleibt die alte Zuordnung; die Matrix zeigt das Alter)
+        log.exception("Traefik labels could not be evaluated")
     new_findings: list[dict] = []
     new_objs: list[Finding] = []
     resolved = reopened = changed = osv_closed = 0

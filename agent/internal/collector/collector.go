@@ -397,12 +397,18 @@ func hostPorts(listeners []queries.Listener, published map[int]bool) []int {
 }
 
 // safeLabelPrefixes: Nur diese Labels verlassen den Host. Andere tragen oft Zugangsdaten (Traefik-Basic-Auth,
-// OAuth-Client-IDs …). Gleiche Liste im Master (agent_api.SAFE_LABEL_PREFIXES).
-var safeLabelPrefixes = []string{"com.docker.compose.", "org.opencontainers."}
+// OAuth-Client-IDs …). Traefik-Router (Regel, Entrypoints) ja, Middlewares und Services nie.
+// Gleiche Liste im Master (agent_api.SAFE_LABEL_PREFIXES, SAFE_LABEL_KEYS).
+var safeLabelPrefixes = []string{"com.docker.compose.", "org.opencontainers.", "traefik.http.routers.", "traefik.tcp.routers."}
+var safeLabelKeys = map[string]bool{"traefik.enable": true}
 
 func safeLabels(in map[string]string) map[string]string {
 	out := map[string]string{}
 	for k, v := range in {
+		if safeLabelKeys[k] {
+			out[k] = v
+			continue
+		}
 		for _, p := range safeLabelPrefixes {
 			if strings.HasPrefix(k, p) {
 				out[k] = v

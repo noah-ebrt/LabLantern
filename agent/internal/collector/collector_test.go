@@ -322,6 +322,22 @@ func TestCleanCollectionSerializesEmptyErrorsObjectAndNeverContainerEnvironment(
 	}
 }
 
+func TestSafeLabelsTraefik(t *testing.T) {
+	got := safeLabels(map[string]string{
+		"traefik.enable":                                 "true",
+		"traefik.http.routers.app.rule":                  "Host(`app.example.org`)",
+		"traefik.http.routers.app.entrypoints":           "websecure",
+		"traefik.tcp.routers.mc.rule":                    "HostSNI(`mc.example.org`)",
+		"traefik.http.middlewares.auth.basicauth.users":  "noah:$apr1$secret",
+		"traefik.tcp.middlewares.ip.ipallowlist.source":  "10.0.0.0/8",
+		"traefik.http.services.app.loadbalancer.server":  "x",
+		"traefik.enabled":                                "true",
+	})
+	if len(got) != 4 || got["traefik.http.routers.app.rule"] == "" || got["traefik.http.middlewares.auth.basicauth.users"] != "" {
+		t.Fatalf("%v", got)
+	}
+}
+
 func TestOnlyHarmlessContainerLabelsLeaveTheHost(t *testing.T) {
 	got := safeLabels(map[string]string{
 		"com.docker.compose.project":                    "web",
