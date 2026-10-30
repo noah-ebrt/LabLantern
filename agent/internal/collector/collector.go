@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"sort"
@@ -35,6 +36,9 @@ type Env struct {
 	LookPath  func(name string) (string, error)
 	Run       func(name string, args ...string) ([]byte, error)
 	DockerGet func(path string) (body []byte, status int, err error)
+	// SocketGet fragt einen Podman-Socket (Docker-kompatible API); nil = kein Podman (Tests ohne Podman).
+	SocketGet func(socket, path string) (body []byte, status int, err error)
+	Glob      func(pattern string) ([]string, error)
 	Listeners func() []queries.Listener
 }
 
@@ -48,6 +52,8 @@ type ContainerInfo struct {
 	Labels      map[string]string `json:"labels,omitempty"`
 	Created     string            `json:"created,omitempty"`
 	State       string            `json:"state,omitempty"`
+	Runtime     string            `json:"runtime,omitempty"` // docker | podman (ab 0.17)
+	Socket      string            `json:"-"`                 // für die SBOM: welcher Socket das Image hat
 }
 
 type PackageInfo struct {
@@ -83,36 +89,41 @@ type HostReport struct {
 	CollectionErrors     map[string]string `json:"collection_errors"`
 }
 
+func unixGet(socket, path string) ([]byte, int, error) {
+	hc := &http.Client{
+		Timeout: 15 * time.Second,
+		Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "unix", socket)
+		}},
+	}
+	resp, err := hc.Get("http://unix" + path)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
+	return body, resp.StatusCode, err
+}
+
 func DefaultEnv() Env {
-	const socket = "/var/run/docker.sock"
 	return Env{
 		ReadFile:  os.ReadFile,
 		Exists:    func(p string) bool { _, err := os.Stat(p); return err == nil },
 		LookPath:  exec.LookPath,
 		Listeners: queries.TCPListeners,
+		Glob:      filepath.Glob,
 		Run: func(name string, args ...string) ([]byte, error) {
 			ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 			defer cancel()
 			return exec.CommandContext(ctx, name, args...).Output()
 		},
 		DockerGet: func(path string) ([]byte, int, error) {
-			if _, err := os.Stat(socket); err != nil {
+			if _, err := os.Stat(dockerSocket); err != nil {
 				return nil, 0, ErrNoDocker
 			}
-			hc := &http.Client{
-				Timeout: 15 * time.Second,
-				Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-					return (&net.Dialer{}).DialContext(ctx, "unix", socket)
-				}},
-			}
-			resp, err := hc.Get("http://unix" + path)
-			if err != nil {
-				return nil, 0, err
-			}
-			defer resp.Body.Close()
-			body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
-			return body, resp.StatusCode, err
+			return unixGet(dockerSocket, path)
 		},
+		SocketGet: unixGet,
 	}
 }
 
@@ -296,9 +307,9 @@ type dockerImage struct {
 // imageDigests: Registry-Digests je Image-ID (docker image inspect .RepoDigests). Der Master vergleicht sie mit
 // der Registry (Image veraltet?). Fehlt die Liste, fragt er langsamer selbst nach; deshalb ist ein Fehler hier
 // kein Sammelfehler.
-func imageDigests(env Env) map[string][]string {
+func imageDigests(get func(string) ([]byte, int, error)) map[string][]string {
 	out := map[string][]string{}
-	body, status, err := env.DockerGet("/images/json")
+	body, status, err := get("/images/json")
 	if err != nil || status != http.StatusOK {
 		return out
 	}
@@ -336,48 +347,88 @@ func publishedPorts(c dockerContainer, listeners []queries.Listener) []int {
 	return out
 }
 
-func collectContainers(env Env, r *HostReport) {
-	body, status, err := env.DockerGet("/containers/json?all=1")
-	if errors.Is(err, ErrNoDocker) {
-		return
-	}
+// queryContainers: Container und Image-Digests eines Sockets.
+func queryContainers(get func(string) ([]byte, int, error), label string) ([]dockerContainer, map[string][]string, error) {
+	body, status, err := get("/containers/json?all=1")
 	if err != nil {
-		r.CollectionErrors["containers"] = "Docker query failed: " + err.Error()
-		return
+		return nil, nil, fmt.Errorf("%s query failed: %w", label, err)
 	}
 	if status != http.StatusOK {
-		r.CollectionErrors["containers"] = fmt.Sprintf("Docker query failed: HTTP %d", status)
-		return
+		return nil, nil, fmt.Errorf("%s query failed: HTTP %d", label, status)
 	}
 	var raw []dockerContainer
 	if err := json.Unmarshal(body, &raw); err != nil {
-		r.CollectionErrors["containers"] = "invalid Docker response: " + err.Error()
-		return
+		return nil, nil, fmt.Errorf("invalid %s response: %v", label, err)
 	}
-	digests := imageDigests(env)
+	return raw, imageDigests(get), nil
+}
+
+func collectContainers(env Env, r *HostReport) {
 	var listeners []queries.Listener
 	if env.Listeners != nil {
 		listeners = env.Listeners()
 	}
 	published := map[int]bool{}
-	for _, c := range raw {
-		name := ""
-		if len(c.Names) > 0 {
-			name = strings.TrimPrefix(c.Names[0], "/")
+	seen := map[string]bool{}  // Container-IDs: der podman-docker-Shim zeigt dieselben Container zweimal
+	names := map[string]bool{} // Docker-Namen bleiben, Podman weicht bei Gleichheit auf "podman:<name>" aus
+	var errs []string
+	add := func(raw []dockerContainer, digests map[string][]string, rt, socket string) {
+		for _, c := range raw {
+			if seen[c.ID] {
+				continue
+			}
+			seen[c.ID] = true
+			name := ""
+			if len(c.Names) > 0 {
+				name = strings.TrimPrefix(c.Names[0], "/")
+			}
+			if rt == "podman" && names[name] {
+				name = "podman:" + name
+			}
+			names[name] = true
+			id := c.ID
+			if len(id) > 12 {
+				id = id[:12]
+			}
+			ports := publishedPorts(c, listeners)
+			for _, p := range ports {
+				published[p] = true
+			}
+			r.Containers = append(r.Containers, ContainerInfo{
+				ID: id, Name: name, Image: c.Image, ImageID: c.ImageID, RepoDigests: digests[c.ImageID],
+				Ports: ports, Labels: safeLabels(c.Labels), State: c.State, Runtime: rt, Socket: socket,
+				Created: time.Unix(c.Created, 0).UTC().Format(time.RFC3339),
+			})
 		}
-		id := c.ID
-		if len(id) > 12 {
-			id = id[:12]
+	}
+
+	if raw, digests, err := queryContainers(env.DockerGet, "Docker"); err == nil {
+		add(raw, digests, "docker", dockerSocket)
+	} else if !errors.Is(err, ErrNoDocker) {
+		errs = append(errs, err.Error())
+	}
+	if env.SocketGet != nil {
+		podman := 0
+		for _, s := range findSockets(env.Glob, env.Exists) {
+			if s.Runtime != "podman" {
+				continue
+			}
+			podman++
+			sock := s.Path
+			get := func(path string) ([]byte, int, error) { return env.SocketGet(sock, path) }
+			raw, digests, err := queryContainers(get, "Podman ("+sock+")")
+			if err != nil {
+				errs = append(errs, err.Error())
+				continue
+			}
+			add(raw, digests, "podman", sock)
 		}
-		ports := publishedPorts(c, listeners)
-		for _, p := range ports {
-			published[p] = true
+		if podman == 0 && podmanInstalled(env.Exists) {
+			errs = append(errs, podmanNoSocket)
 		}
-		r.Containers = append(r.Containers, ContainerInfo{
-			ID: id, Name: name, Image: c.Image, ImageID: c.ImageID, RepoDigests: digests[c.ImageID],
-			Ports: ports, Labels: safeLabels(c.Labels), State: c.State,
-			Created: time.Unix(c.Created, 0).UTC().Format(time.RFC3339),
-		})
+	}
+	if len(errs) > 0 {
+		r.CollectionErrors["containers"] = strings.Join(errs, "; ")
 	}
 	r.HostPorts = hostPorts(listeners, published)
 }

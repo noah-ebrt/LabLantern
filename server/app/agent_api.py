@@ -4,7 +4,7 @@ import json
 import os
 import re
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import FileResponse
@@ -101,6 +101,7 @@ class ContainerInfo(BaseModel):
         return {k: val for k, val in v.items() if k in SAFE_LABEL_KEYS or k.startswith(SAFE_LABEL_PREFIXES)}
     created: str = Field(default="", max_length=40)
     state: str = Field(default="running", max_length=40)
+    runtime: Literal["docker", "podman"] = "docker"   # ab Agent 0.17; ältere melden nur Docker
 
 
 class PackageIn(BaseModel):

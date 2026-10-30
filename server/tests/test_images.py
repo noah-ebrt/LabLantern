@@ -158,6 +158,18 @@ def test_container_labels_are_reduced_to_harmless_ones(admin):
     assert stored == {"com.docker.compose.project": "web"}
 
 
+def test_container_without_runtime_defaults_docker(admin):
+    env, client, h = admin
+    sid, bearer = activate(env, client, h)
+    podman = {**CONTAINERS[0], "name": "web", "runtime": "podman"}
+    r = env.new_client().post("/api/agent/report", headers=bearer, json=report(containers=[CONTAINERS[0], podman]))
+    assert r.status_code == 200
+    stored = client.get(f"/api/systems/{sid}").json()["inventory"]["containers"]
+    assert [c["runtime"] for c in stored] == ["docker", "podman"]
+    bad = {**CONTAINERS[0], "runtime": "lxc"}
+    assert env.new_client().post("/api/agent/report", headers=bearer, json=report(containers=[bad])).status_code == 422
+
+
 def test_middleware_label_never_stored(admin):
     env, client, h = admin
     sid, bearer = activate(env, client, h)

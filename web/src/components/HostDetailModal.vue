@@ -197,7 +197,7 @@ useLive(['commands'], loadCommands)
           </thead>
           <tbody>
             <tr v-for="c in system.inventory.containers" :key="c.id">
-              <td class="strong name">{{ c.name }}</td>
+              <td class="strong name">{{ c.name }} <span v-if="c.runtime === 'podman'" class="badge neutral" title="Container runs under Podman">podman</span></td>
               <td class="img"><code :title="c.image">{{ shortImage(c.image) }}</code></td>
               <td class="st"><span :class="['badge', containerState(c).cls]">{{ containerState(c).text }}</span></td>
               <td class="ver">

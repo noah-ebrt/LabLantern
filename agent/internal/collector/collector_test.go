@@ -22,6 +22,8 @@ type fake struct {
 	bins   map[string]bool
 	cmds   map[string]result
 	docker func(path string) ([]byte, int, error)
+	podman func(socket, path string) ([]byte, int, error)
+	globs  map[string][]string
 }
 
 func newFake() *fake {
@@ -51,6 +53,8 @@ func (f *fake) env() Env {
 			return []byte(r.out), r.err
 		},
 		DockerGet: f.docker,
+		SocketGet: f.podman,
+		Glob:      func(p string) ([]string, error) { return f.globs[p], nil },
 	}
 }
 
