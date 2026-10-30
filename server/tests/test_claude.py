@@ -6,6 +6,7 @@ import threading
 import pytest
 from sqlalchemy import select, text
 
+from app.aibase import short_error
 from app.models import AuditLog
 from tests.conftest import Env
 
@@ -199,3 +200,15 @@ def test_models_come_from_anthropic_and_auto_picks_the_newest_haiku(admin, monke
     assert integrations.resolve_model(env.app.state.ctx) == "claude-opus-5-5"
     client.put("/api/integrations/claude/model", headers=h, json={"model": None})
     assert integrations.resolve_model(env.app.state.ctx) == "claude-haiku-6"
+
+
+def test_usage_limit_message_is_passed_through():
+    body = {"error": {"type": "invalid_request_error", "message": "You have reached your specified workspace API usage limits. You will regain access on 2026-11-01 at 00:00 UTC."}}
+    msg = short_error("Anthropic", 400, body, secret=None)
+    assert msg == "Anthropic: You have reached your specified workspace API usage limits. You will regain access on 2026-11-01 at 00:00 UTC. (HTTP 400)"
+
+
+def test_error_text_is_truncated_and_scrubbed():
+    key = "sk-ant-api03-SECRET-0123456789abcdef"
+    msg = short_error("OpenAI", 401, {"error": {"message": f"bad key {key} " + "x" * 600}}, secret=key)
+    assert key not in msg and len(msg) <= 340 and msg.endswith("(HTTP 401)")

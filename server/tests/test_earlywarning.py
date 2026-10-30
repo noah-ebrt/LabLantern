@@ -176,7 +176,7 @@ def test_wrong_api_key_gives_unclear_not_a_gap(ctx, gitlab_host):
     ew.run_pass(ctx, fetch=lambda url: ew.parse_feed(RSS))
     with ctx.session_factory() as s:
         w = s.scalar(select(EarlyWarning))
-        assert (w.status, w.detail) == ("unklar", "Claude could not read the advisory (Claude API: key invalid (HTTP 401)); ask again")
+        assert (w.status, w.detail) == ("unklar", "Claude could not read the advisory (Anthropic: key invalid (HTTP 401)); ask again")
         assert s.scalar(select(Finding)) is None
 
 
@@ -515,7 +515,7 @@ def test_research_errors_are_recorded_not_raised(ctx, pi_host):
     use(ctx, Claude(status=429))
     state = ew.run_pass(ctx, fetch=lambda url: [], force_research=True)
     assert state["research"] == {**state["research"], "ok": False, "model": "claude-opus-5-5",
-                                 "error": "Claude API: rate limit (HTTP 429)"}
+                                 "error": "Anthropic: rate limit (HTTP 429)"}
 
 
 def test_legacy_default_feeds_upgrade_to_the_global_list(ctx):

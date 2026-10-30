@@ -11,6 +11,8 @@ from typing import Any, Callable
 
 import anthropic
 
+from .aibase import AiError, short_error
+
 log = logging.getLogger("vulnwatch.claude")
 
 # Modelle, die den serverseitigen Refusal-Fallback ("default") annehmen; für sie wird er immer mitgeschickt
@@ -22,8 +24,7 @@ WEB_SEARCH_DYNAMIC = ("claude-opus-5", "claude-opus-4-8", "claude-opus-4-7", "cl
 MAX_PAUSES = 4
 
 
-class ClaudeError(Exception):
-    """Jeder Fehler beim Aufruf; die Frühwarnung macht daraus „needs review“, nie eine Lücke."""
+ClaudeError = AiError   # Alias: bestehende Importe und `earlywarning.AiError` bleiben unverändert
 
 
 def make_client(base_url: str, key: str, factory: Callable[[str], Any] | None = None) -> anthropic.Anthropic:
@@ -32,25 +33,25 @@ def make_client(base_url: str, key: str, factory: Callable[[str], Any] | None = 
     return anthropic.Anthropic(api_key=key, base_url=base_url, timeout=120.0, max_retries=2)
 
 
-def _call(fn):
-    """SDK-Fehler in einen Satz übersetzen, ohne Schlüssel oder Antworttexte zu zeigen."""
+def _call(client, fn):
+    """SDK-Fehler in einen Satz übersetzen; bei sonstigen HTTP-Fehlern mit der Meldung des Anbieters, ohne Schlüssel."""
     try:
         return fn()
     except anthropic.AuthenticationError:
-        raise ClaudeError("Claude API: key invalid (HTTP 401)") from None
+        raise ClaudeError("Anthropic: key invalid (HTTP 401)") from None
     except anthropic.PermissionDeniedError:
-        raise ClaudeError("Claude API: key not permitted (HTTP 403)") from None
+        raise ClaudeError("Anthropic: key not permitted (HTTP 403)") from None
     except anthropic.RateLimitError:
-        raise ClaudeError("Claude API: rate limit (HTTP 429)") from None
+        raise ClaudeError("Anthropic: rate limit (HTTP 429)") from None
     except anthropic.APIStatusError as e:
-        raise ClaudeError(f"Claude API HTTP {e.status_code}") from None
+        raise ClaudeError(short_error("Anthropic", e.status_code, e.body, getattr(client, "api_key", None))) from None
     except anthropic.APIConnectionError:
-        raise ClaudeError("Claude API unreachable") from None
+        raise ClaudeError("Anthropic: API unreachable") from None
 
 
 def check_key(client: anthropic.Anthropic) -> dict:
     try:
-        _call(lambda: client.models.list(limit=1))
+        _call(client, lambda: client.models.list(limit=1))
         return {"ok": True}
     except ClaudeError as e:
         return {"ok": False, "error": str(e)}
@@ -61,14 +62,14 @@ def list_models(client: anthropic.Anthropic) -> list[dict]:
     def fetch():
         return [{"id": m.id, "name": m.display_name or m.id,
                  "created_at": m.created_at.isoformat() if m.created_at else ""} for m in client.models.list(limit=100)]
-    return sorted(_call(fetch), key=lambda m: m["created_at"], reverse=True)
+    return sorted(_call(client, fetch), key=lambda m: m["created_at"], reverse=True)
 
 
 def _create(client: anthropic.Anthropic, **params):
     model = params["model"]
     if model in FALLBACK_MODELS:   # Ablehnung durch Sicherheitsfilter: Anthropic leitet an ein passendes Modell weiter
-        return _call(lambda: client.beta.messages.create(betas=[FALLBACK_BETA], fallbacks="default", **params))
-    return _call(lambda: client.messages.create(**params))
+        return _call(client, lambda: client.beta.messages.create(betas=[FALLBACK_BETA], fallbacks="default", **params))
+    return _call(client, lambda: client.messages.create(**params))
 
 
 def _tool_input(resp, name: str) -> dict:
