@@ -353,3 +353,22 @@ def test_untagged_images_name_the_containers_and_the_recreate_command():
     assert detail.endswith("cd /srv/vw/deploy && docker compose up -d --force-recreate announce server")
     assert _untagged(System(name="x", inventory_json="{}"), ["plain"])[1].endswith("(a restart is not enough)")
 
+
+
+def test_podman_fq_name_same_as_docker():
+    from app.freshness import parse_ref
+
+    assert parse_ref("docker.io/library/nginx:latest") == parse_ref("nginx:latest")
+    assert parse_ref("docker.io/linuxserver/plex:1.40") == parse_ref("linuxserver/plex:1.40")
+    assert parse_ref("index.docker.io/library/postgres:16")[0] == parse_ref("postgres:16")[0]
+
+
+def test_localhost_image_no_version_check():
+    from app.freshness import check
+
+    class NoRegistry:
+        def __getattr__(self, name):
+            raise AssertionError("no registry request for localhost/ images")
+
+    status, running, newer, detail = check("localhost/myapp:latest", [], "sha256:1", "amd64", "", NoRegistry(), {})
+    assert (status, detail) == ("local", "built locally (localhost/), no version check")

@@ -45,6 +45,8 @@ def parse_ref(ref):
     if ':' in ref.rsplit('/', 1)[-1]:
         name, tag = ref.rsplit(':', 1)
     first, _, rest = name.partition('/')
+    if rest and first in ('docker.io', 'index.docker.io'):   # Podman nennt Docker-Hub-Images voll qualifiziert
+        name, first, rest = rest, '', ''
     if rest and ('.' in first or ':' in first or first == 'localhost'):
         return first, rest, tag
     return DOCKERHUB, name if '/' in name else 'library/' + name, tag
@@ -220,6 +222,8 @@ def check(ref, local_digests, image_id, arch, label_version, registry, cache):
     parsed = parse_ref(ref)
     if not parsed:
         return 'current', label_version, '', 'pinned by digest'
+    if parsed[0] == 'localhost':   # Podmans lokale Builds: es gibt keine Registry zum Vergleichen
+        return 'local', '', '', 'built locally (localhost/), no version check'
     if ref not in cache:
         try:
             remote = registry.digest(*parsed)

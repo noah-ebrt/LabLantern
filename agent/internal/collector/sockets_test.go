@@ -13,7 +13,7 @@ func TestFindSocketsOrder(t *testing.T) {
 		return []string{"/run/user/1000/podman/podman.sock", "/run/user/0/podman/podman.sock", "/run/user/5/podman/podman.sock"}, nil
 	}
 	got := findSockets(glob, func(p string) bool { return exists[p] })
-	want := []runtimeSocket{{"docker", dockerSocket}, {"podman", podmanSocket},
+	want := []RuntimeSocket{{"docker", dockerSocket}, {"podman", podmanSocket},
 		{"podman", "/run/user/0/podman/podman.sock"}, {"podman", "/run/user/1000/podman/podman.sock"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("%v", got)

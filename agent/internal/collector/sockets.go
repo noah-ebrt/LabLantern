@@ -1,6 +1,10 @@
 package collector
 
-import "sort"
+import (
+	"os"
+	"path/filepath"
+	"sort"
+)
 
 // Container-Laufzeiten: Docker, dazu Podman (rootful und rootless) über seine Docker-kompatible API.
 // Der Agent läuft als root und sieht auch die Sockets der Benutzer unter /run/user/<uid>/.
@@ -14,23 +18,23 @@ const (
 
 var podmanBinaries = []string{"/usr/bin/podman", "/usr/local/bin/podman"}
 
-type runtimeSocket struct{ Runtime, Path string }
+type RuntimeSocket struct{ Runtime, Path string }
 
 // findSockets: vorhandene Sockets in fester Reihenfolge (Docker, Podman rootful, Podman rootless nach Pfad).
-func findSockets(glob func(string) ([]string, error), exists func(string) bool) []runtimeSocket {
-	var out []runtimeSocket
+func findSockets(glob func(string) ([]string, error), exists func(string) bool) []RuntimeSocket {
+	var out []RuntimeSocket
 	if exists(dockerSocket) {
-		out = append(out, runtimeSocket{"docker", dockerSocket})
+		out = append(out, RuntimeSocket{"docker", dockerSocket})
 	}
 	if exists(podmanSocket) {
-		out = append(out, runtimeSocket{"podman", podmanSocket})
+		out = append(out, RuntimeSocket{"podman", podmanSocket})
 	}
 	if glob != nil {
 		matches, _ := glob(rootlessGlob)
 		sort.Strings(matches)
 		for _, m := range matches {
 			if exists(m) {
-				out = append(out, runtimeSocket{"podman", m})
+				out = append(out, RuntimeSocket{"podman", m})
 			}
 		}
 	}
@@ -44,4 +48,9 @@ func podmanInstalled(exists func(string) bool) bool {
 		}
 	}
 	return false
+}
+
+// Sockets: die Container-Sockets dieses Hosts (für die SBOM: welcher Socket hat das Image?).
+func Sockets() []RuntimeSocket {
+	return findSockets(filepath.Glob, func(p string) bool { _, err := os.Stat(p); return err == nil })
 }

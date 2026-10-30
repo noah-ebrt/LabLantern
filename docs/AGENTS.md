@@ -27,8 +27,15 @@ approve the host in the list.
 
 - OS name and version, kernel, architecture
 - installed packages (dpkg, rpm, apk) as an SBOM, pending security updates, reboot required
-- Docker containers (also stopped ones) with image, image ID, registry digests, published ports and a safe subset of
-  labels (`com.docker.compose.*`, `org.opencontainers.*`). **Never** environment variables or other labels.
+- Docker and Podman containers (also stopped ones) with runtime, image, image ID, registry digests, published ports
+  and a safe subset of labels (`com.docker.compose.*`, `org.opencontainers.*`, `traefik.enable` and Traefik router
+  labels from 0.17). **Never** environment variables, Traefik middlewares or services, or other labels.
+- Podman (from 0.17): the agent asks the rootful socket `/run/podman/podman.sock` and every rootless socket
+  `/run/user/<uid>/podman/podman.sock` over the Docker-compatible API. If Podman is installed but no socket is active,
+  the host shows a containers error. Enable it with `systemctl enable --now podman.socket`, or for rootless Podman
+  as that user `systemctl --user enable --now podman.socket` plus `loginctl enable-linger <user>`. Podman images
+  are exported over the socket into a temporary file for the SBOM, so the host needs free space of about the image
+  size, as with Docker. Images built locally (`localhost/…`) get no version check.
 - an SBOM per container image, generated locally with Syft
 
 Reports come about every 55 minutes on their own, and immediately when a full run asks for fresh data.
