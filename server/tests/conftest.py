@@ -169,6 +169,16 @@ def admin(env):
 
 
 @pytest.fixture(autouse=True)
+def no_extra_feeds(monkeypatch):
+    """Die Frühwarnung holt in Tests weder den KEV-Katalog noch Release-Feeds, außer ein Test schaltet sie ein:
+    die Feed-Attrappen der Tests antworten auf jede Adresse mit denselben Einträgen."""
+    from app import earlywarning
+
+    monkeypatch.setitem(earlywarning.SWITCH_DEFAULTS, "kev", False)
+    monkeypatch.setitem(earlywarning.SWITCH_DEFAULTS, "release_feeds", False)
+
+
+@pytest.fixture(autouse=True)
 def no_public_dns(monkeypatch):
     """Tests fragen nie das öffentliche DNS: jeder Name gilt dann als "Prüfung fehlgeschlagen", also erreichbar."""
     def offline(name, rtype):

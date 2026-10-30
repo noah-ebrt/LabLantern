@@ -141,10 +141,25 @@ def _versions(ctx: Context) -> None:
         log.exception("Version check failed")
 
 
-def _early_warnings(ctx: Context) -> None:
-    from .earlywarning import run_pass
+def _coverage_check(ctx: Context) -> None:
+    from .earlywarning import miss_due, run_miss_check
 
     try:
+        with ctx.session_factory() as s:
+            if not miss_due(s):
+                return
+        run_miss_check(ctx)
+    except Exception:
+        log.exception("Early warning coverage check failed")
+
+
+def _early_warnings(ctx: Context) -> None:
+    from .earlywarning import pass_due, run_pass
+
+    try:
+        with ctx.session_factory() as s:
+            if not pass_due(s):
+                return
         run_pass(ctx)
     except Exception:
         log.exception("Early warning pass failed")
@@ -237,10 +252,13 @@ def build_scheduler(ctx: Context) -> BackgroundScheduler:
     from .products import INTERVAL_HOURS
     scheduler.add_job(_versions, "interval", hours=INTERVAL_HOURS, args=[ctx], id="versions",
                       max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(minutes=2))
-    # KI-Frühwarnung: Feeds alle 2 h (ohne Claude-Schlüssel wird alles `unklar`, nie still übergangen)
-    from .earlywarning import INTERVAL_HOURS as EW_HOURS
-    scheduler.add_job(_early_warnings, "interval", hours=EW_HOURS, args=[ctx], id="early-warnings",
+    # KI-Frühwarnung: stündlicher Takt, der Durchgang selbst läuft im eingestellten Abstand (Vorgabe 2 h; ohne
+    # KI-Anbieter wird alles `unklar`, nie still übergangen)
+    scheduler.add_job(_early_warnings, "interval", hours=1, args=[ctx], id="early-warnings",
                       max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(minutes=5))
+    # Wöchentliche Abdeckungsprüfung (KEV, GitHub-Advisories); der Takt prüft nur, ob sie fällig ist
+    scheduler.add_job(_coverage_check, "interval", hours=6, args=[ctx], id="coverage-check",
+                      max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(minutes=30))
     apply_schedule(scheduler, ctx)
     return scheduler
 

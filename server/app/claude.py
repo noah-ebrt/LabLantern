@@ -105,8 +105,9 @@ def research(client: anthropic.Anthropic, model: str, system: str, text: str, to
              max_searches: int = 15) -> tuple[dict, dict]:
     """Recherche mit Websuche (serverseitig bei Anthropic) in zwei Schritten: erst nur suchen (ohne Bericht-Werkzeug
     kann das Modell die Suche nicht überspringen), dann das Ergebnis über `tool` melden.
-    `pause_turn` (Server-Werkzeug braucht mehr Runden) wird fortgesetzt, höchstens MAX_PAUSES-mal."""
-    search = web_search_tool(model, max_searches)
+    `pause_turn` (Server-Werkzeug braucht mehr Runden) wird fortgesetzt, höchstens MAX_PAUSES-mal. `max_searches` gilt
+    für die ganze Recherche (`max_uses` zählt je Anfrage, Fortsetzungen fingen sonst von vorn an). Automatisches
+    Prompt-Caching: Fortsetzungen lesen den bisherigen Verlauf zum Cache-Preis."""
     user = {"role": "user", "content": text}
     found: list = []
     searches, sources, usage = 0, [], []
@@ -114,7 +115,7 @@ def research(client: anthropic.Anthropic, model: str, system: str, text: str, to
     def call(messages, tools):
         nonlocal searches
         resp = _create(client, model=model, max_tokens=16000, system=system, tools=tools, messages=messages,
-                       output_config={"effort": "medium"})
+                       output_config={"effort": "medium"}, cache_control={"type": "ephemeral"})
         searches += sum(1 for b in resp.content if b.type == "server_tool_use")
         sources.extend(r.url for b in resp.content if b.type == "web_search_tool_result" and isinstance(b.content, list)
                        for r in b.content if getattr(r, "url", None))
@@ -123,9 +124,10 @@ def research(client: anthropic.Anthropic, model: str, system: str, text: str, to
 
     resp = None
     for _ in range(MAX_PAUSES + 1):
-        resp = call([user, {"role": "assistant", "content": found}] if found else [user], [search])
+        resp = call([user, {"role": "assistant", "content": found}] if found else [user],
+                    [web_search_tool(model, max(max_searches - searches, 1))])
         found = [*found, *resp.content]
-        if resp.stop_reason != "pause_turn":
+        if resp.stop_reason != "pause_turn" or searches >= max_searches:
             break
     if resp.stop_reason == "refusal":
         raise ClaudeError("Claude declined the request")

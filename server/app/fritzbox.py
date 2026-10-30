@@ -5,6 +5,7 @@ Passwort liegt im Geheimnisspeicher. Gelesen wird nur die Freigabeliste, nie etw
 
 IPv6-Freigaben liefert TR-064 nicht; solche Dienste bleiben von Hand zu markieren."""
 import logging
+import re
 import time
 import urllib.error
 import urllib.request
@@ -33,6 +34,14 @@ class FritzError(Exception):
     pass
 
 
+def tr064_url(url: str) -> str:
+    """TR-064 läuft auf Port 49000 (HTTPS 49443); ohne Port landet der Aufruf in der Weboberfläche (HTTP 404)."""
+    url = url.strip().rstrip("/")
+    if re.search(r":\d+$", url):
+        return url
+    return url + (":49443" if url.startswith("https:") else ":49000")
+
+
 def _soap(opener, base: str, action: str, args: dict | None = None) -> dict[str, str]:
     """Ein TR-064-Aufruf; liefert die Ausgabefelder (NewExternalPort …) als Text."""
     inner = "".join(f"<{k}>{v}</{k}>" for k, v in (args or {}).items())
@@ -59,6 +68,7 @@ def _soap(opener, base: str, action: str, args: dict | None = None) -> dict[str,
 
 def fetch_forwards(url: str, user: str, password: str) -> list[dict]:
     """Alle IPv4-Portfreigaben: {external_port, protocol, internal_client, internal_port, enabled, description}."""
+    url = tr064_url(url)
     pw = urllib.request.HTTPPasswordMgrWithDefaultRealm()
     pw.add_password(None, url, user, password)
     opener = urllib.request.build_opener(urllib.request.HTTPDigestAuthHandler(pw))
@@ -156,7 +166,7 @@ def build_fritzbox_router(ctx: Context, guards: Guards) -> APIRouter:
         if body.password is not None:
             ctx.secrets.set(FRITZ_SECRET, body.password)
         with ctx.session_factory() as s:
-            put_setting(s, FRITZ_CONFIG, {"url": url.rstrip("/"), "user": body.user.strip()})
+            put_setting(s, FRITZ_CONFIG, {"url": tr064_url(url), "user": body.user.strip()})
             ctx.audit(s, found[0].username, "connector.fritzbox.saved", url)
             s.commit()
         return {"ok": True}

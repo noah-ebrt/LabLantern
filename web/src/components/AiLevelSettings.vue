@@ -1,0 +1,196 @@
+<script setup>
+import { computed, onMounted, reactive, ref } from 'vue'
+import { api } from '../api.js'
+import { ASSUMED_NVD_SHARE, DEFAULT_RESEARCH_HOURS, LEVELS, SWITCHES, estimate, fmtUsd } from '../aicost.js'
+import Icon from './Icon.vue'
+import SettingsCard from './SettingsCard.vue'
+import SettingsSection from './SettingsSection.vue'
+
+const KEYS = ['level', 'pass_hours', 'research_hours', 'max_searches', ...SWITCHES.map((x) => x.id)]
+const cfg = reactive({ level: 'full', pass_hours: 2, research_hours: 20, max_searches: 15, kev: true, release_feeds: true, health_alerts: true, miss_check: true })
+const releaseFeeds = ref([])
+const saved = ref(null)
+const basis = ref(null)
+const research = ref({ enabled: true, verify: true })
+const busy = ref(false)
+const message = ref(null)
+const loadError = ref(null)
+
+async function load() {
+  loadError.value = null
+  try {
+    const data = await api.get('/api/early-warnings/ai-level')
+    for (const k of KEYS) cfg[k] = data[k]
+    releaseFeeds.value = data.release_feeds_found || []
+    saved.value = { ...cfg }
+    basis.value = data.basis
+    research.value = data.research
+  } catch (e) {
+    loadError.value = e.message
+  }
+}
+onMounted(load)
+
+function pick(level) {
+  if (level === cfg.level) return
+  cfg.level = level
+  cfg.research_hours = DEFAULT_RESEARCH_HOURS[level]
+}
+
+// Andere Stufen mit ihrem vorgeschlagenen Recherche-Abstand, die gewählte mit den eingegebenen Werten
+const perLevel = computed(() => {
+  if (!basis.value) return {}
+  return Object.fromEntries(LEVELS.map((l) => [l.id, estimate(basis.value, l.id === cfg.level ? cfg
+    : { ...cfg, level: l.id, research_hours: DEFAULT_RESEARCH_HOURS[l.id] }, research.value)]))
+})
+const current = computed(() => perLevel.value[cfg.level])
+const valid = computed(() => Number.isInteger(cfg.pass_hours) && cfg.pass_hours >= 1 && cfg.pass_hours <= 24
+  && Number.isInteger(cfg.research_hours) && cfg.research_hours >= 6 && cfg.research_hours <= 336
+  && Number.isInteger(cfg.max_searches) && cfg.max_searches >= 5 && cfg.max_searches <= 30)
+const dirty = computed(() => !!saved.value && KEYS.some((k) => cfg[k] !== saved.value[k]))
+const status = computed(() => ({ tone: 'neutral', text: LEVELS.find((l) => l.id === (saved.value?.level || 'full')).label }))
+
+const assumptions = computed(() => {
+  const b = basis.value
+  if (!b) return []
+  const out = [`Frequencies measured over the last ${b.days} days; token use measured from ${b.classify.measured} reads, ${b.research.measured} research runs and ${b.verify.measured} AI checks (assumed until measured).`]
+  out.push(b.verify.nvd_share == null
+    ? `Share of checks the NVD can answer: ${ASSUMED_NVD_SHARE * 100} % assumed until measured (early reports rarely have an analysed CVE yet).`
+    : `The NVD answered ${Math.round(b.verify.nvd_share * 100)} % of ${b.verify.nvd_measured} checks.`)
+  out.push(`Anthropic list prices; web search $${(b.search_usd * 1000).toFixed(0)} per 1,000 searches. No price is known for other providers; local models cost nothing.`)
+  if (cfg.kev || cfg.release_feeds) out.push('KEV and release feeds add a few reads per month with the cheap model (cents).')
+  if (!research.value.enabled) out.push('Web research is switched off on the Early warnings page.')
+  if (!research.value.verify) out.push('The vendor check is switched off on the Early warnings page.')
+  return out
+})
+
+async function save() {
+  busy.value = true
+  message.value = null
+  try {
+    await api.put('/api/early-warnings/ai-level', { ...cfg })
+    saved.value = { ...cfg }
+    message.value = { kind: 'ok', text: 'Saved. The next early warning pass uses it.' }
+  } catch (e) {
+    message.value = { kind: 'error', text: e.message }
+  } finally {
+    busy.value = false
+  }
+}
+</script>
+
+<template>
+  <SettingsCard icon="sparkles" title="AI level and cost" subtitle="How much of the early warning runs on AI, how often, and what it costs." :status="status">
+    <template #intro>
+      Fully agentic uses AI and web search for every step. The lower levels replace steps with structured public
+      data (NVD, CISA KEV), so you get fewer AI calls and lower cost but less news coverage.
+    </template>
+    <p v-if="loadError" class="message error" role="alert">{{ loadError }}
+      <button type="button" class="btn-sm" @click="load"><Icon name="refresh" :size="14" />Retry</button>
+    </p>
+
+    <SettingsSection title="Level">
+      <div class="levels" role="radiogroup" aria-label="AI level">
+        <button v-for="l in LEVELS" :key="l.id" type="button" role="radio" :aria-checked="cfg.level === l.id"
+                :class="['level', { active: cfg.level === l.id }]" :data-test="`level-${l.id}`" @click="pick(l.id)">
+          <span class="level-head">
+            <strong>{{ l.label }}</strong>
+            <span class="level-cost" :data-test="`cost-${l.id}`">{{ fmtUsd(perLevel[l.id]?.total) }}<small>/month</small></span>
+          </span>
+          <span class="level-text">{{ l.text }}</span>
+        </button>
+      </div>
+    </SettingsSection>
+
+    <SettingsSection title="Intervals">
+      <div class="intervals">
+        <label>
+          <span class="field-label">Check feeds every (hours)</span>
+          <input v-model.number="cfg.pass_hours" type="number" min="1" max="24" step="1" data-test="pass-hours" />
+        </label>
+        <label>
+          <span class="field-label">Web research every (hours)</span>
+          <input v-model.number="cfg.research_hours" type="number" min="6" max="336" step="1" data-test="research-hours"
+                 :disabled="cfg.level === 'minimal'" />
+        </label>
+        <label>
+          <span class="field-label">Searches per research run</span>
+          <input v-model.number="cfg.max_searches" type="number" min="5" max="30" step="1" data-test="max-searches"
+                 :disabled="cfg.level === 'minimal'" />
+        </label>
+      </div>
+      <span class="subtext">Feed checks cost little (AI only reads new matched advisories); web research is the expensive part. Research runs at the first feed check after its interval. Each search costs $0.01 and adds pages the model has to read; fewer searches cover fewer of your products per run.</span>
+    </SettingsSection>
+
+    <SettingsSection title="Sources and safety nets">
+      <div class="switches">
+        <label v-for="x in SWITCHES" :key="x.id" class="switch-row">
+          <input v-model="cfg[x.id]" type="checkbox" :data-test="`switch-${x.id}`" />
+          <span><strong>{{ x.label }}</strong><span class="subtext">{{ x.text }}</span></span>
+        </label>
+      </div>
+      <details v-if="cfg.release_feeds" class="feeds" data-test="release-feeds">
+        <summary>{{ releaseFeeds.length }} release feeds found in your inventory</summary>
+        <ul>
+          <li v-for="f in releaseFeeds" :key="f.url"><a :href="f.url.replace(/\/releases\.atom$/, '/releases')" target="_blank" rel="noopener">{{ f.url.replace('https://github.com/', '').replace('/releases.atom', '') }}</a> <span class="subtext">{{ f.keywords.join(', ') }}</span></li>
+        </ul>
+        <span class="subtext">From the images’ <code>org.opencontainers.image.source</code> label, only when the repository name matches the product (a label inherited from a base image does not count).</span>
+      </details>
+    </SettingsSection>
+
+    <SettingsSection v-if="current" title="Estimate per month" :hint="`${fmtUsd(current.total)} total`">
+      <div class="table-wrap">
+      <table class="cost-table" data-test="breakdown">
+        <thead><tr><th>Task</th><th>Model</th><th class="num">Runs</th><th class="num">Each</th><th class="num">Month</th></tr></thead>
+        <tbody>
+          <tr v-for="r in current.rows" :key="r.task">
+            <td>{{ r.label }}</td>
+            <td class="model">{{ r.count === 0 ? '—' : r.model || 'no model' }}</td>
+            <td class="num">{{ Math.round(r.count) }} {{ r.unit }}</td>
+            <td class="num">{{ r.count === 0 ? '—' : fmtUsd(r.usd) }}</td>
+            <td class="num">{{ fmtUsd(r.total) }}</td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+      <ul class="assumptions subtext">
+        <li v-for="a in assumptions" :key="a">{{ a }}</li>
+      </ul>
+    </SettingsSection>
+
+    <div class="actions">
+      <button type="button" class="primary" data-test="save-level" :disabled="busy || !valid || !dirty" @click="save"><Icon name="check" :size="15" />Save</button>
+    </div>
+    <p v-if="!valid" class="message error" role="alert">Feed checks: 1–24 hours. Web research: 6–336 hours, 5–30 searches.</p>
+    <p v-if="message" class="message" :class="message.kind" role="status">{{ message.text }}</p>
+  </SettingsCard>
+</template>
+
+<style scoped>
+.levels { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+.level { display: flex; flex-direction: column; gap: 0.4rem; text-align: left; padding: 0.8rem 0.9rem; border: 1px solid var(--line-strong);
+         border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text-2); }
+.level:hover { background: var(--surface-3); }
+.level.active { border-color: var(--info); background: var(--surface); color: var(--text); box-shadow: 0 0 0 1px var(--info); }
+.level-head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; }
+.level-head strong { color: var(--text); }
+.level-cost { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text); }
+.level-cost small { font-weight: 400; color: var(--text-2); margin-left: 0.15rem; }
+.level-text { font-size: 0.82rem; line-height: 1.4; }
+.intervals { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+.intervals label { display: flex; flex-direction: column; gap: 0.35rem; }
+.table-wrap { overflow-x: auto; }
+.cost-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+.cost-table th, .cost-table td { padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--line); text-align: left; }
+.cost-table th { color: var(--text-2); font-weight: 500; }
+.cost-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cost-table .model { color: var(--text-2); overflow-wrap: anywhere; }
+.switches { display: flex; flex-direction: column; gap: 0.6rem; }
+.switch-row { display: flex; gap: 0.6rem; align-items: flex-start; }
+.switch-row input { margin-top: 0.2rem; }
+.switch-row > span { display: flex; flex-direction: column; gap: 0.1rem; }
+.feeds { margin-top: 0.75rem; font-size: 0.86rem; }
+.feeds summary { cursor: pointer; color: var(--text-2); }
+.feeds ul { margin: 0.4rem 0; padding-left: 1.1rem; overflow-wrap: anywhere; }
+.assumptions { margin: 0.5rem 0 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.2rem; }
+</style>

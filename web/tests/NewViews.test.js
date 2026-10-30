@@ -19,9 +19,16 @@ beforeEach(() => {
     if (url.startsWith('/api/early-warnings') && (init.method || 'GET') === 'GET') {
       return json({ items: [WARNING, { ...WARNING, id: 2, status: 'unklar', exploited: 'unbekannt', detail: 'AI evaluation failed: Claude API HTTP 401', retryable: true }],
         counts: { betroffen: 1, unklar: 1 },
-        state: { at: 1761400000, keywords: 12, feed_errors: { 'https://bad': 'HTTP 503' } }, feeds: ['https://f'], products: [], ai_configured: true })
+        state: { at: 1761400000, keywords: 12, feed_errors: { 'https://bad': 'HTTP 503', 'https://github.com/dani-garcia/vaultwarden/releases.atom': 'HTTP 404' } },
+        feeds: ['https://f'], products: [], ai_configured: true,
+        health: [{ key: 'research', text: 'Web research failed: Anthropic: limit (HTTP 400)', since: 1761400000 }],
+        coverage: { at: 1761400000, window_days: 30, errors: {},
+          kev: [{ cve: 'CVE-2026-1', title: 'Plex Media Server: CVE-2026-1 exploited', added: '2026-10-20', status: 'related', lead_days: -6 },
+                { cve: 'CVE-2026-2', title: 'GitLab: CVE-2026-2 exploited', added: '2026-10-21', status: 'early', lead_days: 2 }],
+          ghsa: [], counts: { early: 1, late: 0, related: 1, kev_only: 0, missed: 0, ghsa_seen: 0, ghsa_possible: 0 } } })
     }
     if (url === '/api/early-warnings/2/retry') return json({ ok: true })
+    if (url === '/api/early-warnings/coverage-check') return json({ ok: true, started: true })
     if (url.startsWith('/api/history')) {
       return json({ runs: [
         { id: 1, started_at: '2026-10-24T03:00:00+00:00', counts: { kritisch: 2, hoch: 5 }, coverage_percent: 80, duration_min: 17 },
@@ -45,11 +52,20 @@ describe('EarlyWarningsView', () => {
     expect(w.text()).toContain('Exploited')
     expect(w.text()).toContain('CVE-2026-110264')
     expect(w.text()).toContain('bad: HTTP 503')
+    expect(w.text()).toContain('dani-garcia/vaultwarden: HTTP 404')   // Release-Feeds: das Repo statt github.com
+    expect(w.get('[data-test="health"]').text()).toContain('Web research failed: Anthropic: limit (HTTP 400)')
+    const cov = w.get('[data-test="coverage"]').text()
+    expect(cov).toContain('warned early 1, late 0, same product without CVE 1, only via KEV 0, missed 0')
+    expect(cov).toContain('same product, no CVE Plex Media Server')
+    expect(cov).toContain('warning 6 days after')
+    expect(cov).not.toContain('GitLab: CVE-2026-2')   // früh gewarnt: keine Lücke
+    await w.get('[data-test="coverage-now"]').trigger('click')
+    expect(calls.some((x) => x.url === '/api/early-warnings/coverage-check' && x.method === 'POST')).toBe(true)
     expect(w.text()).toContain('Affected1')
-    expect(w.findAll('button.btn-sm')).toHaveLength(1)   // nur der KI-Fehler bekommt einen neuen Versuch
-    expect(w.get('button.btn-sm').text()).toBe('Ask again')   // anbieterneutral
+    expect(w.findAll('.ew-actions button.btn-sm')).toHaveLength(1)   // nur der KI-Fehler bekommt einen neuen Versuch
+    expect(w.get('.ew-actions button.btn-sm').text()).toBe('Ask again')   // anbieterneutral
     expect(w.text()).not.toMatch(/Ask Claude|No Claude|Claude API key/)
-    await w.get('button.btn-sm').trigger('click')
+    await w.get('.ew-actions button.btn-sm').trigger('click')
     await flushPromises()
     expect(calls.some((c) => c.url === '/api/early-warnings/2/retry' && c.method === 'POST')).toBe(true)
   })

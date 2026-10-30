@@ -33,3 +33,27 @@ def test_anthropic_web_allow_list():
     assert anthropic_web("claude-sonnet-5-5") and anthropic_web("claude-haiku-5-5")
     assert anthropic_web("claude-opus-4-8") and anthropic_web("claude-haiku-4-5-20251001")
     assert not anthropic_web("claude-3-haiku-20240307")
+
+
+def test_research_caps_searches_over_the_whole_run_and_caches():
+    """`max_uses` gilt je Anfrage: Fortsetzungen (pause_turn) bekommen nur den Rest, danach geht es zum Bericht."""
+    from types import SimpleNamespace
+
+    from app import claude
+
+    calls = []
+
+    def create(**params):
+        calls.append(params)
+        if params["tools"][-1].get("type"):   # Suchschritt: drei Suchen je Runde, immer pause_turn
+            content = [SimpleNamespace(type="server_tool_use")] * 3
+            return SimpleNamespace(id="m", model="x", stop_reason="pause_turn", content=content, usage=None)
+        block = SimpleNamespace(type="tool_use", name="report", input={"advisories": []})
+        return SimpleNamespace(id="m", model="x", stop_reason="tool_use", content=[block], usage=None)
+
+    fake = SimpleNamespace(messages=SimpleNamespace(create=create))
+    tool = {"name": "report", "description": "x", "input_schema": {"type": "object", "properties": {}}}
+    _, archive = claude.research(fake, "claude-haiku-5-5", "sys", "text", tool, max_searches=7)
+    uses = [c["tools"][0]["max_uses"] for c in calls]
+    assert uses == [7, 4, 1, 1] and archive["searches"] == 9   # 3 + 3 + 3, dann Schluss; der Bericht darf 1
+    assert all(c["cache_control"] == {"type": "ephemeral"} for c in calls)

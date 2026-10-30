@@ -2,6 +2,7 @@
 import ScheduleSettings from '../components/ScheduleSettings.vue'
 import NotificationSettings from '../components/NotificationSettings.vue'
 import AiSettings from '../components/AiSettings.vue'
+import AiLevelSettings from '../components/AiLevelSettings.vue'
 import ReleaseSettings from '../components/ReleaseSettings.vue'
 import WatchdogSettings from '../components/WatchdogSettings.vue'
 import PasskeySettings from '../components/PasskeySettings.vue'
@@ -38,6 +39,7 @@ import MetricsSettings from '../components/MetricsSettings.vue'
 
       <!-- 3. AI Early Warning Integration -->
       <AiSettings />
+      <AiLevelSettings />
 
       <!-- Passkeys: Login und Bestätigung gefährlicher Befehle -->
       <PasskeySettings />

@@ -37,7 +37,7 @@ def build_config_router(ctx: Context, guards: Guards, routers: list[APIRouter]) 
     from .appliances import CONFIG_KEY as APPLIANCES_KEY, _configs
     from .connectors import NPM_CONFIG, NPM_SECRET
     from .aiproviders import MODEL_ID, TASKS, TASKS_KEY
-    from .earlywarning import DEFAULT_FEEDS, FEEDS_KEY, PRODUCTS_KEY, research_config
+    from .earlywarning import DEFAULT_FEEDS, FEEDS_KEY, PRODUCTS_KEY, ai_config, research_config
     from .fritzbox import FRITZ_CONFIG, FRITZ_SECRET
     from .integrity import drop_config
     from .models import CoverageExclusion, Snooze, System
@@ -240,6 +240,7 @@ def build_config_router(ctx: Context, guards: Guards, routers: list[APIRouter]) 
         "early_warning": (lambda s: {"feeds": setting(s, FEEDS_KEY, DEFAULT_FEEDS), "products": setting(s, PRODUCTS_KEY, [])},
                           simple("/early-warnings/config")),
         "research": (research_config, simple("/early-warnings/research")),
+        "early_warning_ai": (ai_config, simple("/early-warnings/ai-level")),
         "claude": (read_claude, write_claude),
         "npm": (read_npm, write_npm),
         "fritzbox": (read_fritzbox, write_fritzbox),

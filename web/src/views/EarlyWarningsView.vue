@@ -104,6 +104,32 @@ function stopPoll() {
 }
 onBeforeUnmount(() => poll && clearInterval(poll))
 
+// Abdeckungsprüfung: läuft im Hintergrund (KEV und GitHub, unter einer Minute); danach neu laden
+const coverageBusy = ref(false)
+const coverage = computed(() => data.value?.coverage || null)
+const STATUS_TEXT = { early: 'warned early', late: 'warned late', related: 'same product, no CVE', kev_only: 'only via KEV', missed: 'missed' }
+const coverageGaps = computed(() => (coverage.value?.kev || []).filter((r) => r.status !== 'early'))
+const coveragePossible = computed(() => (coverage.value?.ghsa || []).filter((a) => a.status === 'possible'))
+async function checkCoverage() {
+  const before = coverage.value?.at
+  coverageBusy.value = true
+  error.value = ''
+  try {
+    await api.post('/api/early-warnings/coverage-check')
+    const started = Date.now()
+    const wait = setInterval(async () => {
+      await load()
+      if (coverage.value?.at !== before || Date.now() - started > 120000) {
+        clearInterval(wait)
+        coverageBusy.value = false
+      }
+    }, 3000)
+  } catch (e) {
+    error.value = e.message
+    coverageBusy.value = false
+  }
+}
+
 async function retry(w) {
   try {
     await api.post(`/api/early-warnings/${w.id}/retry`)
@@ -117,7 +143,8 @@ const state = computed(() => data.value?.state || {})
 const counts = computed(() => data.value?.counts || {})
 const total = computed(() => Object.values(counts.value).reduce((a, b) => a + b, 0))
 const feedErrors = computed(() => Object.entries(state.value.feed_errors || {}).map(([url, err]) => {
-  try { return { host: new URL(url).hostname, url, err } } catch { return { host: url, url, err } }
+  // Release-Feeds liegen alle auf github.com: dort zählt das Repo
+  try { const u = new URL(url); return { host: u.hostname === 'github.com' ? u.pathname.replace(/\/releases\.atom$/, '').slice(1) : u.hostname, url, err } } catch { return { host: url, url, err } }
 }))
 const lastPass = computed(() => (state.value.at ? timeAgo(new Date(state.value.at * 1000).toISOString()) : 'never'))
 // Gleiche Produkte auf mehreren Wegen gefunden: je Produkt und Host einmal
@@ -189,6 +216,35 @@ useLive(['findings', 'settings'], load, 3000)
     </div>
   </div>
 
+  <div v-if="data?.health?.length" class="notice" role="alert" data-test="health">
+    <Icon name="x" :size="15" />
+    <div>
+      <strong>The early warning is not working fully</strong>
+      <span v-for="p in data.health" :key="p.key" class="subtext">{{ p.text }} <template v-if="p.since">(since {{ timeAgo(new Date(p.since * 1000).toISOString()) }})</template></span>
+    </div>
+  </div>
+
+  <section v-if="data" class="card coverage" aria-label="Coverage check" data-test="coverage">
+    <div class="coverage-head">
+      <div>
+        <strong>Coverage check</strong>
+        <span v-if="coverage" class="subtext">
+          {{ timeAgo(new Date(coverage.at * 1000).toISOString()) }} · exploited issues (CISA KEV) for your products in the last {{ coverage.window_days }} days:
+          {{ coverage.kev.length }} — warned early {{ coverage.counts.early }}, late {{ coverage.counts.late }}, same product without CVE {{ coverage.counts.related ?? 0 }}, only via KEV {{ coverage.counts.kev_only }}, missed {{ coverage.counts.missed }}<template v-if="coverage.ghsa.length">; GitHub advisories {{ coverage.counts.ghsa_seen }} seen, {{ coverage.counts.ghsa_possible }} possibly missed</template>
+        </span>
+        <span v-else class="subtext">Not run yet. Once a week vulnwatch checks whether the early warning caught every actively exploited issue for your products.</span>
+        <span v-for="(e, src) in coverage?.errors || {}" :key="src" class="subtext text-danger">{{ e }}</span>
+      </div>
+      <button class="secondary btn-sm" :disabled="coverageBusy" data-test="coverage-now" @click="checkCoverage">
+        <Icon name="refresh" :size="14" :class="{ spin: coverageBusy }" />{{ coverageBusy ? 'Checking…' : 'Check now' }}
+      </button>
+    </div>
+    <ul v-if="coverageGaps.length || coveragePossible.length" class="coverage-list">
+      <li v-for="r in coverageGaps" :key="r.cve"><span :class="['badge', r.status === 'missed' ? 'danger' : 'warning']">{{ STATUS_TEXT[r.status] }}</span> {{ r.title }} <span class="subtext">added {{ r.added }}<template v-if="r.lead_days != null"> · warning {{ Math.abs(r.lead_days) }} days {{ r.lead_days >= 0 ? 'before' : 'after' }}</template></span></li>
+      <li v-for="a in coveragePossible" :key="a.id"><span class="badge neutral">possible</span> <a :href="a.url" target="_blank" rel="noopener">{{ a.id }}</a> {{ a.products.join(', ') }}: {{ a.summary }}</li>
+    </ul>
+  </section>
+
   <section v-if="showConfig" id="ew-config" class="card config">
     <label>
       <span class="field-label">Feeds</span>
@@ -203,13 +259,13 @@ useLive(['findings', 'settings'], load, 3000)
     <div class="research-config">
       <label class="check">
         <input v-model="research.enabled" type="checkbox" :disabled="!data?.ai_configured" />
-        <span>Daily web research</span>
+        <span>Web research</span>
       </label>
       <label class="check">
         <input v-model="research.verify" type="checkbox" :disabled="!data?.ai_configured" />
         <span>Check high hits with the vendor</span>
       </label>
-      <span class="subtext">Once every {{ data?.research?.interval_hours ?? 20 }} hours the research model searches the web worldwide for fresh advisories on your products. It catches news no feed has yet; with Sonnet a pass costs about $0.20–0.40. The vendor check compares the facts of every high-severity hit with the vendor’s own advisory before it is reported. Pick the models under Settings → AI providers.</span>
+      <span class="subtext"><template v-if="data?.research?.level === 'minimal'">The AI level is Minimal: no web research, and the vendor check uses only the NVD.</template><template v-else>Once every {{ data?.research?.interval_hours ?? 20 }} hours the research model searches the web worldwide for fresh advisories on your products. It catches news no feed has yet; with Sonnet a pass costs about $0.20–0.40.</template> The vendor check compares the facts of every high-severity hit with the vendor’s own advisory<template v-if="data?.research?.level === 'balanced'"> (NVD first, AI only without NVD data)</template> before it is reported. Set the AI level, intervals and models under Settings.</span>
     </div>
     <div class="config-actions">
       <button class="primary" :disabled="saving" @click="saveConfig"><Icon name="check" :size="15" />{{ saving ? 'Saving…' : 'Save' }}</button>
@@ -289,6 +345,10 @@ useLive(['findings', 'settings'], load, 3000)
 .facts strong { color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
 .text-danger { color: var(--crit); }
 
+.coverage { padding: 0.8rem 1.05rem; margin-bottom: 1.1rem; display: flex; flex-direction: column; gap: 0.6rem; }
+.coverage-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.8rem; flex-wrap: wrap; }
+.coverage-head > div { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; flex: 1 1 260px; }
+.coverage-list { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.86rem; overflow-wrap: anywhere; }
 .notice { display: flex; gap: 0.7rem; align-items: flex-start; padding: 0.8rem 1.05rem; margin-bottom: 1.1rem; color: var(--crit); }
 .notice div { display: flex; flex-direction: column; gap: 0.15rem; }
 .notice strong { color: var(--text); font-weight: 500; }
