@@ -217,7 +217,8 @@ exploit, the severity the source states, the worst impact, and the mitigations i
 
 The AI never removes or downgrades a finding. Feed and web content is treated as data, never as instructions.
 
-Model for reading feeds: **Latest Haiku (automatic)** by default, or any model your provider offers (Settings → AI
+Model for reading feeds: **Latest Haiku (automatic)** by default when Anthropic is configured (with only OpenAI or
+your own endpoint, choose a model yourself), or any model your provider offers (Settings → AI
 providers → Models per task). The same page sets the models for the web research and the vendor check.
 
 ### Local models with Ollama
@@ -231,8 +232,8 @@ Ollama reads feeds on your own hardware, so nothing leaves your network. On the 
    `/v1`), leave the API key empty, **Save**, then **Test**.
 4. Under **Models per task** pick the Ollama model for reading feeds.
 
-The base URL is stored like a key (the settings page shows only the host). Local models are slower (a 27B model needs a minute or more
-per entry) and read less reliably than the hosted ones; they do not offer web search, so research and the vendor
+The base URL is stored like a key (the settings page shows scheme, host, port and path, never credentials or query parameters). Local models are slower (a 27B model needs a minute or more
+per entry; vulnwatch waits up to 10 minutes for one answer and does not retry) and read less reliably than the hosted ones; they do not offer web search, so research and the vendor
 check stay on Anthropic or OpenAI.
 
 ## Prometheus metrics (optional)
@@ -255,7 +256,7 @@ TLS certificate days left and watchdog pings. No finding details, no secrets.
 
 ## What leaves your network
 
-vulnwatch has no telemetry and no update check of its own. These are the outbound connections, all over HTTPS:
+vulnwatch has no telemetry and no update check of its own. These are the outbound connections, all over HTTPS (except a custom AI endpoint, which may be plain `http://` on your network):
 
 | To | When | What is sent |
 | --- | --- | --- |

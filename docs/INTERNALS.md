@@ -80,7 +80,9 @@ Agent and worker endpoints don't use cookies. They authenticate with a bearer to
 | `runs_api.py` | findings list/accept, runs list/detail/trigger |
 | `schedule.py` | APScheduler: daily run, 60 s maintenance, hourly release sync; schedule settings API |
 | `releases.py` | take the signed agent releases from `agent-sign`, verify, and serve them |
-| `integrations.py`, `notify.py`, `mail.py` | Apprise channels (mail + push), legacy SMTP, AI provider keys and endpoint |
+| `integrations.py`, `notify.py`, `mail.py` | Apprise channels (mail + push), legacy SMTP |
+| `aiproviders.py` | AI providers: keys and custom endpoint (stored as secrets), model per task, automatic choice, `/api/ai` |
+| `aibase.py`, `claude.py`, `openai_client.py` | the common provider interface and error type (`aibase.py`); Anthropic and OpenAI/OpenAI-compatible adapters |
 | `events.py` | Server-Sent Events: topic names only, published from DB commit hooks |
 | `internal.py` | `/api/internal/tls-allowed` for Caddy's `on_demand_tls ask` |
 | `announce.py` | mDNS announcement (separate container) |
