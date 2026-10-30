@@ -1,0 +1,68 @@
+# Tests, Lizenz- und Leak-Prüfung auf GitHub-eigenen Runnern. Keine Secrets außer der Musterliste für die
+# Leak-Prüfung; bei Pull Requests aus Forks fehlt sie, dann laufen nur die allgemeinen Muster.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  server:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install --require-hashes -r requirements-dev.txt
+      - run: python -m pytest -q
+
+  web:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+  agent:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: agent
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: agent/go.mod
+      - run: go vet ./...
+      - run: go test ./...
+      # Keine GPL/LGPL-artigen Abhängigkeiten (vertragen sich nicht mit der Lizenz). Ignoriert: der eigene Code (Lizenz
+      # liegt im Repo-Wurzelverzeichnis, außerhalb des Moduls), xi2/xz (gemeinfrei) und modernc.org/mathutil (BSD),
+      # deren Lizenzdateien go-licenses nicht erkennt.
+      - name: Dependency licenses
+        run: |
+          go install github.com/google/go-licenses@v1.6.0
+          "$(go env GOPATH)/bin/go-licenses" check ./... --disallowed_types=forbidden,restricted \
+            --ignore vulnwatch/agent --ignore github.com/xi2/xz --ignore modernc.org/mathutil
+
+  leaks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - run: scripts/check-leaks.sh
+        env:
+          LEAK_PATTERNS: ${{ secrets.LEAK_PATTERNS }}

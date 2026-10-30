@@ -1,0 +1,40 @@
+{
+	admin off
+	skip_install_trust
+	auto_https disable_redirects
+	# Wer per IP verbindet, sendet keinen Servernamen (SNI). Ohne diese Angabe nähme Caddy die Docker-interne
+	# Adresse des Containers und stellte dafür ein Zertifikat aus, das kein Client je akzeptieren kann.
+	default_sni {$VULNWATCH_BIND_IP}
+	# Zertifikate nur für Namen ausstellen, die der Server als seine eigenen kennt.
+	on_demand_tls {
+		ask http://server:8000/api/internal/tls-allowed
+	}
+}
+
+(wurzelzertifikat) {
+	handle /ca.crt {
+		root * /data/caddy/pki/authorities/local
+		rewrite * /root.crt
+		file_server
+	}
+}
+
+:8443 {
+	tls internal {
+		on_demand
+	}
+	# Interne Endpunkte (Worker-API, TLS-Abfrage) gibt es von außen nicht.
+	@intern path /api/worker/* /api/internal/*
+	respond @intern 404
+	request_body {
+		max_size 64MB
+	}
+	import wurzelzertifikat
+	reverse_proxy server:8000
+}
+
+# Nur im Compose-Netz (nicht veröffentlicht): Der Server liest hier das Wurzelzertifikat für den Fingerabdruck.
+http://:8081 {
+	import wurzelzertifikat
+	respond 404
+}

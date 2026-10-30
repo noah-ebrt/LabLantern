@@ -1,0 +1,25 @@
+# Root-Teil für Neustart, Agent-Update und die Liste der vertrauten Passkeys. Ohne Netz; jeder Befehl braucht
+# eine Passkey-Signatur über genau diesen Umschlag, Updates zusätzlich die Release-Signatur. dpkg/rpm schreiben
+# nach /usr und /etc, deshalb ist das Dateisystem hier nicht schreibgeschützt.
+[Unit]
+Description=vulnwatch actions (root, no network, passkey-verified)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/vulnwatch-agent action-job
+TimeoutStartSec=15min
+StateDirectory=vulnwatch-action
+StateDirectoryMode=0700
+NoNewPrivileges=yes
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+PrivateTmp=yes
+ProtectHome=read-only
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+SystemCallArchitectures=native

@@ -1,0 +1,74 @@
+import { flushPromises, mount } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import OverviewView from '../src/views/OverviewView.vue'
+import FindingsView from '../src/views/FindingsView.vue'
+import { setCsrf } from '../src/api.js'
+
+vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }), useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }))
+
+let calls
+let steps
+const json = (b, s = 200, headers = {}) => new Response(JSON.stringify(b), { status: s, headers: { 'content-type': 'application/json', ...headers } })
+const overview = () => ({
+  ampel: 'rot', findings: { kritisch: 2, hoch: 0, mittel: 0, info: 0 }, coverage: [], coverage_percent: 100, canary_status: 'ok',
+  last_run: null, active_run: null, next_run: null, worker: { age_seconds: 10 }, setup_hints: [], early_warning: {},
+  short_run: {}, next_steps: steps,
+  early_warning_hits: [{ id: 1, title: 'Unpatched Tailscale SSH flaws', severity: 'hoch', systems: ['host-b', 'raspberrypi'] }],
+})
+
+beforeEach(() => {
+  setCsrf('tok')
+  calls = []
+  steps = [
+    { id: 'mini · host packages', title: 'mini · host packages', level: 'rot', detail: '9 critical', command: '', done: false },
+    { id: 'g# · host packages', title: 'host-a · host packages', level: 'rot', detail: '4 critical', command: '', done: true },
+  ]
+  vi.stubGlobal('fetch', vi.fn(async (url, init = {}) => {
+    calls.push({ url, method: init.method || 'GET', body: init.body ? JSON.parse(init.body) : null })
+    if (url === '/api/overview') return json(overview())
+    if (url === '/api/overview/steps/done') return json({ ok: true })
+    if (url.startsWith('/api/findings')) {
+      return json([{ id: 5, cve_id: 'CVE-2026-1', title: 't', target: 'host', severity: 'kritisch', system_id: 1, system_name: 'host-c',
+        component: 'openssl', installed_version: '3.0.1', fixed_version: '3.0.2', cvss_score: 9.8, epss_score: 0.1, kev: true,
+        source: 'grype', internet_exposed: false, status: 'open',
+        action: { text: 'Update openssl to 3.0.2 or newer.', command: 'sudo apt update && sudo apt install --only-upgrade openssl' } }],
+      200, { 'X-Total-Count': '1' })
+    }
+    return json([])
+  }))
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+  setCsrf(null)
+})
+
+const stubs = { RouterLink: { props: ['to'], template: '<a><slot /></a>' }, PipelineFlow: true, RunProgress: true, LineChart: true }
+
+describe('Overview: what to do and early warnings', () => {
+  it('hides done steps, offers undo and shows affected early warnings as a bar', async () => {
+    const w = mount(OverviewView, { global: { stubs } })
+    await flushPromises()
+    expect(w.find('.ew-bar').text()).toContain('1 early warning affects your systems')
+    expect(w.find('.ew-bar').text()).toContain('host-b, raspberrypi')
+    const list = w.find('.step-list').text()
+    expect(list).toContain('mini · host packages')
+    expect(list).not.toContain('host-a · host packages')
+    expect(w.text()).toContain('Show 1 marked done')
+
+    await w.findAll('.step-actions button').find((b) => b.text() === 'Done').trigger('click')
+    await flushPromises()
+    expect(calls.find((c) => c.url === '/api/overview/steps/done').body).toEqual({ id: 'mini · host packages', done: true })
+  })
+})
+
+describe('Findings: recommended action', () => {
+  it('opens text and command under the row', async () => {
+    const w = mount(FindingsView, { global: { stubs } })
+    await flushPromises()
+    expect(w.find('.action-row').exists()).toBe(false)
+    await w.findAll('button').find((b) => b.text() === 'How to fix').trigger('click')
+    expect(w.find('.action-row').text()).toContain('Update openssl to 3.0.2 or newer.')
+    expect(w.find('.action-row code').text()).toBe('sudo apt update && sudo apt install --only-upgrade openssl')
+  })
+})

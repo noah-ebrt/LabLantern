@@ -1,0 +1,13 @@
+**/.venv
+**/node_modules
+**/dist
+**/__pycache__
+**/.pytest_cache
+deploy/.env*
+docs
+agent
+private
+graft
+.claude
+.trail
+.playwright-mcp

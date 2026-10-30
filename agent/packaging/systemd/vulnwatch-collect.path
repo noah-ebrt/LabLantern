@@ -1,0 +1,8 @@
+[Unit]
+Description=vulnwatch collector trigger (request from vulnwatch-agentd)
+
+[Path]
+PathExists=/run/vulnwatch/collect.request
+
+[Install]
+WantedBy=paths.target

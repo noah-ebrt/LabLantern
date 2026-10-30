@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+sqlalchemy
+cryptography
+argon2-cffi
+pyotp
+qrcode
+python-multipart
+apprise
+apscheduler<4
+webauthn
+zeroconf
+anthropic

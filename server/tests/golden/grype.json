@@ -1,0 +1,20 @@
+{"matches": [
+ {"vulnerability": {"id": "CVE-2021-44228", "severity": "Critical", "description": "Log4Shell", "knownExploited": [{"cve": "CVE-2021-44228"}],
+   "cvss": [{"metrics": {"baseScore": 10.0}}], "epss": [{"epss": 0.97}], "fix": {"versions": ["2.15.0"], "state": "fixed"}},
+  "artifact": {"name": "log4j-core", "version": "2.14.1", "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1"}},
+ {"vulnerability": {"id": "CVE-2024-6387", "severity": "High", "description": "regreSSHion",
+   "cvss": [{"metrics": {"baseScore": 8.1}}], "epss": [{"epss": 0.4}], "fix": {"versions": ["1:9.6p1-3ubuntu13.3"], "state": "fixed"}},
+  "artifact": {"name": "openssh-server", "version": "1:9.6p1-3ubuntu13", "purl": "pkg:deb/ubuntu/openssh-server@1:9.6p1-3ubuntu13"}},
+ {"vulnerability": {"id": "CVE-2024-6387", "severity": "High", "description": "same, lower score",
+   "cvss": [{"metrics": {"baseScore": 7.0}}], "fix": {"versions": ["1:9.6p1-3ubuntu13.3"], "state": "fixed"}},
+  "artifact": {"name": "openssh-server", "version": "1:9.6p1-3ubuntu13", "purl": "pkg:deb/ubuntu/openssh-server@1:9.6p1-3ubuntu13"}},
+ {"vulnerability": {"id": "GHSA-xxxx-yyyy-zzzz", "severity": "Critical", "description": "no CVSS, label only",
+   "fix": {"versions": ["4.17.21"], "state": "fixed"}},
+  "artifact": {"name": "lodash", "version": "4.17.20", "purl": "pkg:npm/lodash@4.17.20"}},
+ {"vulnerability": {"id": "CVE-2023-0001", "severity": "Medium", "description": "wont fix",
+   "cvss": [{"metrics": {"baseScore": 9.8}}], "fix": {"versions": ["2.0"], "state": "wont-fix"}},
+  "artifact": {"name": "libfoo", "version": "1.0", "purl": "pkg:deb/ubuntu/libfoo@1.0"}},
+ {"vulnerability": {"id": "CVE-2023-0002", "severity": "Negligible", "description": "unfixed",
+   "cvss": [], "fix": {"versions": [], "state": "not-fixed"}},
+  "artifact": {"name": "libbar", "version": "3.1", "purl": "pkg:deb/ubuntu/libbar@3.1"}}
+]}

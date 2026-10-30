@@ -1,0 +1,40 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Node
+node_modules/
+dist/
+
+# Local data and configuration
+*.db
+*.db-*
+.env
+.env.*
+!.env.example
+*.key
+/deploy/.worker-deployed
+
+# Agent build output
+/agent/vulnwatch-agent
+/agent/dist/
+/agent/build/
+
+# Maintainer's local files: plans, agent and editor tooling (not part of the product)
+/private/
+/AGENTS.md
+/.claude/
+/.trail/
+/.mcp.json
+/graft/
+/.playwright-mcp/
+/.superpowers/
+/web/.impeccable/
+/agent/.claude/
+/agent/.trail/
+/agent/.mcp.json
+/agent/graft/
+/.ignore
+/agent/.ignore

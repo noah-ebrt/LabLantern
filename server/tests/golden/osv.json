@@ -1,0 +1,14 @@
+{"results": [{"source": {"path": "/tmp/host.cdx.json", "type": "sbom"}, "packages": [
+ {"package": {"name": "openssh-server", "version": "1:9.6p1-3ubuntu13", "ecosystem": "Ubuntu:24.04:LTS"},
+  "groups": [{"ids": ["UBUNTU-CVE-2024-6387"], "max_severity": "8.1"}],
+  "vulnerabilities": [{"id": "UBUNTU-CVE-2024-6387", "upstream": ["CVE-2024-6387"], "summary": "regreSSHion",
+    "affected": [{"ranges": [{"events": [{"introduced": "0"}, {"fixed": "1:9.6p1-3ubuntu13.3"}]}]}]}]},
+ {"package": {"name": "libbaz", "version": "0.9", "ecosystem": "Ubuntu:24.04:LTS"},
+  "groups": [{"ids": ["UBUNTU-CVE-2025-1111"], "max_severity": "7.5"}],
+  "vulnerabilities": [{"id": "UBUNTU-CVE-2025-1111", "aliases": ["CVE-2025-1111"], "details": "only OSV knows",
+    "affected": [{"ranges": [{"events": [{"introduced": "0"}, {"fixed": "0.9.1"}]}]}]}]},
+ {"package": {"name": "libbar", "version": "3.1", "ecosystem": "Ubuntu:24.04:LTS"},
+  "groups": [{"ids": ["UBUNTU-CVE-2023-0002"], "max_severity": ""}],
+  "vulnerabilities": [{"id": "UBUNTU-CVE-2023-0002", "upstream": ["CVE-2023-0002"], "summary": "unfixed",
+    "affected": [{"ranges": [{"events": [{"introduced": "0"}]}]}]}]}
+]}]}

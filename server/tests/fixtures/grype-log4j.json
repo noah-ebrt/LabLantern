@@ -1,0 +1,956 @@
+{
+ "matches": [
+  {
+   "vulnerability": {
+    "id": "CVE-2021-44228",
+    "dataSource": "https://github.com/advisories/GHSA-jfh8-c2jp-5v3q",
+    "namespace": "github:language:java",
+    "severity": "Critical",
+    "urls": [
+     "https://nvd.nist.gov/vuln/detail/CVE-2021-44228"
+    ],
+    "description": "Remote code injection in Log4j",
+    "cvss": [
+     {
+      "type": "Secondary",
+      "version": "3.1",
+      "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H/E:H",
+      "metrics": {
+       "baseScore": 10,
+       "exploitabilityScore": 3.9,
+       "impactScore": 6.1
+      },
+      "vendorMetadata": {}
+     }
+    ],
+    "knownExploited": [
+     {
+      "cve": "CVE-2021-44228",
+      "vendorProject": "Apache",
+      "product": "Log4j2",
+      "dateAdded": "2021-12-10",
+      "requiredAction": "...",
+      "dueDate": "2021-12-24",
+      "knownRansomwareCampaignUse": "known",
+      "urls": [
+       "https://nvd.nist.gov/vuln/detail/CVE-2021-44228"
+      ],
+      "cwes": [
+       "CWE-20",
+       "CWE-400",
+       "CWE-502"
+      ],
+      "notes": "..."
+     }
+    ],
+    "epss": [
+     {
+      "cve": "CVE-2021-44228",
+      "epss": 0.99999,
+      "percentile": 1,
+      "date": "2026-10-22"
+     }
+    ],
+    "fix": {
+     "versions": [
+      "2.15.0"
+     ],
+     "state": "fixed",
+     "available": [
+      {
+       "version": "2.15.0",
+       "date": "2021-12-10",
+       "kind": "first-observed"
+      }
+     ]
+    },
+    "advisories": [],
+    "risk": 100
+   },
+   "relatedVulnerabilities": [
+    {
+     "id": "GHSA-jfh8-c2jp-5v3q",
+     "dataSource": "https://github.com/advisories/GHSA-jfh8-c2jp-5v3q",
+     "namespace": "github:language:java",
+     "severity": "Critical",
+     "urls": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2021-44228",
+      "https://github.com/apache/logging-log4j2/pull/608",
+      "https://github.com/tangxiaofeng7/apache-log4j-poc",
+      "https://logging.apache.org/log4j/2.x/changes-report.html#a2.15.0",
+      "https://logging.apache.org/log4j/2.x/manual/lookups.html#JndiLookup",
+      "https://issues.apache.org/jira/browse/LOG4J2-3198",
+      "https://issues.apache.org/jira/browse/LOG4J2-3201",
+      "https://logging.apache.org/log4j/2.x/manual/migration.html",
+      "https://logging.apache.org/log4j/2.x/security.html",
+      "http://packetstormsecurity.com/files/165225/Apache-Log4j2-2.14.1-Remote-Code-Execution.html",
+      "http://www.openwall.com/lists/oss-security/2021/12/10/1",
+      "http://www.openwall.com/lists/oss-security/2021/12/10/2",
+      "http://www.openwall.com/lists/oss-security/2021/12/10/3",
+      "https://psirt.global.sonicwall.com/vuln-detail/SNWLID-2021-0032",
+      "https://issues.apache.org/jira/browse/LOG4J2-3214",
+      "https://www.oracle.com/security-alerts/alert-cve-2021-44228.html",
+      "http://www.openwall.com/lists/oss-security/2021/12/13/1",
+      "http://www.openwall.com/lists/oss-security/2021/12/13/2",
+      "https://issues.apache.org/jira/browse/LOG4J2-3221",
+      "https://github.com/advisories/GHSA-7rjr-3q55-vv33",
+      "https://cert-portal.siemens.com/productcert/pdf/ssa-661247.pdf",
+      "https://lists.debian.org/debian-lts-announce/2021/12/msg00007.html",
+      "https://twitter.com/kurtseifried/status/1469345530182455296",
+      "https://www.debian.org/security/2021/dsa-5020",
+      "http://packetstormsecurity.com/files/165260/VMware-Security-Advisory-2021-0028.html",
+      "http://packetstormsecurity.com/files/165261/Apache-Log4j2-2.14.1-Information-Disclosure.html",
+      "http://packetstormsecurity.com/files/165270/Apache-Log4j2-2.14.1-Remote-Code-Execution.html",
+      "http://www.openwall.com/lists/oss-security/2021/12/14/4",
+      "https://www.intel.com/content/www/us/en/security-center/advisory/intel-sa-00646.html",
+      "https://www.kb.cert.org/vuls/id/930724",
+      "http://packetstormsecurity.com/files/165281/Log4j2-Log4Shell-Regexes.html",
+      "http://packetstormsecurity.com/files/165282/Log4j-Payload-Generator.html",
+      "http://packetstormsecurity.com/files/165306/L4sh-Log4j-Remote-Code-Execution.html",
+      "http://packetstormsecurity.com/files/165307/Log4j-Remote-Code-Execution-Word-Bypassing.html",
+      "http://packetstormsecurity.com/files/165311/log4j-scan-Extensive-Scanner.html",
+      "http://www.openwall.com/lists/oss-security/2021/12/15/3",
+      "https://cert-portal.siemens.com/productcert/pdf/ssa-714170.pdf",
+      "https://cert-portal.siemens.com/productcert/pdf/ssa-397453.pdf",
+      "https://cert-portal.siemens.com/productcert/pdf/ssa-479842.pdf",
+      "http://packetstormsecurity.com/files/165371/VMware-Security-Advisory-2021-0028.4.html",
+      "http://packetstormsecurity.com/files/165532/Log4Shell-HTTP-Header-Injection.html",
+      "https://github.com/cisagov/log4j-affected-db/blob/develop/SOFTWARE-LIST.md",
+      "http://packetstormsecurity.com/files/165642/VMware-vCenter-Server-Unauthenticated-Log4Shell-JNDI-Injection-Remote-Code-Execution.html",
+      "http://packetstormsecurity.com/files/165673/UniFi-Network-Application-Unauthenticated-Log4Shell-Remote-Code-Execution.html",
+      "https://www.oracle.com/security-alerts/cpujan2022.html",
+      "https://github.com/cisagov/log4j-affected-db",
+      "https://support.apple.com/kb/HT213189",
+      "https://www.bentley.com/en/common-vulnerability-exposure/be-2022-0001",
+      "https://www.oracle.com/security-alerts/cpuapr2022.html",
+      "https://github.com/nu11secur1ty/CVE-mitre/tree/main/CVE-2021-44228",
+      "https://www.nu11secur1ty.com/2021/12/cve-2021-44228.html",
+      "http://packetstormsecurity.com/files/167794/Open-Xchange-App-Suite-7.10.x-Cross-Site-Scripting-Command-Injection.html",
+      "http://packetstormsecurity.com/files/167917/MobileIron-Log4Shell-Remote-Command-Execution.html",
+      "http://packetstormsecurity.com/files/171626/AD-Manager-Plus-7122-Remote-Code-Execution.html",
+      "https://msrc-blog.microsoft.com/2021/12/11/microsofts-response-to-cve-2021-44228-apache-log4j2",
+      "https://security.netapp.com/advisory/ntap-20211210-0007",
+      "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/M5CSVUNV4HWZZXGOKNSK6L7RPM7BOKIB",
+      "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/VU57UJDCFIASIO35GC55JMKSRXJMCDFM",
+      "https://github.com/github/advisory-database/pull/5501",
+      "https://packetstormsecurity.com/files/165673/UniFi-Network-Application-Unauthenticated-Log4Shell-Remote-Code-Execution.html",
+      "https://packetstormsecurity.com/files/167794/Open-Xchange-App-Suite-7.10.x-Cross-Site-Scripting-Command-Injection.html",
+      "https://packetstormsecurity.com/files/167917/MobileIron-Log4Shell-Remote-Command-Execution.html",
+      "https://packetstormsecurity.com/files/171626/AD-Manager-Plus-7122-Remote-Code-Execution.html",
+      "https://sec.cloudapps.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-apache-log4j-qRuKNEbd",
+      "https://seclists.org/fulldisclosure/2022/Dec/2",
+      "https://seclists.org/fulldisclosure/2022/Jul/11",
+      "https://seclists.org/fulldisclosure/2022/Mar/23",
+      "https://tools.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-apache-log4j-qRuKNEbd",
+      "https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2021-44228",
+      "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/M5CSVUNV4HWZZXGOKNSK6L7RPM7BOKIB",
+      "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/VU57UJDCFIASIO35GC55JMKSRXJMCDFM",
+      "http://seclists.org/fulldisclosure/2022/Dec/2",
+      "http://seclists.org/fulldisclosure/2022/Jul/11",
+      "http://seclists.org/fulldisclosure/2022/Mar/23"
+     ],
+     "description": "Remote code injection in Log4j",
+     "cvss": [
+      {
+       "type": "Secondary",
+       "version": "3.1",
+       "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H/E:H",
+       "metrics": {
+        "baseScore": 10,
+        "exploitabilityScore": 3.9,
+        "impactScore": 6.1
+       },
+       "vendorMetadata": {}
+      }
+     ],
+     "knownExploited": [
+      {
+       "cve": "CVE-2021-44228",
+       "vendorProject": "Apache",
+       "product": "Log4j2",
+       "dateAdded": "2021-12-10",
+       "requiredAction": "For all affected software assets for which updates exist, the only acceptable remediation actions are: 1) Apply updates; OR 2) remove affected assets from agency networks. Temporary mitigations using one of the measures provided at https://www.cisa.gov/uscert/ed-22-02-apache-log4j-recommended-mitigation-measures are only acceptable until updates are available.",
+       "dueDate": "2021-12-24",
+       "knownRansomwareCampaignUse": "known",
+       "urls": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2021-44228"
+       ],
+       "cwes": [
+        "CWE-20",
+        "CWE-400",
+        "CWE-502"
+       ]
+      }
+     ],
+     "epss": [
+      {
+       "cve": "CVE-2021-44228",
+       "epss": 0.99999,
+       "percentile": 1,
+       "date": "2026-10-22"
+      }
+     ],
+     "cwes": [
+      {
+       "cve": "CVE-2021-44228",
+       "cwe": "CWE-20",
+       "source": "security@apache.org",
+       "type": "Secondary"
+      },
+      {
+       "cve": "CVE-2021-44228",
+       "cwe": "CWE-400",
+       "source": "security@apache.org",
+       "type": "Secondary"
+      },
+      {
+       "cve": "CVE-2021-44228",
+       "cwe": "CWE-502",
+       "source": "security@apache.org",
+       "type": "Secondary"
+      },
+      {
+       "cve": "CVE-2021-44228",
+       "cwe": "CWE-917",
+       "source": "nvd@nist.gov",
+       "type": "Secondary"
+      }
+     ]
+    }
+   ],
+   "artifact": {
+    "name": "log4j-core",
+    "version": "2.14.1",
+    "type": "java-archive",
+    "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1"
+   }
+  },
+  {
+   "vulnerability": {
+    "id": "CVE-2021-45046",
+    "dataSource": "https://github.com/advisories/GHSA-7rjr-3q55-vv33",
+    "namespace": "github:language:java",
+    "severity": "Critical",
+    "urls": [
+     "https://nvd.nist.gov/vuln/detail/CVE-2021-45046"
+    ],
+    "description": "Incomplete fix for Apache Log4j vulnerability",
+    "cvss": [
+     {
+      "type": "Secondary",
+      "version": "3.1",
+      "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:C/C:H/I:H/A:H",
+      "metrics": {
+       "baseScore": 9,
+       "exploitabilityScore": 2.3,
+       "impactScore": 6.1
+      },
+      "vendorMetadata": {}
+     }
+    ],
+    "knownExploited": [
+     {
+      "cve": "CVE-2021-45046",
+      "vendorProject": "Apache",
+      "product": "Log4j2",
+      "dateAdded": "2023-05-01",
+      "requiredAction": "...",
+      "dueDate": "2023-05-22",
+      "knownRansomwareCampaignUse": "known",
+      "urls": [
+       "https://logging.apache.org/log4j/2.x/security.html",
+       "https://nvd.nist.gov/vuln/detail/CVE-2021-45046"
+      ],
+      "cwes": [
+       "CWE-917"
+      ],
+      "notes": "..."
+     }
+    ],
+    "epss": [
+     {
+      "cve": "CVE-2021-45046",
+      "epss": 0.99977,
+      "percentile": 0.9998,
+      "date": "2026-10-22"
+     }
+    ],
+    "fix": {
+     "versions": [
+      "2.16.0"
+     ],
+     "state": "fixed",
+     "available": [
+      {
+       "version": "2.16.0",
+       "date": "2021-12-15",
+       "kind": "first-observed"
+      }
+     ]
+    },
+    "advisories": [],
+    "risk": 99.00000000000001
+   },
+   "relatedVulnerabilities": [
+    {
+     "id": "GHSA-7rjr-3q55-vv33",
+     "dataSource": "https://github.com/advisories/GHSA-7rjr-3q55-vv33",
+     "namespace": "github:language:java",
+     "severity": "Critical",
+     "urls": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2021-45046",
+      "https://logging.apache.org/log4j/2.x/security.html",
+      "https://www.openwall.com/lists/oss-security/2021/12/14/4",
+      "https://www.cve.org/CVERecord?id=CVE-2021-44228",
+      "https://www.intel.com/content/www/us/en/security-center/advisory/intel-sa-00646.html",
+      "https://cert-portal.siemens.com/productcert/pdf/ssa-661247.pdf",
+      "https://cert-portal.siemens.com/productcert/pdf/ssa-714170.pdf",
+      "https://www.kb.cert.org/vuls/id/930724",
+      "https://www.debian.org/security/2021/dsa-5022",
+      "https://psirt.global.sonicwall.com/vuln-detail/SNWLID-2021-0032",
+      "https://www.oracle.com/security-alerts/alert-cve-2021-44228.html",
+      "https://cert-portal.siemens.com/productcert/pdf/ssa-397453.pdf",
+      "https://cert-portal.siemens.com/productcert/pdf/ssa-479842.pdf",
+      "https://www.oracle.com/security-alerts/cpujan2022.html",
+      "https://www.oracle.com/security-alerts/cpuapr2022.html",
+      "https://www.oracle.com/security-alerts/cpujul2022.html",
+      "https://security.gentoo.org/glsa/202310-16",
+      "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/SIG7FZULMNK2XF6FZRU4VWYDQXNMUGAJ",
+      "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/EOKPQGV24RRBBI4TBZUDQMM4MEH7MXCY",
+      "https://sec.cloudapps.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-apache-log4j-qRuKNEbd",
+      "https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2021-45046",
+      "https://www.openwall.com/lists/oss-security/2021/12/18/1",
+      "https://www.openwall.com/lists/oss-security/2021/12/15/3",
+      "https://logging.apache.org/security.html#CVE-2021-45046",
+      "https://github.com/apache/logging-log4j2/compare/rel/2.3...rel/2.3.1"
+     ],
+     "description": "Incomplete fix for Apache Log4j vulnerability",
+     "cvss": [
+      {
+       "type": "Secondary",
+       "version": "3.1",
+       "vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:C/C:H/I:H/A:H",
+       "metrics": {
+        "baseScore": 9,
+        "exploitabilityScore": 2.3,
+        "impactScore": 6.1
+       },
+       "vendorMetadata": {}
+      }
+     ],
+     "knownExploited": [
+      {
+       "cve": "CVE-2021-45046",
+       "vendorProject": "Apache",
+       "product": "Log4j2",
+       "dateAdded": "2023-05-01",
+       "requiredAction": "Apply updates per vendor instructions.",
+       "dueDate": "2023-05-22",
+       "knownRansomwareCampaignUse": "known",
+       "urls": [
+        "https://logging.apache.org/log4j/2.x/security.html",
+        "https://nvd.nist.gov/vuln/detail/CVE-2021-45046"
+       ],
+       "cwes": [
+        "CWE-917"
+       ]
+      }
+     ],
+     "epss": [
+      {
+       "cve": "CVE-2021-45046",
+       "epss": 0.99977,
+       "percentile": 0.9998,
+       "date": "2026-10-22"
+      }
+     ],
+     "cwes": [
+      {
+       "cve": "CVE-2021-45046",
+       "cwe": "CWE-917",
+       "source": "security@apache.org",
+       "type": "Secondary"
+      },
+      {
+       "cve": "CVE-2021-45046",
+       "cwe": "CWE-917",
+       "source": "nvd@nist.gov",
+       "type": "Primary"
+      }
+     ]
+    }
+   ],
+   "artifact": {
+    "name": "log4j-core",
+    "version": "2.14.1",
+    "type": "java-archive",
+    "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1"
+   }
+  },
+  {
+   "vulnerability": {
+    "id": "CVE-2021-45105",
+    "dataSource": "https://github.com/advisories/GHSA-p6xc-xr62-6r2g",
+    "namespace": "github:language:java",
+    "severity": "High",
+    "urls": [
+     "https://nvd.nist.gov/vuln/detail/CVE-2021-45105"
+    ],
+    "description": "Apache Log4j2 vulnerable to Improper Input Validation and Uncontrolled Recursion",
+    "cvss": [
+     {
+      "type": "Secondary",
+      "version": "3.1",
+      "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:N/I:N/A:H",
+      "metrics": {
+       "baseScore": 8.6,
+       "exploitabilityScore": 3.9,
+       "impactScore": 4
+      },
+      "vendorMetadata": {}
+     }
+    ],
+    "epss": [
+     {
+      "cve": "CVE-2021-45105",
+      "epss": 0.99999,
+      "percentile": 0.99991,
+      "date": "2026-10-22"
+     }
+    ],
+    "fix": {
+     "versions": [
+      "2.17.0"
+     ],
+     "state": "fixed",
+     "available": [
+      {
+       "version": "2.17.0",
+       "date": "2021-12-19",
+       "kind": "first-observed"
+      }
+     ]
+    },
+    "advisories": [],
+    "risk": 80.499195
+   },
+   "relatedVulnerabilities": [
+    {
+     "id": "GHSA-p6xc-xr62-6r2g",
+     "dataSource": "https://github.com/advisories/GHSA-p6xc-xr62-6r2g",
+     "namespace": "github:language:java",
+     "severity": "High",
+     "urls": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2021-45105",
+      "https://logging.apache.org/log4j/2.x/security.html",
+      "https://cert-portal.siemens.com/productcert/pdf/ssa-479842.pdf",
+      "https://cert-portal.siemens.com/productcert/pdf/ssa-501673.pdf",
+      "https://lists.debian.org/debian-lts-announce/2021/12/msg00017.html",
+      "https://psirt.global.sonicwall.com/vuln-detail/SNWLID-2021-0032",
+      "https://www.debian.org/security/2021/dsa-5024",
+      "https://www.kb.cert.org/vuls/id/930724",
+      "http://www.openwall.com/lists/oss-security/2021/12/19/1",
+      "https://www.oracle.com/security-alerts/cpujan2022.html",
+      "https://www.oracle.com/security-alerts/cpuapr2022.html",
+      "https://www.oracle.com/security-alerts/cpujul2022.html",
+      "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/EOKPQGV24RRBBI4TBZUDQMM4MEH7MXCY",
+      "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/SIG7FZULMNK2XF6FZRU4VWYDQXNMUGAJ",
+      "https://sec.cloudapps.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-apache-log4j-qRuKNEbd",
+      "https://security.netapp.com/advisory/ntap-20211218-0001",
+      "https://www.zerodayinitiative.com/advisories/ZDI-21-1541",
+      "https://tools.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-apache-log4j-qRuKNEbd"
+     ],
+     "description": "Apache Log4j2 vulnerable to Improper Input Validation and Uncontrolled Recursion",
+     "cvss": [
+      {
+       "type": "Secondary",
+       "version": "3.1",
+       "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:N/I:N/A:H",
+       "metrics": {
+        "baseScore": 8.6,
+        "exploitabilityScore": 3.9,
+        "impactScore": 4
+       },
+       "vendorMetadata": {}
+      }
+     ],
+     "epss": [
+      {
+       "cve": "CVE-2021-45105",
+       "epss": 0.99999,
+       "percentile": 0.99991,
+       "date": "2026-10-22"
+      }
+     ],
+     "cwes": [
+      {
+       "cve": "CVE-2021-45105",
+       "cwe": "CWE-20",
+       "source": "security@apache.org",
+       "type": "Secondary"
+      },
+      {
+       "cve": "CVE-2021-45105",
+       "cwe": "CWE-674",
+       "source": "security@apache.org",
+       "type": "Secondary"
+      },
+      {
+       "cve": "CVE-2021-45105",
+       "cwe": "CWE-20",
+       "source": "nvd@nist.gov",
+       "type": "Primary"
+      },
+      {
+       "cve": "CVE-2021-45105",
+       "cwe": "CWE-674",
+       "source": "nvd@nist.gov",
+       "type": "Primary"
+      }
+     ]
+    }
+   ],
+   "artifact": {
+    "name": "log4j-core",
+    "version": "2.14.1",
+    "type": "java-archive",
+    "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1"
+   }
+  },
+  {
+   "vulnerability": {
+    "id": "CVE-2021-44832",
+    "dataSource": "https://github.com/advisories/GHSA-8489-44mv-ggj8",
+    "namespace": "github:language:java",
+    "severity": "Medium",
+    "urls": [
+     "https://nvd.nist.gov/vuln/detail/CVE-2021-44832"
+    ],
+    "description": "Improper Input Validation and Injection in Apache Log4j2",
+    "cvss": [
+     {
+      "type": "Secondary",
+      "version": "3.1",
+      "vector": "CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:H/I:H/A:H",
+      "metrics": {
+       "baseScore": 6.6,
+       "exploitabilityScore": 0.8,
+       "impactScore": 5.9
+      },
+      "vendorMetadata": {}
+     }
+    ],
+    "epss": [
+     {
+      "cve": "CVE-2021-44832",
+      "epss": 0.97906,
+      "percentile": 0.9991,
+      "date": "2026-10-22"
+     }
+    ],
+    "fix": {
+     "versions": [
+      "2.17.1"
+     ],
+     "state": "fixed",
+     "available": [
+      {
+       "version": "2.17.1",
+       "date": "2022-01-05",
+       "kind": "first-observed"
+      }
+     ]
+    },
+    "advisories": [],
+    "risk": 56.78548
+   },
+   "relatedVulnerabilities": [
+    {
+     "id": "GHSA-8489-44mv-ggj8",
+     "dataSource": "https://github.com/advisories/GHSA-8489-44mv-ggj8",
+     "namespace": "github:language:java",
+     "severity": "Medium",
+     "urls": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2021-44832",
+      "https://issues.apache.org/jira/browse/LOG4J2-3293",
+      "https://lists.apache.org/thread/s1o5vlo78ypqxnzn6p8zf6t9shtq5143",
+      "https://cert-portal.siemens.com/productcert/pdf/ssa-784507.pdf",
+      "https://lists.debian.org/debian-lts-announce/2021/12/msg00036.html",
+      "http://www.openwall.com/lists/oss-security/2021/12/28/1",
+      "https://www.oracle.com/security-alerts/cpujan2022.html",
+      "https://www.oracle.com/security-alerts/cpuapr2022.html",
+      "https://www.oracle.com/security-alerts/cpujul2022.html",
+      "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/EVV25FXL4FU5X6X5BSL7RLQ7T6F65MRA",
+      "https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/T57MPJUW3MA6QGWZRTMCHHMMPQNVKGFC",
+      "https://sec.cloudapps.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-apache-log4j-qRuKNEbd",
+      "https://security.netapp.com/advisory/ntap-20220104-0001",
+      "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/EVV25FXL4FU5X6X5BSL7RLQ7T6F65MRA",
+      "https://lists.fedoraproject.org/archives/list/package-announce%40lists.fedoraproject.org/message/T57MPJUW3MA6QGWZRTMCHHMMPQNVKGFC",
+      "https://tools.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-apache-log4j-qRuKNEbd"
+     ],
+     "description": "Improper Input Validation and Injection in Apache Log4j2",
+     "cvss": [
+      {
+       "type": "Secondary",
+       "version": "3.1",
+       "vector": "CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:H/I:H/A:H",
+       "metrics": {
+        "baseScore": 6.6,
+        "exploitabilityScore": 0.8,
+        "impactScore": 5.9
+       },
+       "vendorMetadata": {}
+      }
+     ],
+     "epss": [
+      {
+       "cve": "CVE-2021-44832",
+       "epss": 0.97906,
+       "percentile": 0.9991,
+       "date": "2026-10-22"
+      }
+     ],
+     "cwes": [
+      {
+       "cve": "CVE-2021-44832",
+       "cwe": "CWE-20",
+       "source": "security@apache.org",
+       "type": "Secondary"
+      },
+      {
+       "cve": "CVE-2021-44832",
+       "cwe": "CWE-74",
+       "source": "security@apache.org",
+       "type": "Secondary"
+      },
+      {
+       "cve": "CVE-2021-44832",
+       "cwe": "CWE-20",
+       "source": "nvd@nist.gov",
+       "type": "Primary"
+      }
+     ]
+    }
+   ],
+   "artifact": {
+    "name": "log4j-core",
+    "version": "2.14.1",
+    "type": "java-archive",
+    "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1"
+   }
+  },
+  {
+   "vulnerability": {
+    "id": "CVE-2026-34480",
+    "dataSource": "https://github.com/advisories/GHSA-3pxv-7cmr-fjr4",
+    "namespace": "github:language:java",
+    "severity": "Medium",
+    "urls": [
+     "https://nvd.nist.gov/vuln/detail/CVE-2026-34480"
+    ],
+    "description": "Apache Log4j Core: Silent log event loss in XmlLayout due to unescaped XML 1.0 forbidden characters",
+    "cvss": [
+     {
+      "type": "Secondary",
+      "version": "4.0",
+      "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:N/SC:N/SI:L/SA:N",
+      "metrics": {
+       "baseScore": 6.9
+      },
+      "vendorMetadata": {}
+     }
+    ],
+    "epss": [
+     {
+      "cve": "CVE-2026-34480",
+      "epss": 0.01187,
+      "percentile": 0.67629,
+      "date": "2026-10-22"
+     }
+    ],
+    "fix": {
+     "versions": [
+      "2.25.4"
+     ],
+     "state": "fixed",
+     "available": [
+      {
+       "version": "2.25.4",
+       "date": "2026-04-11",
+       "kind": "first-observed"
+      }
+     ]
+    },
+    "advisories": [],
+    "risk": 0.706265
+   },
+   "relatedVulnerabilities": [
+    {
+     "id": "GHSA-3pxv-7cmr-fjr4",
+     "dataSource": "https://github.com/advisories/GHSA-3pxv-7cmr-fjr4",
+     "namespace": "github:language:java",
+     "severity": "Medium",
+     "urls": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2026-34480",
+      "https://github.com/apache/logging-log4j2/pull/4077",
+      "https://lists.apache.org/thread/5x0hcnng0chhghp6jgjdp3qmbbhfjzhb",
+      "https://logging.apache.org/cyclonedx/vdr.xml",
+      "https://logging.apache.org/log4j/2.x/manual/layouts.html#XmlLayout",
+      "https://logging.apache.org/security.html#CVE-2026-34480",
+      "http://www.openwall.com/lists/oss-security/2026/04/10/9"
+     ],
+     "description": "Apache Log4j Core: Silent log event loss in XmlLayout due to unescaped XML 1.0 forbidden characters",
+     "cvss": [
+      {
+       "type": "Secondary",
+       "version": "4.0",
+       "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:N/SC:N/SI:L/SA:N",
+       "metrics": {
+        "baseScore": 6.9
+       },
+       "vendorMetadata": {}
+      }
+     ],
+     "epss": [
+      {
+       "cve": "CVE-2026-34480",
+       "epss": 0.01187,
+       "percentile": 0.67629,
+       "date": "2026-10-22"
+      }
+     ],
+     "cwes": [
+      {
+       "cve": "CVE-2026-34480",
+       "cwe": "CWE-116",
+       "source": "security@apache.org",
+       "type": "Secondary"
+      }
+     ]
+    }
+   ],
+   "artifact": {
+    "name": "log4j-core",
+    "version": "2.14.1",
+    "type": "java-archive",
+    "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1"
+   }
+  },
+  {
+   "vulnerability": {
+    "id": "CVE-2025-68161",
+    "dataSource": "https://github.com/advisories/GHSA-vc5p-v9hr-52mj",
+    "namespace": "github:language:java",
+    "severity": "Medium",
+    "urls": [
+     "https://nvd.nist.gov/vuln/detail/CVE-2025-68161"
+    ],
+    "description": "Apache Log4j does not verify the TLS hostname in its Socket Appender",
+    "cvss": [
+     {
+      "type": "Secondary",
+      "version": "4.0",
+      "vector": "CVSS:4.0/AV:N/AC:H/AT:N/PR:N/UI:N/VC:L/VI:N/VA:N/SC:N/SI:L/SA:N",
+      "metrics": {
+       "baseScore": 6.3
+      },
+      "vendorMetadata": {}
+     }
+    ],
+    "epss": [
+     {
+      "cve": "CVE-2025-68161",
+      "epss": 0.00767,
+      "percentile": 0.55034,
+      "date": "2026-10-22"
+     }
+    ],
+    "fix": {
+     "versions": [
+      "2.25.3"
+     ],
+     "state": "fixed",
+     "available": [
+      {
+       "version": "2.25.3",
+       "date": "2025-12-20",
+       "kind": "first-observed"
+      }
+     ]
+    },
+    "advisories": [],
+    "risk": 0.43335499999999993
+   },
+   "relatedVulnerabilities": [
+    {
+     "id": "GHSA-vc5p-v9hr-52mj",
+     "dataSource": "https://github.com/advisories/GHSA-vc5p-v9hr-52mj",
+     "namespace": "github:language:java",
+     "severity": "Medium",
+     "urls": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2025-68161",
+      "https://github.com/apache/logging-log4j2/pull/4002",
+      "https://lists.apache.org/thread/xr33kyxq3sl67lwb61ggvm1fzc8k7dvx",
+      "https://logging.apache.org/cyclonedx/vdr.xml",
+      "https://logging.apache.org/log4j/2.x/manual/appenders/network.html#SslConfiguration-attr-verifyHostName",
+      "https://logging.apache.org/log4j/2.x/manual/systemproperties.html#log4j2.sslVerifyHostName",
+      "https://logging.apache.org/security.html#CVE-2025-68161",
+      "https://github.com/apache/logging-log4j2/commit/3b93748497e1adbbd027fda8a5e7268ec5d0d578",
+      "http://www.openwall.com/lists/oss-security/2025/12/18/1"
+     ],
+     "description": "Apache Log4j does not verify the TLS hostname in its Socket Appender",
+     "cvss": [
+      {
+       "type": "Secondary",
+       "version": "4.0",
+       "vector": "CVSS:4.0/AV:N/AC:H/AT:N/PR:N/UI:N/VC:L/VI:N/VA:N/SC:N/SI:L/SA:N",
+       "metrics": {
+        "baseScore": 6.3
+       },
+       "vendorMetadata": {}
+      }
+     ],
+     "epss": [
+      {
+       "cve": "CVE-2025-68161",
+       "epss": 0.00767,
+       "percentile": 0.55034,
+       "date": "2026-10-22"
+      }
+     ],
+     "cwes": [
+      {
+       "cve": "CVE-2025-68161",
+       "cwe": "CWE-297",
+       "source": "security@apache.org",
+       "type": "Secondary"
+      },
+      {
+       "cve": "CVE-2025-68161",
+       "cwe": "CWE-295",
+       "source": "nvd@nist.gov",
+       "type": "Primary"
+      }
+     ]
+    }
+   ],
+   "artifact": {
+    "name": "log4j-core",
+    "version": "2.14.1",
+    "type": "java-archive",
+    "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1"
+   }
+  },
+  {
+   "vulnerability": {
+    "id": "CVE-2026-34477",
+    "dataSource": "https://github.com/advisories/GHSA-6hg6-v5c8-fphq",
+    "namespace": "github:language:java",
+    "severity": "Medium",
+    "urls": [
+     "https://nvd.nist.gov/vuln/detail/CVE-2026-34477"
+    ],
+    "description": "Apache Log4j Core: `verifyHostName` attribute silently ignored in TLS configuration",
+    "cvss": [
+     {
+      "type": "Secondary",
+      "version": "4.0",
+      "vector": "CVSS:4.0/AV:N/AC:H/AT:N/PR:N/UI:N/VC:L/VI:N/VA:N/SC:N/SI:L/SA:N",
+      "metrics": {
+       "baseScore": 6.3
+      },
+      "vendorMetadata": {}
+     }
+    ],
+    "epss": [
+     {
+      "cve": "CVE-2026-34477",
+      "epss": 0.00502,
+      "percentile": 0.4205,
+      "date": "2026-10-22"
+     }
+    ],
+    "fix": {
+     "versions": [
+      "2.25.4"
+     ],
+     "state": "fixed",
+     "available": [
+      {
+       "version": "2.25.4",
+       "date": "2026-04-14",
+       "kind": "first-observed"
+      }
+     ]
+    },
+    "advisories": [],
+    "risk": 0.28363
+   },
+   "relatedVulnerabilities": [
+    {
+     "id": "GHSA-6hg6-v5c8-fphq",
+     "dataSource": "https://github.com/advisories/GHSA-6hg6-v5c8-fphq",
+     "namespace": "github:language:java",
+     "severity": "Medium",
+     "urls": [
+      "https://nvd.nist.gov/vuln/detail/CVE-2026-34477",
+      "https://github.com/apache/logging-log4j2/pull/4075",
+      "https://lists.apache.org/thread/lkx8cl46t2bvkcwfcb2pd43ygc097lq4",
+      "https://logging.apache.org/cyclonedx/vdr.xml",
+      "https://logging.apache.org/log4j/2.x/manual/appenders/network.html#SslConfiguration-attr-verifyHostName",
+      "https://logging.apache.org/security.html#CVE-2026-34477"
+     ],
+     "description": "Apache Log4j Core: `verifyHostName` attribute silently ignored in TLS configuration",
+     "cvss": [
+      {
+       "type": "Secondary",
+       "version": "4.0",
+       "vector": "CVSS:4.0/AV:N/AC:H/AT:N/PR:N/UI:N/VC:L/VI:N/VA:N/SC:N/SI:L/SA:N",
+       "metrics": {
+        "baseScore": 6.3
+       },
+       "vendorMetadata": {}
+      }
+     ],
+     "epss": [
+      {
+       "cve": "CVE-2026-34477",
+       "epss": 0.00502,
+       "percentile": 0.4205,
+       "date": "2026-10-22"
+      }
+     ],
+     "cwes": [
+      {
+       "cve": "CVE-2026-34477",
+       "cwe": "CWE-297",
+       "source": "security@apache.org",
+       "type": "Secondary"
+      },
+      {
+       "cve": "CVE-2026-34477",
+       "cwe": "CWE-295",
+       "source": "nvd@nist.gov",
+       "type": "Primary"
+      }
+     ]
+    }
+   ],
+   "artifact": {
+    "name": "log4j-core",
+    "version": "2.14.1",
+    "type": "java-archive",
+    "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1"
+   }
+  }
+ ],
+ "distro": {
+  "name": "",
+  "version": "",
+  "idLike": null
+ },
+ "descriptor": {
+  "name": "grype",
+  "version": "0.120.1"
+ }
+}

@@ -1,0 +1,138 @@
+{
+ "internal": [
+  {
+   "component": "log4j-core",
+   "cve_id": "CVE-2021-44228",
+   "cvss_score": 10.0,
+   "fixed_version": "2.15.0",
+   "has_fix": true,
+   "installed_version": "2.14.1",
+   "kev": true,
+   "severity": "kritisch",
+   "source": "grype"
+  },
+  {
+   "component": "libfoo",
+   "cve_id": "CVE-2023-0001",
+   "cvss_score": 9.8,
+   "fixed_version": "2.0",
+   "has_fix": false,
+   "installed_version": "1.0",
+   "kev": false,
+   "severity": "info",
+   "source": "grype"
+  },
+  {
+   "component": "libbar",
+   "cve_id": "CVE-2023-0002",
+   "cvss_score": 0.0,
+   "fixed_version": "",
+   "has_fix": false,
+   "installed_version": "3.1",
+   "kev": false,
+   "severity": "info",
+   "source": "both"
+  },
+  {
+   "component": "openssh-server",
+   "cve_id": "CVE-2024-6387",
+   "cvss_score": 8.1,
+   "fixed_version": "1:9.6p1-3ubuntu13.3",
+   "has_fix": true,
+   "installed_version": "1:9.6p1-3ubuntu13",
+   "kev": false,
+   "severity": "mittel",
+   "source": "both"
+  },
+  {
+   "component": "libbaz",
+   "cve_id": "CVE-2025-1111",
+   "cvss_score": 7.5,
+   "fixed_version": "0.9.1",
+   "has_fix": true,
+   "installed_version": "0.9",
+   "kev": false,
+   "severity": "mittel",
+   "source": "osv"
+  },
+  {
+   "component": "lodash",
+   "cve_id": "GHSA-xxxx-yyyy-zzzz",
+   "cvss_score": 0.0,
+   "fixed_version": "4.17.21",
+   "has_fix": true,
+   "installed_version": "4.17.20",
+   "kev": false,
+   "severity": "hoch",
+   "source": "grype"
+  }
+ ],
+ "internet_exposed": [
+  {
+   "component": "log4j-core",
+   "cve_id": "CVE-2021-44228",
+   "cvss_score": 10.0,
+   "fixed_version": "2.15.0",
+   "has_fix": true,
+   "installed_version": "2.14.1",
+   "kev": true,
+   "severity": "kritisch",
+   "source": "grype"
+  },
+  {
+   "component": "libfoo",
+   "cve_id": "CVE-2023-0001",
+   "cvss_score": 9.8,
+   "fixed_version": "2.0",
+   "has_fix": false,
+   "installed_version": "1.0",
+   "kev": false,
+   "severity": "kritisch",
+   "source": "grype"
+  },
+  {
+   "component": "libbar",
+   "cve_id": "CVE-2023-0002",
+   "cvss_score": 0.0,
+   "fixed_version": "",
+   "has_fix": false,
+   "installed_version": "3.1",
+   "kev": false,
+   "severity": "info",
+   "source": "both"
+  },
+  {
+   "component": "openssh-server",
+   "cve_id": "CVE-2024-6387",
+   "cvss_score": 8.1,
+   "fixed_version": "1:9.6p1-3ubuntu13.3",
+   "has_fix": true,
+   "installed_version": "1:9.6p1-3ubuntu13",
+   "kev": false,
+   "severity": "hoch",
+   "source": "both"
+  },
+  {
+   "component": "libbaz",
+   "cve_id": "CVE-2025-1111",
+   "cvss_score": 7.5,
+   "fixed_version": "0.9.1",
+   "has_fix": true,
+   "installed_version": "0.9",
+   "kev": false,
+   "severity": "hoch",
+   "source": "osv"
+  },
+  {
+   "component": "lodash",
+   "cve_id": "GHSA-xxxx-yyyy-zzzz",
+   "cvss_score": 0.0,
+   "fixed_version": "4.17.21",
+   "has_fix": true,
+   "installed_version": "4.17.20",
+   "kev": false,
+   "severity": "kritisch",
+   "source": "grype"
+  }
+ ]
+}

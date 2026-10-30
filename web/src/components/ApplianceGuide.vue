@@ -1,0 +1,128 @@
+<script setup>
+import { reactive, ref } from 'vue'
+import { api } from '../api.js'
+import Icon from './Icon.vue'
+import SecretField from './SecretField.vue'
+
+// Anleitung und Formular für ein Gerät ohne Agent (TrueNAS, Home Assistant): was gelesen wird, was vorher auf dem
+// Gerät einzurichten ist, welche API-Aufrufe vulnwatch macht. Mit `entry` wird eine bestehende Verbindung bearbeitet.
+const props = defineProps({
+  kind: { type: String, required: true },     // truenas | homeassistant
+  entry: { type: Object, default: null },     // aus /api/settings/appliances
+})
+const emit = defineEmits(['saved'])
+
+const GUIDES = {
+  truenas: {
+    title: 'TrueNAS',
+    reads: ['Installed version and the system update check (patch → high, new release line → medium)',
+      'Apps with a newer version or image', 'Open alerts (CRITICAL → high, ERROR and WARNING → medium)', 'Pending reboot after an update'],
+    steps: [
+      'Credentials → Users → Add: a user named <code>vulnwatch</code> with the role <strong>Read-only Administrator</strong>.',
+      'Create an API key for that user (TrueNAS 24.10 and newer: Credentials → Users → the user → API keys). Older versions issue keys with full admin rights; update first if you can.',
+      'Enter the address with <code>https://</code>. TrueNAS revokes a key that was ever sent over plain HTTP.',
+    ],
+    url: 'https://truenas.lan', secret: 'API key',
+    api: [
+      ['Connection', 'WebSocket wss://&lt;host&gt;/api/current, JSON-RPC 2.0 (before 24.10: /websocket)'],
+      ['Login', 'auth.login_with_api_key'],
+      ['Read calls', 'system.info · update.status (before 25.10: update.check_available) · alert.list · app.query (before 24.10: chart.release.query)'],
+      ['Writes', 'none'],
+    ],
+  },
+  homeassistant: {
+    title: 'Home Assistant',
+    reads: ['Every update entity: Core, Operating System, Supervisor, add-ons, ESPHome and device firmware (same line → high, new line → medium; skipped versions are not reported)',
+      'Age of the last successful automatic backup (over 3 days medium, over 7 days or never high) and failed backups',
+      'Recovery or safe mode (high: integrations and automations are not loaded)',
+      'Disk usage from System Monitor and the Supervisor (from 90 % medium, from 95 % high)',
+      'Low batteries below 15 % (info), and the loaded integrations for the AI early warning'],
+    steps: [
+      'Settings → People → Users → Add user: <code>vulnwatch</code>, administrator off.',
+      'Log in as that user, then Profile → Security → Long-lived access tokens → Create token.',
+      'Enter the address with port, e.g. <code>http://homeassistant.lan:8123</code>. If the test says the token was rejected for a non-admin user, use an admin user instead.',
+    ],
+    url: 'http://homeassistant.lan:8123', secret: 'Access token',
+    api: [
+      ['Connection', 'HTTP(S) to &lt;host&gt;:8123'],
+      ['Requests', 'GET /api/states and GET /api/config, with Authorization: Bearer &lt;token&gt;'],
+      ['Used from states', 'update.*; sensor.backup_* timestamps; device_class battery; disk sensors (detected by device class and unit, so any language works)'],
+      ['Used from config', 'state, safe_mode, recovery_mode, components. Never location or URLs'],
+      ['Writes', 'none'],
+    ],
+  },
+}
+const g = GUIDES[props.kind]
+const form = reactive({ name: props.entry?.name || (props.kind === 'truenas' ? 'truenas' : 'homeassistant'),
+  url: props.entry?.url || '', token: '' })
+const message = ref(null)
+const busy = ref(false)
+
+async function save() {
+  busy.value = true
+  message.value = null
+  try {
+    const body = { kind: props.kind, name: form.name, url: form.url, token: form.token || null }
+    const r = props.entry ? await api.put(`/api/settings/appliances/${props.entry.system_id}`, body)
+      : await api.post('/api/settings/appliances', body)
+    form.token = ''
+    if (r.ok) emit('saved', `${form.name} connected: ${r.version || 'version unknown'}, ${r.findings} open update(s) or alert(s).`)
+    else message.value = { kind: 'error', text: `Saved, but the device could not be read: ${r.error}. Fix it here and save again, or remove the host.` }
+  } catch (e) {
+    message.value = { kind: 'error', text: e.message }
+  } finally {
+    busy.value = false
+  }
+}
+</script>
+
+<template>
+  <div class="guide">
+    <section>
+      <h3>What vulnwatch reads</h3>
+      <ul class="reads"><li v-for="r in g.reads" :key="r">{{ r }}</li></ul>
+      <p class="subtext">The device becomes a host of its own: findings, a row on the overview, read every 6 hours. vulnwatch only reads; it never
+        changes anything on the device and the device never connects to vulnwatch.</p>
+    </section>
+
+    <section>
+      <h3>Before you start, on the {{ g.title }}</h3>
+      <ol class="prep"><li v-for="(s, i) in g.steps" :key="i" v-html="s" /></ol>
+    </section>
+
+    <form class="settings-form" @submit.prevent="save">
+      <h3>Connection</h3>
+      <div class="grid">
+        <label><span class="field-label">Name (as host)</span><input v-model="form.name" name="appliance_name" autocomplete="off" required /></label>
+        <label><span class="field-label">URL</span><input v-model="form.url" name="appliance_url" :placeholder="g.url" autocomplete="off" required /></label>
+        <SecretField v-model="form.token" name="appliance_token" :label="g.secret" :set="!!entry?.token?.set" :required="!entry" />
+      </div>
+      <p class="subtext">Over HTTPS vulnwatch pins the certificate it sees now and sends the {{ g.secret.toLowerCase() }} only to that certificate.
+        The {{ g.secret.toLowerCase() }} is stored encrypted and never shown again.</p>
+      <p v-if="message" class="message" :class="message.kind" role="status">{{ message.text }}</p>
+      <div class="actions">
+        <button class="primary" :disabled="busy || !form.name || !form.url || (!entry && !form.token)">
+          <Icon name="check" :size="15" />{{ busy ? 'Connecting…' : entry ? 'Save and test' : 'Add and test' }}</button>
+      </div>
+    </form>
+
+    <details class="api">
+      <summary>API specification: what vulnwatch calls</summary>
+      <table>
+        <tr v-for="[k, v] in g.api" :key="k"><th>{{ k }}</th><td class="mono" v-html="v" /></tr>
+      </table>
+      <p class="subtext">Full description, with how findings are rated: <span class="mono">docs/INTEGRATIONS.md</span> → “Devices without agent”.</p>
+    </details>
+  </div>
+</template>
+
+<style scoped>
+.guide { display: flex; flex-direction: column; gap: 1.1rem; }
+h3 { font-size: 0.85rem; margin: 0 0 0.4rem; }
+.reads, .prep { margin: 0; padding-left: 1.2rem; font-size: 0.85rem; line-height: 1.55; color: var(--text-2); }
+.prep li + li, .reads li + li { margin-top: 0.25rem; }
+.api summary { cursor: pointer; font-size: 0.82rem; color: var(--text-2); }
+.api table { margin-top: 0.5rem; border-collapse: collapse; font-size: 0.78rem; }
+.api th { text-align: left; font-weight: 500; color: var(--muted); padding: 0.2rem 1rem 0.2rem 0; vertical-align: top; white-space: nowrap; }
+.api td { padding: 0.2rem 0; overflow-wrap: anywhere; }
+</style>

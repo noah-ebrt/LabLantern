@@ -1,0 +1,308 @@
+[
+ {
+  "name": "libssl3t64",
+  "version": "3.0.13-0ubuntu3.16",
+  "arch": "amd64",
+  "source": "openssl",
+  "source_version": "3.0.13-0ubuntu3.16",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/libssl3t64@3.0.13-0ubuntu3.16?arch=amd64&distro=ubuntu-24.04&upstream=openssl"
+ },
+ {
+  "name": "openssl",
+  "version": "3.0.13-0ubuntu3.16",
+  "arch": "amd64",
+  "source": "openssl",
+  "source_version": "3.0.13-0ubuntu3.16",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/openssl@3.0.13-0ubuntu3.16?arch=amd64&distro=ubuntu-24.04"
+ },
+ {
+  "name": "android-libbase",
+  "version": "1:34.0.4-1build3",
+  "arch": "amd64",
+  "source": "android-platform-tools",
+  "source_version": "34.0.4-1build3",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/android-libbase@1%3A34.0.4-1build3?arch=amd64&distro=ubuntu-24.04&upstream=android-platform-tools%4034.0.4-1build3"
+ },
+ {
+  "name": "android-libcutils",
+  "version": "1:34.0.4-1build3",
+  "arch": "amd64",
+  "source": "android-platform-tools",
+  "source_version": "34.0.4-1build3",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/android-libcutils@1%3A34.0.4-1build3?arch=amd64&distro=ubuntu-24.04&upstream=android-platform-tools%4034.0.4-1build3"
+ },
+ {
+  "name": "android-liblog",
+  "version": "1:34.0.4-1build3",
+  "arch": "amd64",
+  "source": "android-platform-tools",
+  "source_version": "34.0.4-1build3",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/android-liblog@1%3A34.0.4-1build3?arch=amd64&distro=ubuntu-24.04&upstream=android-platform-tools%4034.0.4-1build3"
+ },
+ {
+  "name": "android-libziparchive",
+  "version": "1:34.0.4-1build3",
+  "arch": "amd64",
+  "source": "android-platform-tools",
+  "source_version": "34.0.4-1build3",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/android-libziparchive@1%3A34.0.4-1build3?arch=amd64&distro=ubuntu-24.04&upstream=android-platform-tools%4034.0.4-1build3"
+ },
+ {
+  "name": "bash-completion",
+  "version": "1:2.11-8",
+  "arch": "all",
+  "source": "bash-completion",
+  "source_version": "1:2.11-8",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/bash-completion@1%3A2.11-8?arch=all&distro=ubuntu-24.04"
+ },
+ {
+  "name": "bind9-dnsutils",
+  "version": "1:9.18.39-0ubuntu0.24.04.8",
+  "arch": "amd64",
+  "source": "bind9",
+  "source_version": "1:9.18.39-0ubuntu0.24.04.8",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/bind9-dnsutils@1%3A9.18.39-0ubuntu0.24.04.8?arch=amd64&distro=ubuntu-24.04&upstream=bind9"
+ },
+ {
+  "name": "alsa-base",
+  "version": "1.0.25+dfsg-0ubuntu7",
+  "arch": "all",
+  "source": "alsa-driver",
+  "source_version": "1.0.25+dfsg-0ubuntu7",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/alsa-base@1.0.25%2Bdfsg-0ubuntu7?arch=all&distro=ubuntu-24.04&upstream=alsa-driver"
+ },
+ {
+  "name": "android-libboringssl",
+  "version": "14.0.0+r11-4build1",
+  "arch": "amd64",
+  "source": "android-platform-external-boringssl",
+  "source_version": "14.0.0+r11-4build1",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/android-libboringssl@14.0.0%2Br11-4build1?arch=amd64&distro=ubuntu-24.04&upstream=android-platform-external-boringssl"
+ },
+ {
+  "name": "bpfcc-tools",
+  "version": "0.29.1+ds-1ubuntu7",
+  "arch": "all",
+  "source": "bpfcc",
+  "source_version": "0.29.1+ds-1ubuntu7",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/bpfcc-tools@0.29.1%2Bds-1ubuntu7?arch=all&distro=ubuntu-24.04&upstream=bpfcc"
+ },
+ {
+  "name": "cpio",
+  "version": "2.15+dfsg-1ubuntu2.1",
+  "arch": "amd64",
+  "source": "cpio",
+  "source_version": "2.15+dfsg-1ubuntu2.1",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/cpio@2.15%2Bdfsg-1ubuntu2.1?arch=amd64&distro=ubuntu-24.04"
+ },
+ {
+  "name": "default-jre",
+  "version": "2:1.21-75+exp1",
+  "arch": "amd64",
+  "source": "java-common",
+  "source_version": "0.75+exp1",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/default-jre@2%3A1.21-75%2Bexp1?arch=amd64&distro=ubuntu-24.04&upstream=java-common%400.75%2Bexp1"
+ },
+ {
+  "name": "cloud-init",
+  "version": "26.1-0ubuntu1~24.04.1",
+  "arch": "all",
+  "source": "cloud-init",
+  "source_version": "26.1-0ubuntu1~24.04.1",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/cloud-init@26.1-0ubuntu1~24.04.1?arch=all&distro=ubuntu-24.04"
+ },
+ {
+  "name": "cloud-initramfs-copymods",
+  "version": "0.49~24.04.1",
+  "arch": "all",
+  "source": "cloud-initramfs-tools",
+  "source_version": "0.49~24.04.1",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/cloud-initramfs-copymods@0.49~24.04.1?arch=all&distro=ubuntu-24.04&upstream=cloud-initramfs-tools"
+ },
+ {
+  "name": "cloud-initramfs-dyn-netconf",
+  "version": "0.49~24.04.1",
+  "arch": "all",
+  "source": "cloud-initramfs-tools",
+  "source_version": "0.49~24.04.1",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/cloud-initramfs-dyn-netconf@0.49~24.04.1?arch=all&distro=ubuntu-24.04&upstream=cloud-initramfs-tools"
+ },
+ {
+  "name": "containerd.io",
+  "version": "2.3.6-1~ubuntu.24.04~noble",
+  "arch": "amd64",
+  "source": "containerd.io",
+  "source_version": "2.3.6-1~ubuntu.24.04~noble",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/containerd.io@2.3.6-1~ubuntu.24.04~noble?arch=amd64&distro=ubuntu-24.04"
+ },
+ {
+  "name": "apport-core-dump-handler",
+  "version": "2.28.3-0ubuntu0.1",
+  "arch": "all",
+  "source": "apport",
+  "source_version": "2.28.3-0ubuntu0.1",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/apport-core-dump-handler@2.28.3-0ubuntu0.1?arch=all&distro=ubuntu-24.04&upstream=apport"
+ },
+ {
+  "name": "apt-transport-https",
+  "version": "2.8.3",
+  "arch": "all",
+  "source": "apt",
+  "source_version": "2.8.3",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/apt-transport-https@2.8.3?arch=all&distro=ubuntu-24.04&upstream=apt"
+ },
+ {
+  "name": "apt-utils",
+  "version": "2.8.3",
+  "arch": "amd64",
+  "source": "apt",
+  "source_version": "2.8.3",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/apt-utils@2.8.3?arch=amd64&distro=ubuntu-24.04&upstream=apt"
+ },
+ {
+  "name": "at-spi2-common",
+  "version": "2.52.0-1build1",
+  "arch": "all",
+  "source": "at-spi2-core",
+  "source_version": "2.52.0-1build1",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/at-spi2-common@2.52.0-1build1?arch=all&distro=ubuntu-24.04&upstream=at-spi2-core"
+ },
+ {
+  "name": "bind9-host",
+  "version": "1:9.18.39-0ubuntu0.24.04.8",
+  "arch": "amd64",
+  "source": "bind9",
+  "source_version": "1:9.18.39-0ubuntu0.24.04.8",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/bind9-host@1%3A9.18.39-0ubuntu0.24.04.8?arch=amd64&distro=ubuntu-24.04&upstream=bind9"
+ },
+ {
+  "name": "bind9-libs",
+  "version": "1:9.18.39-0ubuntu0.24.04.8",
+  "arch": "amd64",
+  "source": "bind9",
+  "source_version": "1:9.18.39-0ubuntu0.24.04.8",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/bind9-libs@1%3A9.18.39-0ubuntu0.24.04.8?arch=amd64&distro=ubuntu-24.04&upstream=bind9"
+ },
+ {
+  "name": "bsdutils",
+  "version": "1:2.39.3-9ubuntu6.6",
+  "arch": "amd64",
+  "source": "util-linux",
+  "source_version": "2.39.3-9ubuntu6.6",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/bsdutils@1%3A2.39.3-9ubuntu6.6?arch=amd64&distro=ubuntu-24.04&upstream=util-linux%402.39.3-9ubuntu6.6"
+ },
+ {
+  "name": "cpp",
+  "version": "4:13.2.0-7ubuntu1",
+  "arch": "amd64",
+  "source": "gcc-defaults",
+  "source_version": "1.214ubuntu1",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/cpp@4%3A13.2.0-7ubuntu1?arch=amd64&distro=ubuntu-24.04&upstream=gcc-defaults%401.214ubuntu1"
+ },
+ {
+  "name": "cpp-x86-64-linux-gnu",
+  "version": "4:13.2.0-7ubuntu1",
+  "arch": "amd64",
+  "source": "gcc-defaults",
+  "source_version": "1.214ubuntu1",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/cpp-x86-64-linux-gnu@4%3A13.2.0-7ubuntu1?arch=amd64&distro=ubuntu-24.04&upstream=gcc-defaults%401.214ubuntu1"
+ },
+ {
+  "name": "default-jre-headless",
+  "version": "2:1.21-75+exp1",
+  "arch": "amd64",
+  "source": "java-common",
+  "source_version": "0.75+exp1",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/default-jre-headless@2%3A1.21-75%2Bexp1?arch=amd64&distro=ubuntu-24.04&upstream=java-common%400.75%2Bexp1"
+ },
+ {
+  "name": "dmeventd",
+  "version": "2:1.02.185-3ubuntu3.2",
+  "arch": "amd64",
+  "source": "lvm2",
+  "source_version": "2.03.16-3ubuntu3.2",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/dmeventd@2%3A1.02.185-3ubuntu3.2?arch=amd64&distro=ubuntu-24.04&upstream=lvm2%402.03.16-3ubuntu3.2"
+ },
+ {
+  "name": "dmsetup",
+  "version": "2:1.02.185-3ubuntu3.2",
+  "arch": "amd64",
+  "source": "lvm2",
+  "source_version": "2.03.16-3ubuntu3.2",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/dmsetup@2%3A1.02.185-3ubuntu3.2?arch=amd64&distro=ubuntu-24.04&upstream=lvm2%402.03.16-3ubuntu3.2"
+ },
+ {
+  "name": "adduser",
+  "version": "3.137ubuntu1",
+  "arch": "all",
+  "source": "adduser",
+  "source_version": "3.137ubuntu1",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/adduser@3.137ubuntu1?arch=all&distro=ubuntu-24.04"
+ },
+ {
+  "name": "adwaita-icon-theme",
+  "version": "46.0-1",
+  "arch": "all",
+  "source": "adwaita-icon-theme",
+  "source_version": "46.0-1",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/adwaita-icon-theme@46.0-1?arch=all&distro=ubuntu-24.04"
+ },
+ {
+  "name": "alsa-topology-conf",
+  "version": "1.2.5.1-2",
+  "arch": "all",
+  "source": "alsa-topology-conf",
+  "source_version": "1.2.5.1-2",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/alsa-topology-conf@1.2.5.1-2?arch=all&distro=ubuntu-24.04"
+ },
+ {
+  "name": "alsa-ucm-conf",
+  "version": "1.2.10-1ubuntu5.15",
+  "arch": "all",
+  "source": "alsa-ucm-conf",
+  "source_version": "1.2.10-1ubuntu5.15",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/alsa-ucm-conf@1.2.10-1ubuntu5.15?arch=all&distro=ubuntu-24.04"
+ },
+ {
+  "name": "alsa-utils",
+  "version": "1.2.9-1ubuntu5",
+  "arch": "amd64",
+  "source": "alsa-utils",
+  "source_version": "1.2.9-1ubuntu5",
+  "type": "deb",
+  "expected_purl": "pkg:deb/ubuntu/alsa-utils@1.2.9-1ubuntu5?arch=amd64&distro=ubuntu-24.04"
+ }
+]

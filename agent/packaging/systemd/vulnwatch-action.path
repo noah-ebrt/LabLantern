@@ -1,0 +1,8 @@
+[Unit]
+Description=vulnwatch action trigger (passkey-confirmed request from vulnwatch-agentd)
+
+[Path]
+PathExists=/run/vulnwatch/action.request
+
+[Install]
+WantedBy=paths.target

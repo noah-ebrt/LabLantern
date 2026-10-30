@@ -1,0 +1,18 @@
+# Baut und signiert die Agent-Pakete dieser Installation (Dienste agent-key, agent-build, agent-sign in compose.yaml).
+# Module und nfpm kommen beim Image-Bau aus dem Netz; die Container selbst laufen ohne Netz.
+# golang 1.26.9-alpine
+FROM golang@sha256:3082400e369fa24d5fc60bca20edab3f6d604e0c5a690ec66b295eff4dd87ade
+ENV CGO_ENABLED=0 GOFLAGS=-mod=readonly
+RUN go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.46.3
+ENV GOTOOLCHAIN=local
+WORKDIR /src
+COPY agent/go.mod agent/go.sum ./
+RUN go mod download
+COPY agent/ ./
+# Ein Release entsteht nur aus Code, dessen Tests durchlaufen.
+RUN go vet ./... && go test ./... \
+ && go build -trimpath -o /usr/local/bin/vw-release ./cmd/vw-release \
+ && install -m 0755 packaging/build-agent.sh /usr/local/bin/build-agent \
+ && mkdir /key /stage /releases /cache && chown 10001:10001 /key /stage /releases /cache
+ENV GOCACHE=/cache/go-build HOME=/tmp
+USER 10001:10001

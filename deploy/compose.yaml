@@ -1,0 +1,177 @@
+name: deploy  # Volumes heißen deploy_*; fest, damit ein Umzug des Ordners nichts ändert
+
+x-agent-job: &agent-job
+  image: vulnwatch-agent-builder:${VULNWATCH_TAG:-dev}
+  restart: "no"
+  network_mode: none
+  user: "10001:10001"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs: [/tmp]
+
+services:
+  proxy:
+    image: caddy@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f  # 2.11.7-alpine
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    # Das Caddy-Binary trägt ein Datei-Capability für niedrige Ports; ohne diese eine Capability startet es nicht.
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: [/tmp]
+    environment:
+      VULNWATCH_BIND_IP: ${VULNWATCH_BIND_IP}
+    ports:
+      # Bewusst ohne Standardwert: Die Oberfläche gehört nur an die LAN-IP, nie an 0.0.0.0.
+      - "${VULNWATCH_BIND_IP:?in .env setzen: die LAN-IP dieses Hosts}:${VULNWATCH_PORT:-8443}:8443"
+    networks:
+      # Eigenes Netz nur mit dem Server und einer festen Adresse: Nur ihr glaubt der Server X-Forwarded-For.
+      edge:
+        ipv4_address: ${VULNWATCH_PROXY_IP:-10.89.254.2}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8081/ca.crt"]
+      interval: 15s
+      timeout: 4s
+      start_period: 10s
+    depends_on:
+      server:
+        condition: service_healthy
+
+  server:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: vulnwatch-server:${VULNWATCH_TAG:-dev}
+    restart: unless-stopped
+    user: "10001:10001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: [/tmp]
+    environment:
+      VULNWATCH_PLAIN_HTTP: "1"  # TLS terminiert der Proxy
+      VULNWATCH_PORT: "8000"
+      VULNWATCH_PUBLIC_PORT: ${VULNWATCH_PORT:-8443}
+      # Namen und IPs, unter denen die Oberfläche erreichbar ist (Zertifikate werden nur dafür ausgestellt)
+      VULNWATCH_HOSTNAMES: ${VULNWATCH_HOSTNAMES:?in .env setzen, z. B. vulnwatch.lan,192.168.1.50}
+      VULNWATCH_CA_URL: http://proxy:8081/ca.crt
+      # Nur diese Adresse darf die echte Client-IP mitteilen (Worker und Docker-Host erreichen Port 8000 auch direkt)
+      VULNWATCH_TRUSTED_PROXY: ${VULNWATCH_PROXY_IP:-10.89.254.2}
+    networks:
+      default:
+      edge:
+        # fest, damit der Server nie die Adresse des Proxys belegt (sonst startet der Proxy nicht)
+        ipv4_address: ${VULNWATCH_SERVER_IP:-10.89.254.3}
+    volumes:
+      - data:/data
+      - keys:/keys               # Master-Schlüssel: nur der Server
+      - worker_auth:/worker_auth # Worker-Token (der Server legt es an)
+      - agent_releases:/agent-releases:ro  # signierte Agent-Pakete aus agent-sign
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/api/state', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+
+  announce:
+    # mDNS-Ankündigung für `vulnwatch-agent setup`. Host-Netz nötig (Multicast), sonst nichts:
+    # keine Volumes, keine Rechte, nur lesend. Eine gefälschte Ankündigung scheitert am Pairing-Code.
+    image: vulnwatch-server:${VULNWATCH_TAG:-dev}
+    command: ["python", "-m", "app.announce"]
+    network_mode: host
+    restart: unless-stopped
+    user: "10001:10001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      disable: true
+    environment:
+      VULNWATCH_BIND_IP: ${VULNWATCH_BIND_IP}
+      VULNWATCH_PORT: ${VULNWATCH_PORT:-8443}
+    depends_on:
+      server:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.worker
+    image: vulnwatch-worker:${VULNWATCH_TAG:-dev}
+    restart: unless-stopped
+    user: "10001:10001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: [/tmp]
+    environment:
+      VULNWATCH_SERVER_URL: http://server:8000
+      VULNWATCH_WORKER_TOKEN_FILE: /worker_auth/worker.token
+    volumes:
+      # Kein data-Volume, kein keys-Volume: Der Worker sieht weder Datenbank noch Master-Schlüssel.
+      - grype_cache:/home/vulnwatch/.cache
+      - worker_auth:/worker_auth:ro
+    depends_on:
+      server:
+        condition: service_healthy
+
+  # Agent-Pakete dieser Installation: bei jedem `docker compose up` einmal durchlaufen, ohne Netz. Unveränderter Code
+  # baut nichts neu. Den Signierschlüssel (Volume agent_key) sehen nur agent-key und agent-sign, die allein vw-release
+  # ausführen (nur Standardbibliothek); der Server liest die fertigen Pakete nur.
+  agent-key:
+    <<: *agent-job
+    command: ["vw-release", "init-key", "/key/release.key", "/releases/release.pub"]
+    volumes:
+      - agent_key:/key
+      - agent_releases:/releases
+
+  agent-build:
+    <<: *agent-job
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.agent
+    command: ["build-agent"]
+    volumes:
+      - agent_releases:/releases:ro
+      - agent_stage:/stage
+      - agent_gocache:/cache
+    depends_on:
+      agent-key:
+        condition: service_completed_successfully
+
+  agent-sign:
+    <<: *agent-job
+    command: ["vw-release", "publish", "/stage", "/releases", "/key/release.key"]
+    volumes:
+      - agent_key:/key:ro
+      - agent_stage:/stage:ro
+      - agent_releases:/releases
+    depends_on:
+      agent-build:
+        condition: service_completed_successfully
+
+networks:
+  default: {}
+  edge:
+    ipam:
+      config:
+        - subnet: ${VULNWATCH_EDGE_SUBNET:-10.89.254.0/29}   # in .env ändern, falls das Netz im LAN schon vergeben ist
+
+volumes:
+  data:
+  keys:
+  worker_auth:
+  caddy_data:
+  caddy_config:
+  grype_cache:
+  agent_key:        # privater Signierschlüssel der Agenten: getrennt sichern (docs/INSTALL.md)
+  agent_releases:
+  agent_stage:
+  agent_gocache:

@@ -1,0 +1,29 @@
+name: Bug report
+description: Something does not work as described
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Before you paste logs or screenshots:** replace IP addresses, host names, domains and anything that looks
+        like a token. Security problems: please use private reporting (Security → Report a vulnerability) instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: vulnwatch commit or tag, agent version (Systems), host OS
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs (redacted)
+      description: e.g. docker compose logs server --since 10m
+      render: text

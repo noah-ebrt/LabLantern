@@ -1,0 +1,37 @@
+# Paketbau mit nfpm: ARCH und VERSION setzt packaging/build-agent.sh.
+name: vulnwatch-agent
+arch: ${ARCH}
+platform: linux
+version: ${VERSION}
+section: admin
+priority: optional
+maintainer: vulnwatch <vulnwatch@localhost>
+description: vulnwatch agent – reports inventory and container SBOMs to the vulnwatch master.
+license: PolyForm-Noncommercial-1.0.0
+contents:
+  - src: build/vulnwatch-agent   # build-agent.sh kopiert das Binary der jeweiligen Architektur hierher
+    dst: /usr/bin/vulnwatch-agent
+    file_info: {mode: 0755}
+  - src: packaging/systemd/vulnwatch-agentd.service
+    dst: /usr/lib/systemd/system/vulnwatch-agentd.service
+    file_info: {mode: 0644}
+  - src: packaging/systemd/vulnwatch-collect.service
+    dst: /usr/lib/systemd/system/vulnwatch-collect.service
+    file_info: {mode: 0644}
+  - src: packaging/systemd/vulnwatch-collect.path
+    dst: /usr/lib/systemd/system/vulnwatch-collect.path
+    file_info: {mode: 0644}
+  - src: packaging/systemd/vulnwatch-action.service
+    dst: /usr/lib/systemd/system/vulnwatch-action.service
+    file_info: {mode: 0644}
+  - src: packaging/systemd/vulnwatch-action.path
+    dst: /usr/lib/systemd/system/vulnwatch-action.path
+    file_info: {mode: 0644}
+  - src: packaging/tmpfiles.conf
+    dst: /usr/lib/tmpfiles.d/vulnwatch.conf
+    file_info: {mode: 0644}
+scripts:
+  preinstall: packaging/scripts/preinst.sh
+  postinstall: packaging/scripts/postinst.sh
+  preremove: packaging/scripts/prerm.sh
+  postremove: packaging/scripts/postrm.sh

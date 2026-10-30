@@ -1,0 +1,202 @@
+"""Die ganze Konfiguration als ein JSON-Dokument (Einstellungen → „Configuration as JSON“, auch per API skriptbar).
+
+Lesen setzt das Dokument aus den gespeicherten Werten zusammen. Schreiben ruft für jeden geänderten Abschnitt
+dieselben Endpunkte auf wie die Formulare: gleiche Prüfung, gleiche Folgen (Zeitplan neu, Audit-Eintrag), gleiche
+Behandlung von Geheimnissen. Geheimnisse stehen als null im Dokument (= unverändert); ein Text setzt sie neu, sie
+kommen nie heraus. Jeder Abschnitt gilt für sich: schlägt einer fehl, bleiben die übrigen gespeichert.
+
+Bewusst nicht enthalten: Benutzer, Passkeys und ihre Vertrauensliste, Agent- und Metrik-Tokens. Anmeldung und
+Vertrauen gehören nicht in eine Textdatei, die man kopiert und weitergibt."""
+import typing
+
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.routing import APIRoute
+from pydantic import ValidationError
+
+from .context import Context
+from .guards import Guards
+from .models import setting
+
+
+class SectionError(Exception):
+    pass
+
+
+def _route(routers: list[APIRouter], method: str, path: str) -> APIRoute:
+    for router in routers:
+        for r in router.routes:
+            if isinstance(r, APIRoute) and r.path == path and method in r.methods:
+                return r
+    raise RuntimeError(f"route {method} {path} missing")
+
+
+def build_config_router(ctx: Context, guards: Guards, routers: list[APIRouter]) -> APIRouter:
+    """`routers`: die Router der Endpunkte (Pfade ohne /api), über die geschrieben wird."""
+    from .appliances import CONFIG_KEY as APPLIANCES_KEY, _configs
+    from .connectors import NPM_CONFIG, NPM_SECRET
+    from .earlywarning import DEFAULT_FEEDS, FEEDS_KEY, PRODUCTS_KEY, research_config
+    from .fritzbox import FRITZ_CONFIG, FRITZ_SECRET
+    from .integrations import MODEL_KEY
+    from .integrity import drop_config
+    from .models import System
+    from .notify import load_channels
+    from .schedule import get_schedule, get_short_schedule, get_timezone
+    from .watchdog import get_config as watchdog_config
+
+    router = APIRouter(prefix="/settings")
+
+    def call(found, method: str, path: str, value=None, **params):
+        """Den Endpunkt der Formulare aufrufen; Fehler als Text ohne die eingegebenen Werte (Geheimnisse)."""
+        route = _route(routers, method, path)
+        kwargs = dict(params, found=found)
+        if value is not None:
+            model = typing.get_type_hints(route.endpoint)["body"]
+            try:
+                kwargs["body"] = model.model_validate(value)
+            except ValidationError as e:
+                raise SectionError("; ".join(f"{'.'.join(map(str, x['loc'])) or 'value'}: {x['msg']}"
+                                             for x in e.errors(include_input=False, include_url=False))) from None
+        try:
+            return route.endpoint(**kwargs)
+        except HTTPException as e:
+            raise SectionError(str(e.detail)) from None
+
+    def simple(path: str):
+        return lambda found, value, current: call(found, "PUT", path, value)
+
+    # --- Lesen je Abschnitt: genau die Form, die der Endpunkt annimmt ---
+    def read_claude(s):
+        return {"model": setting(s, MODEL_KEY), "api_key": None}
+
+    def read_watchdog(s):
+        cfg = watchdog_config(ctx)
+        return {"provider": cfg["provider"], "heartbeat_minutes": cfg["heartbeat_minutes"],
+                "heartbeat_url": None, "run_url": None, "short_url": None}
+
+    def read_npm(s):
+        cfg = setting(s, NPM_CONFIG)
+        return {**cfg, "password": None} if cfg else None
+
+    def read_fritzbox(s):
+        cfg = setting(s, FRITZ_CONFIG)
+        return {**cfg, "password": None} if cfg else None
+
+    def read_notifications(s):
+        return [{"name": c["name"], "url": None} for c in load_channels(ctx)]
+
+    def read_appliances(s):
+        return [{"system_id": int(sid), "kind": c["kind"], "name": s.get(System, int(sid)).name, "url": c["url"],
+                 "token": None} for sid, c in _configs(s).items()]
+
+    # --- Schreiben, wo ein Abschnitt mehr als einen Endpunkt braucht ---
+    def write_claude(found, value, current):
+        value = value or {}
+        if value.get("model") != current["model"]:
+            call(found, "PUT", "/integrations/claude/model", {"model": value.get("model")})
+        if value.get("api_key"):
+            call(found, "PUT", "/integrations/claude", {"api_key": value["api_key"]})
+
+    def write_npm(found, value, current):
+        if value is None:
+            call(found, "DELETE", "/settings/npm")
+        else:
+            if value.get("password") is None and current is None and not ctx.secrets.get(NPM_SECRET):
+                raise SectionError("password required")
+            call(found, "PUT", "/settings/npm", value)
+
+    def write_fritzbox(found, value, current):
+        if value is None:
+            call(found, "DELETE", "/settings/fritzbox")
+        else:
+            if value.get("password") is None and current is None and not ctx.secrets.get(FRITZ_SECRET):
+                raise SectionError("password required")
+            call(found, "PUT", "/settings/fritzbox", value)
+
+    def write_notifications(found, value, current):
+        """Bestehende Kanäle stehen mit url null darin; fehlt einer, wird er entfernt. Neue haben eine URL."""
+        if not isinstance(value, list):
+            raise SectionError("must be a list")
+        keep = [c.get("name") for c in value if isinstance(c, dict) and c.get("url") is None]
+        names = [c["name"] for c in current]
+        for n in keep:
+            if n not in names:
+                raise SectionError(f"no channel named {n!r}: a new channel needs its url")
+        for i in reversed(range(len(names))):
+            if names[i] in keep:
+                keep.remove(names[i])
+            else:
+                call(found, "DELETE", "/integrations/notifications/{index}", index=i)
+        for c in value:
+            if isinstance(c, dict) and c.get("url") is not None:
+                call(found, "POST", "/integrations/notifications", c)
+
+    def write_appliances(found, value, current):
+        """Mit system_id: ändern, ohne: neu anlegen, fehlende: entfernen (samt System und Funden)."""
+        if not isinstance(value, list):
+            raise SectionError("must be a list")
+        now = {c["system_id"]: c for c in current}
+        wanted = {c.get("system_id") for c in value if isinstance(c, dict)}
+        for sid in now:
+            if sid not in wanted:
+                call(found, "DELETE", "/settings/appliances/{sid}", sid=sid)
+        for c in value:
+            if not isinstance(c, dict):
+                raise SectionError("each entry must be an object")
+            body = {k: v for k, v in c.items() if k != "system_id"}
+            sid = c.get("system_id")
+            if sid is None:
+                call(found, "POST", "/settings/appliances", body)
+            elif sid not in now:
+                raise SectionError(f"no connector with system_id {sid}")
+            elif c != now[sid]:
+                call(found, "PUT", "/settings/appliances/{sid}", body, sid=sid)
+
+    sections = {   # Name: (lesen, schreiben); Reihenfolge = Reihenfolge im Dokument
+        "schedule": (lambda s: {k: get_schedule(ctx)[k] for k in ("enabled", "time")}, simple("/settings/schedule")),
+        "short_schedule": (lambda s: {k: get_short_schedule(ctx)[k] for k in ("enabled", "hours")},
+                           simple("/settings/short-schedule")),
+        "timezone": (lambda s: {"timezone": get_timezone(ctx)}, simple("/settings/timezone")),
+        "finding_drop": (drop_config, simple("/settings/finding-drop")),
+        "notifications": (read_notifications, write_notifications),
+        "watchdog": (read_watchdog, simple("/settings/watchdog")),
+        "early_warning": (lambda s: {"feeds": setting(s, FEEDS_KEY, DEFAULT_FEEDS), "products": setting(s, PRODUCTS_KEY, [])},
+                          simple("/early-warnings/config")),
+        "research": (research_config, simple("/early-warnings/research")),
+        "claude": (read_claude, write_claude),
+        "npm": (read_npm, write_npm),
+        "fritzbox": (read_fritzbox, write_fritzbox),
+        "appliances": (read_appliances, write_appliances),
+    }
+
+    def document() -> dict:
+        with ctx.session_factory() as s:
+            return {name: read(s) for name, (read, _) in sections.items()}
+
+    @router.get("/config", dependencies=[Depends(guards.require_session)])
+    def read():
+        return document()
+
+    @router.put("/config")
+    def write(body: dict, found=Depends(guards.require_admin)):
+        """Nur Abschnitte, die im Dokument stehen und sich geändert haben, werden geschrieben."""
+        current = document()
+        results = {}
+        for name, value in body.items():
+            if name == "releases":   # Dokumente von vor dem lokalen Agent-Build: die GitLab-Quelle gibt es nicht mehr
+                results[name] = "ignored: agents are built by this install"
+                continue
+            if name not in sections:
+                results[name] = "error: unknown section"
+                continue
+            if value == current[name]:
+                results[name] = "unchanged"
+                continue
+            try:
+                sections[name][1](found, value, current[name])
+                results[name] = "saved"
+            except SectionError as e:
+                results[name] = f"error: {e}"[:500]
+        return {"ok": not any(r.startswith("error") for r in results.values()), "results": results,
+                "config": document()}
+
+    return router

@@ -1,0 +1,21 @@
+{
+  "name": "vulnwatch",
+  "short_name": "vulnwatch",
+  "description": "Self-hosted vulnerability monitor and fleet security dashboard",
+  "icons": [
+    {
+      "src": "/favicon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "theme_color": "#0e1015",
+  "background_color": "#0e1015",
+  "display": "standalone"
+}

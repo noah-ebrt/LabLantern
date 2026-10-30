@@ -1,0 +1,18 @@
+# Der Worker verarbeitet nicht vertrauenswürdige SBOMs. Deshalb: nur Python-Standardbibliothek (keine pip-Pakete),
+# Grype und OSV-Scanner in fester Version und kein Zugriff auf Datenbank, Master-Schlüssel oder Daten des Servers.
+# Grype und OSV-Scanner in fester Version und kein Zugriff auf Datenbank, Master-Schlüssel oder Daten des Servers.
+# Grype und OSV-Scanner in fester Version und kein Zugriff auf Datenbank, Master-Schlüssel oder Daten des Servers.
+FROM anchore/grype@sha256:e4a44ef45d285b829ce6efe2642980329661bd2d18eab5fc539138d4adaebbbe AS grype-bin
+# osv-scanner v2.7.0 (2026-10-12), statisch gelinkt
+FROM ghcr.io/google/osv-scanner@sha256:4f3b7e2c64b9d38a5febc5a7e4a3dfef1d1362f726dea7a2ef4762b46469fcd0 AS osv-bin
+FROM python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 HOME=/home/vulnwatch
+WORKDIR /app
+COPY --from=grype-bin /grype /usr/local/bin/grype
+COPY --from=osv-bin /osv-scanner /usr/local/bin/osv-scanner
+COPY server/app/__init__.py server/app/worker.py server/app/canary.py server/app/rules.py server/app/scanner.py ./app/
+COPY canary /canary
+RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin vulnwatch \
+ && mkdir -p /home/vulnwatch/.cache && chown -R 10001:10001 /home/vulnwatch
+USER 10001:10001
+CMD ["python", "-m", "app.worker"]

@@ -1,0 +1,33 @@
+# Root-Teil: liest Paketdatenbanken und den Docker-Socket, hat aber kein Netz (nur Unix-Sockets) und
+# kann außer seinem Ausgabeverzeichnis nichts schreiben.
+[Unit]
+Description=vulnwatch collector (root, no network)
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/vulnwatch-agent collect-job
+TimeoutStartSec=30min
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=yes
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+ProtectSystem=strict
+ReadWritePaths=/run/vulnwatch /run/vulnwatch-out
+ProtectHome=read-only
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+CapabilityBoundingSet=CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE

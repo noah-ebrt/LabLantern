@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Background Gradient: Deep slate / obsidian -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#181a24"/>
+      <stop offset="50%" stop-color="#111319"/>
+      <stop offset="100%" stop-color="#0a0b0f"/>
+    </linearGradient>
+
+    <!-- Subtle inner surface border -->
+    <linearGradient id="rimGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="rgba(255, 255, 255, 0.16)"/>
+      <stop offset="100%" stop-color="rgba(255, 255, 255, 0.03)"/>
+    </linearGradient>
+
+    <!-- Shield Stroke: Crisp monochrome platinum -->
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#dce0eb"/>
+    </linearGradient>
+
+    <!-- Shield Fill: Subtle glass tint -->
+    <linearGradient id="shieldFill" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="rgba(255, 255, 255, 0.05)"/>
+      <stop offset="100%" stop-color="rgba(255, 255, 255, 0.01)"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Squircle Canvas -->
+  <rect x="0" y="0" width="512" height="512" rx="116" fill="url(#bgGrad)"/>
+  <rect x="6" y="6" width="500" height="500" rx="110" fill="none" stroke="url(#rimGrad)" stroke-width="4"/>
+
+  <!-- Brand Shield Mark -->
+  <g transform="translate(70.00, 70.00) scale(15.50)">
+    <!-- Shield Background & Outline -->
+    <path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"
+          fill="url(#shieldFill)"
+          stroke="url(#shieldGrad)"
+          stroke-width="2.2"
+          stroke-linecap="round"
+          stroke-linejoin="round"/>
+
+    <!-- Checkmark -->
+    <path d="M9 12l2 2 4-4"
+          fill="none"
+          stroke="url(#shieldGrad)"
+          stroke-width="2.2"
+          stroke-linecap="round"
+          stroke-linejoin="round"/>
+  </g>
+</svg>

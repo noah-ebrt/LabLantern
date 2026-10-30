@@ -1,0 +1,222 @@
+# Integrations and settings
+
+Everything here is configured under **Settings**. Secrets (passwords, tokens, URLs with keys) are stored encrypted
+and never shown again. Each card says whether it is required or optional.
+
+## Schedule
+
+- **Daily full run** (default 03:00): asks every agent for fresh data (waits at most 10 minutes), scans with Grype and
+  OSV, checks versions and the AI early warning, rates, and sends the report.
+- **Short run** (default every 12 hours, aligned to the daily run): scans the agents' latest data against a fresh
+  database. It only notifies when something new is critical or high, or when a check fails.
+- **System time zone:** used for the schedule and for every time shown in the UI.
+
+**Scan now** on the overview starts a full run. **Scan latest data** in the pipeline starts a short run.
+
+## Notification channels (required for alerts)
+
+One channel per Apprise URL. Mail has a form with presets (Gmail, iCloud, Outlook, GMX, WEB.DE, Posteo, custom
+SMTP). Anything else Apprise supports works as a URL, e.g. `ntfy://topic`, `tgram://bottoken/chatid`,
+`signal://…`. **Send test notification** delivers to every channel.
+
+The report subject says what matters: `[IMMEDIATE ALERT]` (invalid run, failed canary, no data from a host twice in
+a row), `[ALERT]` (critical findings), `[ERROR]` (systems not checked), `[WARNING]` (high findings), `[OK]`.
+
+## Offsite watchdog (optional)
+
+A monitor outside your network alerts you when vulnwatch itself goes quiet (host off, power or internet gone, a run
+stuck). Choose the service once, then paste one URL per check:
+
+| Service | Ping URL | What vulnwatch sends |
+| --- | --- | --- |
+| Healthchecks (self-hosted or healthchecks.io) | `https://…/ping/<uuid>` | start, success, `/fail` with the reason |
+| Uptime Kuma | push monitor URL `https://…/api/push/<token>` | `status=up` or `status=down` with a message |
+| Custom URL | anything that alerts when requests stop | a POST on success only; silence is the alarm |
+
+Checks: **Heartbeat** (every 1–60 minutes while master and worker are alive), **Daily run**, **Short run**
+(optional). The card shows what to set up in the monitor for each check (period, cron, grace).
+
+## Nginx Proxy Manager (optional)
+
+Create a dedicated NPM user without admin rights: item visibility **All items**, Proxy Hosts **View only**,
+everything else hidden. NPM itself forces Access Lists and Certificates to view only. Enter the admin URL (port 81),
+the user and password, and the host NPM runs on.
+
+vulnwatch then reads every 6 hours:
+
+- **Exposure:** proxy targets are mapped to containers by container name or by host IP and published port.
+  Findings of internet-exposed containers are rated higher (CVSS 9+ critical, CVSS 7+ with fix high). Targets it
+  cannot map are listed. Mark those containers by hand in the host dialog.
+- **TLS certificates** of active proxy hosts: under 20 days left is a medium finding (NPM renews at 30 days), under 7
+  days or expired is high.
+
+It never reads private keys, access lists or DNS credentials. The user stays read-only, so vulnwatch cannot renew or
+change certificates.
+
+## Devices without agent: TrueNAS and Home Assistant
+
+Added under **Systems → Add host**, not in the settings: each device becomes a host of its own, with findings, a
+row in the coverage matrix and the actions **Test**, **Edit** and **Delete** in the host list. vulnwatch only reads,
+every 6 hours (and on **Test**). It never writes to the device, and the device never connects to vulnwatch.
+
+**TLS:** over HTTPS vulnwatch reads the device's certificate when you save and pins its SHA-256 fingerprint
+(TrueNAS usually has a self-signed one). The key or token is only sent over a connection with exactly that
+certificate. After a certificate change the test fails with "certificate changed"; **Trust new certificate** in the
+host list pins the new one. Compare the fingerprint on the device first if you did not change it yourself.
+
+**Coverage:** only the checks the API provides are rated. The others show **N/A** and don't count towards
+coverage. A failed or older-than-24-hour read is an error in the matrix, never a silent gap.
+
+**Ratings:** an update on the same release line (the first two numbers equal: 25.04.2.4 → 25.04.2.5,
+2026.10.1 → 2026.10.3) is high, a new line is medium, as with container versions.
+
+### TrueNAS
+
+Prepare on the NAS:
+
+1. Credentials → Users → Add: a user `vulnwatch` with the role **Read-only Administrator**.
+2. An API key for that user. Before TrueNAS 24.10, API keys always have full admin rights; update first if you can.
+3. Use `https://` in the URL. TrueNAS revokes a key that was ever sent over plain HTTP, so vulnwatch refuses
+   `http://` for TrueNAS.
+
+API used (read only):
+
+| | |
+| --- | --- |
+| Connection | WebSocket `wss://<host>/api/current`, JSON-RPC 2.0. Before 24.10: `wss://<host>/websocket` (older protocol, same methods) |
+| Login | `auth.login_with_api_key` |
+| Calls | `system.info` (version), `update.status` (25.10+) or `update.check_available` (older), `alert.list`, `app.query` (24.10+) or `chart.release.query` (older) |
+| Health and backups | `pool.query`, `pool.scrub.query`, `pool.snapshottask.query`, `replication.query`, `cloudsync.query`, `cloud_backup.query`, `rsynctask.query` |
+| Settings | `service.query`, `smb.config`, `ssh.config`, `ftp.config`, `system.general.config`, `auth.twofactor.config`, `user.query` |
+
+Each call in the last two rows is optional: if a version lacks it or the role may not read it, only that check is
+missing. `ssh.config` also returns the SSH host private keys; vulnwatch keeps only the password switch.
+
+| Finding | Source | Rating |
+| --- | --- | --- |
+| System update | `update.*` | same line high, new line medium |
+| App update | `upgrade_available`, compared by app package version (`version` → `latest_version`); the title shows the app version too | same line high, new line medium |
+| Newer app image | `image_updates_available` | high |
+| Alert | `alert.list` | CRITICAL/ALERT/EMERGENCY high, ERROR/WARNING medium, INFO and dismissed ones none |
+| End of life | installed release line at endoflife.date | high |
+| Pool | not healthy (DEGRADED, FAULTED …) high; usage 90 % medium, 95 % high. Missing ZFS features are no finding | |
+| Scrub | errors in the last scrub high; older than the scrub task's threshold plus 7 days, never run, or no scrub task medium. After a resilver the scrub age is unknown and not rated | |
+| Backup tasks | replication, cloud sync, cloud backup, rsync: last run failed medium; last success older than 2× its schedule plus a day medium, 4× plus three days high (daily: 3 / 7 days, weekly: 15 / 31). Snapshot tasks only when failed. No replication, cloud sync or rsync task at all medium | |
+| Settings | SMB1 on while SMB runs high; SSH password login while SSH runs, FTP without TLS while FTP runs, web UI without HTTPS redirect, 2FA off, administrators without 2FA medium | |
+
+After a reboot TrueNAS forgets the last run of some tasks; they stay unrated until they run again. A pending
+reboot after an update shows in the **Reboot** column. The installed version and the apps also feed the AI early
+warning.
+
+### Home Assistant
+
+Prepare in Home Assistant:
+
+1. Settings → People → Users → Add user: `vulnwatch`, administrator off.
+2. Log in as that user: Profile → Security → Long-lived access tokens → Create token.
+3. URL with port, e.g. `http://homeassistant.lan:8123` (or `https://` if Home Assistant serves TLS itself).
+
+API used (read only): `GET /api/states` and `GET /api/config` with `Authorization: Bearer <token>`. Entity IDs
+depend on Home Assistant's language, so vulnwatch recognises entities by device class, unit and value type, not by
+name. From `/api/config` it keeps only the state and the list of integrations, never the location or URLs.
+
+| Finding | Source | Rating |
+| --- | --- | --- |
+| Update available | `update.*` in state `on` (Core, OS, Supervisor, add-ons, ESPHome, firmware). Skipped versions are off | same line high, new line medium |
+| Backup age | timestamps of `sensor.backup_*` (backup integration): the oldest past one is the last success, the newest the last attempt | over 3 days medium, over 7 days or never high; last attempt failed medium; no backup integration medium |
+| Recovery/safe mode | `/api/config` → `recovery_mode`, `safe_mode` | high |
+| Disk usage | System Monitor `…disk_use_percent…` in %, Supervisor `…_disk_used` / `…_disk_total` | from 90 % medium, from 95 % high |
+| Low battery | `device_class: battery`: sensors below 15 %, binary sensors `on` | info |
+
+The loaded integrations (Shelly, Matter, Nuki, Tuya, …) feed the AI early warning, so reports about them are
+matched to this Home Assistant. If NPM forwards a domain to the device, its findings are marked internet-exposed.
+
+## Sharp drop alarm
+
+If a host's open scanner findings fall by at least 50 % in one run (and it had at least 20 before), the run report
+becomes an immediate alert. A compromised worker or a doctored SBOM can report a host as clean; a large update can
+trigger it too, the alert says what to check. Threshold, minimum and on/off under **Settings → Sharp drop alarm**.
+
+## Configuration as JSON
+
+**Settings → Configuration as JSON** shows every setting in one document, also scriptable with
+`GET`/`PUT /api/settings/config`. Saving writes each changed section through the same endpoint as the form
+(same checks, same audit entry). Secrets appear as `null` and are kept; a text replaces them. Lists
+(`notifications`, `appliances`) are complete: an entry missing from the document is removed. Users, passkeys and
+agent tokens are not part of it.
+
+## Version check (built in)
+
+Every 6 hours, for every running container image: the registry digest of its tag (outdated image → high) and newer
+version tags (newer patch → high, newer line → medium). Release lines of operating systems and images are checked
+against endoflife.date (end of life → high). Results appear as findings (filter **Versions & EOL**), in the
+**Versions** column of the coverage matrix and per container in the host dialog. **Check now** runs a pass
+immediately.
+
+## AI early warning (optional)
+
+Needs an Anthropic API key (use a dedicated key with a spend limit). It watches what you actually run: container
+images, operating systems and kernels, network-facing host packages from the agents' SBOMs (Tailscale, OpenSSH,
+OpenSSL, Docker, containerd, sudo, glibc, systemd, Samba, CUPS, nginx, Apache, WireGuard, …) and products you add by
+hand under **Early warnings → Feeds & products**.
+
+**Feeds**, every 2 hours and with every full run. The defaults are global: The Hacker News, BleepingComputer,
+SecurityWeek, oss-security, Tailscale security bulletins, GitLab security releases, heise Security. Only entries from
+the last 30 days that name one of your products go to Claude. Host packages and operating systems must appear in
+the title, because curl or Ubuntu are mentioned in passing all the time. On a vendor's own feed (the feed's domain is
+the product's name, e.g. `tailscale.com`) every entry counts.
+
+**Web research**, once a day (on by default, **Research now** starts one): Claude searches the web worldwide for
+advisories, security releases and exploitation reports on your products from the last days, so you hear about an
+issue before any feed you added carries it. Default model: latest Sonnet (web search needs a capable model). A pass
+runs up to 15 searches and costs about $0.20–0.40 with Sonnet (roughly $6–12 a month); Haiku is cheaper but finds less. Results that a feed already brought (same link or CVE) are skipped.
+
+For both, Claude only extracts facts through a fixed schema: affected and fixed versions, CVEs, exploited, public
+exploit, the severity the source states, the worst impact, and the mitigations it recommends. Everything after that is code:
+
+| Step | Rule |
+| --- | --- |
+| Rating | **affected** (installed version in an affected range), **not affected**, or **needs review** (no comparable versions, version unknown, or a distribution build: Ubuntu and Debian backport fixes without changing the upstream version, so the next Grype/OSV scan decides) |
+| Severity | **high** when exploited, a public exploit exists, the source says critical, or the flaw gives code execution, root or an authentication bypass and the source does not rate it lower (fresh flaws often have no rating yet); **medium** when the source says high; **info** otherwise. Never above high |
+| Steps | per host, from the inventory: `apt`/`dnf`/`apk` command for host packages, `docker compose pull && up -d` in the compose directory (or "change the tag" for pinned versions), OS and kernel upgrades. Without a fixed version, the advisory's mitigations |
+| Finding | affected entries become findings with the same severity (filter source **AI**) |
+| Alert | sent immediately as `[EARLY WARNING]`, once per entry: affected at medium or high, or needs review at high (e.g. an exploited flaw in a product you run whose fixed version is not known yet) |
+
+The AI never removes or downgrades a finding. Feed and web content is treated as data, never as instructions.
+
+Model for reading feeds: **Latest Haiku (automatic)** by default, or any model your key can use (Settings → AI). Model
+for the web research: Feeds & products → Daily web research.
+
+## Prometheus metrics (optional)
+
+**Settings → Prometheus metrics → Create token** turns on `https://<master>:8443/metrics` and shows the token once,
+together with a scrape config. Metrics include open findings by severity and system, coverage and the status of every
+check, agent report age and connection, last run result and duration, canary, scanner database age, early warnings,
+TLS certificate days left and watchdog pings. No finding details, no secrets.
+
+```yaml
+- job_name: vulnwatch
+  scheme: https
+  authorization:
+    credentials: <token>
+  tls_config:
+    ca_file: /etc/prometheus/vulnwatch-ca.crt   # from https://<master>:8443/ca.crt
+  static_configs:
+    - targets: ['vulnwatch.lan:8443']
+```
+
+## What leaves your network
+
+vulnwatch has no telemetry and no update check of its own. These are the outbound connections, all over HTTPS:
+
+| To | When | What is sent |
+| --- | --- | --- |
+| Grype and OSV-Scanner databases (Anchore, osv.dev) | every run | nothing about you: the worker downloads the databases and scans offline |
+| Container registries of your images (Docker Hub, ghcr.io, …) | every run | image names and tags, to compare digests |
+| endoflife.date | daily | product names (e.g. `debian`, `postgres`) |
+| Security feeds (AI early warning, optional) | every two hours | nothing: plain feed downloads |
+| Claude API (AI early warning, optional) | daily and per new feed entry | product names and versions, never secrets, addresses or host names |
+| Your notification channels and offsite watchdog (optional) | per report, alert, ping | the report or alert text, the ping |
+
+Inside the LAN only: agents, Nginx Proxy Manager, FRITZ!Box, TrueNAS and Home Assistant. Building the images and the
+agent fetches packages from Docker Hub, PyPI, npm and the Go module proxy, at build time only.

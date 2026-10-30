@@ -1,0 +1,9 @@
+# Nur der Agent-Code: Werkzeug-Dateien und Doku ändern das Binary nicht und sollen kein neues Release auslösen.
+*
+!agent
+agent/.*
+agent/graft
+agent/docs
+agent/dist
+agent/build
+agent/vulnwatch-agent
