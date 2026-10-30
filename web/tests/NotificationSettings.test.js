@@ -1,7 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import NotificationSettings from '../src/components/NotificationSettings.vue'
-import ClaudeSettings from '../src/components/ClaudeSettings.vue'
 import { setCsrf } from '../src/api.js'
 
 let calls, channels
@@ -18,8 +17,6 @@ beforeEach(() => {
     if (url.startsWith('/api/integrations/notifications') && method === 'POST') return json({ ok: true })
     if (url.startsWith('/api/integrations/notifications/') && method === 'DELETE') return json({ ok: true })
     if (url.startsWith('/api/integrations/notifications/') && method === 'PUT') return json({ ok: true })
-    if (url === '/api/integrations/claude' && method === 'GET') return json({ configured: true, api_key: { set: true, updated_at: '2026-10-24T10:00:00Z' }, model: 'claude-haiku-5-5' })
-    if (url === '/api/integrations/claude/test') return json({ ok: false, error: 'Schlüssel ungültig (HTTP 401)' })
     return json({}, 404)
   }))
 })
@@ -107,17 +104,5 @@ describe('NotificationSettings', () => {
     await flushPromises()
     const put = calls.find((c) => c.method === 'PUT')
     expect(put).toEqual({ url: '/api/integrations/notifications/0', method: 'PUT', body: { gets: 'alerts' } })
-  })
-})
-
-describe('ClaudeSettings', () => {
-  it('zeigt „gesetzt“ ohne Wert und das Testergebnis', async () => {
-    const w = mount(ClaudeSettings)
-    await flushPromises()
-    expect(w.text()).toContain('Stored encrypted · changed')
-    expect(w.get('input[name=api_key]').element.value).toBe('')
-    await w.get('button[data-test=test]').trigger('click')
-    await flushPromises()
-    expect(w.text()).toContain('HTTP 401')
   })
 })

@@ -1,7 +1,7 @@
 <script setup>
 import ScheduleSettings from '../components/ScheduleSettings.vue'
 import NotificationSettings from '../components/NotificationSettings.vue'
-import ClaudeSettings from '../components/ClaudeSettings.vue'
+import AiSettings from '../components/AiSettings.vue'
 import ReleaseSettings from '../components/ReleaseSettings.vue'
 import WatchdogSettings from '../components/WatchdogSettings.vue'
 import PasskeySettings from '../components/PasskeySettings.vue'
@@ -37,7 +37,7 @@ import MetricsSettings from '../components/MetricsSettings.vue'
       <DropAlarmSettings />
 
       <!-- 3. AI Early Warning Integration -->
-      <ClaudeSettings />
+      <AiSettings />
 
       <!-- Passkeys: Login und Bestätigung gefährlicher Befehle -->
       <PasskeySettings />

@@ -33,8 +33,7 @@ const feedsText = ref('')
 const productsText = ref('')
 const configMsg = ref(null)
 const saving = ref(false)
-const research = ref({ enabled: true, model: '' })
-const models = ref([])
+const research = ref({ enabled: true, verify: true })
 const copied = ref('')
 let poll = null
 
@@ -58,11 +57,9 @@ function toggleConfig() {
   if (!showConfig.value) {
     feedsText.value = (data.value?.feeds || []).join('\n')
     productsText.value = (data.value?.products || []).map((p) => [p.name, p.version, p.where].filter(Boolean).join(' | ')).join('\n')
-    research.value = { enabled: data.value?.research?.enabled ?? true, model: data.value?.research?.model || '' }
+    const enabled = data.value?.research?.enabled ?? true
+    research.value = { enabled, verify: data.value?.research?.verify ?? enabled }
     configMsg.value = null
-    if (data.value?.ai_configured && !models.value.length) {
-      api.get('/api/integrations/claude/models').then((r) => { models.value = r.items || [] }).catch(() => {})
-    }
   }
   showConfig.value = !showConfig.value
 }
@@ -208,11 +205,11 @@ useLive(['findings', 'settings'], load, 3000)
         <input v-model="research.enabled" type="checkbox" :disabled="!data?.ai_configured" />
         <span>Daily web research</span>
       </label>
-      <select v-model="research.model" :disabled="!research.enabled || !data?.ai_configured" aria-label="Model for the web research">
-        <option value="">Latest Sonnet (automatic)</option>
-        <option v-for="m in models" :key="m.id" :value="m.id">{{ m.name }} ({{ m.id }})</option>
-      </select>
-      <span class="subtext">Once every {{ data?.research?.interval_hours ?? 20 }} hours Claude searches the web worldwide for fresh advisories on your products. It catches news no feed has yet; with Sonnet a pass costs about $0.20–0.40.</span>
+      <label class="check">
+        <input v-model="research.verify" type="checkbox" :disabled="!data?.ai_configured" />
+        <span>Check high hits with the vendor</span>
+      </label>
+      <span class="subtext">Once every {{ data?.research?.interval_hours ?? 20 }} hours the research model searches the web worldwide for fresh advisories on your products. It catches news no feed has yet; with Sonnet a pass costs about $0.20–0.40. The vendor check compares the facts of every high-severity hit with the vendor’s own advisory before it is reported. Pick the models under Settings → AI providers.</span>
     </div>
     <div class="config-actions">
       <button class="primary" :disabled="saving" @click="saveConfig"><Icon name="check" :size="15" />{{ saving ? 'Saving…' : 'Save' }}</button>
@@ -283,7 +280,7 @@ useLive(['findings', 'settings'], load, 3000)
         </div>
       </li>
     </ol>
-    <p v-else class="empty">{{ data?.ai_configured === false && !filter ? 'Add a Claude API key under Settings; until then matched advisories wait for review by hand.' : EMPTY[filter] }}</p>
+    <p v-else class="empty">{{ data?.ai_configured === false && !filter ? 'Add an AI provider under Settings; until then matched advisories wait for review by hand.' : EMPTY[filter] }}</p>
   </section>
 </template>
 
@@ -330,7 +327,6 @@ useLive(['findings', 'settings'], load, 3000)
 .ew-mitigations p { margin: 0; font-size: 0.85rem; color: var(--text-2); line-height: 1.5; }
 .research-config { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; }
 .research-config .check { display: inline-flex; align-items: center; gap: 0.45rem; font-size: 0.9rem; }
-.research-config select { min-width: 16rem; }
 .research-config .subtext { flex-basis: 100%; }
 .ew-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.9rem; font-size: 0.78rem; color: var(--muted); }
 .ew-meta time { font-variant-numeric: tabular-nums; }
