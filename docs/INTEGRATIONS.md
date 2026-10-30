@@ -159,6 +159,14 @@ name. From `/api/config` it keeps only the state and the list of integrations, n
 The loaded integrations (Shelly, Matter, Nuki, Tuya, …) feed the AI early warning, so reports about them are
 matched to this Home Assistant. If NPM forwards a domain to the device, its findings are marked internet-exposed.
 
+## Other devices: collector scripts
+
+For devices where neither the agent nor an API connector fits (Unraid, Synology DSM, OpenWrt …), a cron script on the
+device reports OS version, packages and containers to vulnwatch (`POST /api/collector/v1/report`, one token per
+device). vulnwatch only receives and never answers with a command. Only what the report provides is rated; the rest
+is n/a. Scripts, setup and limits: [`collectors/README.md`](../collectors/README.md). The traffic stays in your
+network: the device talks to vulnwatch, vulnwatch contacts nothing for it.
+
 ## Sharp drop alarm
 
 If a host's open scanner findings fall by at least 50 % in one run (and it had at least 20 before), the run report

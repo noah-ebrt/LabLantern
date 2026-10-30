@@ -35,7 +35,7 @@
       "required": ["ecosystem", "name", "version"],
       "properties": {
         "ecosystem": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,31}$",
-                      "description": "deb, rpm, apk, npm, pypi, golang, cargo, gem, nuget and composer are checked for CVEs. Other ecosystems (opkg, slackware, synology …) are recorded; the coverage matrix shows the CVE check as n/a for them."},
+                      "description": "Checked for CVEs: deb (Debian, Ubuntu), rpm (RHEL family, SUSE, Fedora …), apk (Alpine, Wolfi), npm, pypi, golang, cargo, gem, nuget and composer. Other ecosystems (opkg, slackware, synology …) are recorded; the coverage matrix shows the CVE check as n/a for them."},
         "name": {"type": "string", "minLength": 1, "maxLength": 200},
         "version": {"type": "string", "minLength": 1, "maxLength": 200},
         "purl": {"type": "string", "maxLength": 500, "pattern": "^pkg:[a-z0-9.+-]+/",

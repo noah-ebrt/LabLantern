@@ -186,3 +186,15 @@ def test_collector_ready_for_scan_without_poke(admin, name):
     assert post(env, c["token"], example(name)).status_code == 200
     with ctx.session_factory() as s:
         assert _system_ready(ctx, s, s.get(System, c["id"]), datetime.now(timezone.utc) + timedelta(minutes=1))
+
+
+def test_distro_packages_only_for_known_distros():
+    """apk auf OpenWrt oder deb auf einem unbekannten System: Grype hat dafür keine Advisories. Abgleichbar zu
+    melden hieße "0 Funde" statt n/a, eine stille Lücke."""
+    from app.sbom import collector_purl
+    pkg = {"ecosystem": "apk", "name": "busybox", "version": "1.36.1-r2"}
+    assert collector_purl(pkg, "openwrt", "24.10.0") is None
+    assert collector_purl(pkg, "alpine", "3.20.3") == "pkg:apk/alpine/busybox@1.36.1-r2?distro=alpine-3.20.3"
+    assert collector_purl({**pkg, "ecosystem": "deb"}, "dsm", "7.2") is None
+    assert collector_purl({**pkg, "ecosystem": "deb"}, "debian", "12").startswith("pkg:deb/debian/busybox@")
+    assert collector_purl({**pkg, "purl": "pkg:apk/openwrt/busybox@1.36.1-r2"}, "openwrt", "24.10.0") is None

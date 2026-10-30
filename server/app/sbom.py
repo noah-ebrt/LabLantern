@@ -58,16 +58,27 @@ def build_cyclonedx(system_name: str, os_id: str, os_version_id: str, os_name: s
 # anderer Ökosysteme (opkg, Slackware, Synology …) landen nicht in der SBOM; die Matrix zeigt sie als n/a mit Grund.
 SCANNABLE_PURL_TYPES = ("deb", "rpm", "apk", "npm", "pypi", "golang", "cargo", "gem", "nuget", "composer", "maven")
 _LANGUAGE = ("npm", "pypi", "golang", "cargo", "gem", "nuget", "composer")
+# Distro-Pakete nur für Distributionen mit Advisories in Grypes Datenbank; sonst hieße es "0 Funde" statt n/a
+_DISTROS = {
+    "deb": ("debian", "ubuntu"),
+    "rpm": ("rhel", "centos", "rocky", "almalinux", "ol", "amzn", "sles", "opensuse-leap", "fedora", "photon",
+            "mariner", "azurelinux"),
+    "apk": ("alpine", "wolfi", "chainguard"),
+}
 
 
 def collector_purl(pkg: dict[str, Any], os_id: str, os_version: str) -> str | None:
     if pkg.get("purl"):
         kind = pkg["purl"].removeprefix("pkg:").split("/", 1)[0]
+        if kind in _DISTROS and os_id not in _DISTROS[kind]:
+            return None
         return pkg["purl"] if kind in SCANNABLE_PURL_TYPES else None
     eco, name, version = pkg["ecosystem"], pkg["name"], pkg["version"]
+    if eco in _DISTROS and os_id not in _DISTROS[eco]:
+        return None
     if eco in ("deb", "rpm"):
         return purl_for({"type": eco, "name": name, "version": version}, os_id, os_version)
-    if eco == "apk" and os_id:
+    if eco == "apk":
         distro = f"{os_id}-{os_version}" if os_version else os_id
         return f"pkg:apk/{_enc(os_id)}/{_enc(name)}@{_enc(version)}?distro={_enc(distro)}"
     if eco in _LANGUAGE:
