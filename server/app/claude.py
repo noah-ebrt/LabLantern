@@ -22,9 +22,16 @@ FALLBACK_BETA = "server-side-fallback-2026-07-01"
 WEB_SEARCH_DYNAMIC = ("claude-opus-5", "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-5",
                       "claude-sonnet-4-6", "claude-fable")
 MAX_PAUSES = 4
+# Modelle mit serverseitiger Websuche (Präfixe); ältere Modelle (z. B. Claude 3) werden für Recherche nicht angeboten
+ANTHROPIC_WEB = ("claude-opus-4", "claude-sonnet-4", "claude-haiku-4-5", "claude-opus-5", "claude-sonnet-5",
+                 "claude-haiku-5", "claude-fable")
 
 
 ClaudeError = AiError   # Alias: bestehende Importe und `earlywarning.AiError` bleiben unverändert
+
+
+def anthropic_web(model_id: str) -> bool:
+    return model_id.startswith(ANTHROPIC_WEB)
 
 
 def make_client(base_url: str, key: str, factory: Callable[[str], Any] | None = None) -> anthropic.Anthropic:
@@ -130,3 +137,25 @@ def research(client: anthropic.Anthropic, model: str, system: str, text: str, to
     archive = {"id": resp.id, "model": resp.model, "stop_reason": resp.stop_reason, "searches": searches,
                "usage": usage, "sources": list(dict.fromkeys(sources))[:50]}
     return _tool_input(resp, tool["name"]), archive
+
+
+class AnthropicProvider:
+    """Anthropic hinter der gemeinsamen Anbieter-Schnittstelle (aibase.Provider); ruft die Funktionen dieses Moduls."""
+    pid = "anthropic"
+    label = "Anthropic"
+    web_search = True
+
+    def __init__(self, client):
+        self.client = client
+
+    def check(self) -> dict:
+        return check_key(self.client)
+
+    def list_models(self) -> list[dict]:
+        return list_models(self.client)
+
+    def ask_tool(self, model: str, system: str, text: str, tool: dict) -> tuple[dict, dict]:
+        return ask_tool(self.client, model, system, text, tool)
+
+    def research(self, model: str, system: str, text: str, tool: dict, max_searches: int = 15) -> tuple[dict, dict]:
+        return research(self.client, model, system, text, tool, max_searches)
