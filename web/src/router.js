@@ -10,6 +10,7 @@ import FindingsView from './views/FindingsView.vue'
 import RunsView from './views/RunsView.vue'
 import HistoryView from './views/HistoryView.vue'
 import EarlyWarningsView from './views/EarlyWarningsView.vue'
+import HealthView from './views/HealthView.vue'
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -20,6 +21,7 @@ export const router = createRouter({
     { path: '/laeufe', component: RunsView },
     { path: '/verlauf', component: HistoryView },
     { path: '/fruehwarnungen', component: EarlyWarningsView },
+    { path: '/gesundheit', component: HealthView },
     { path: '/einstellungen', component: SettingsView },
     { path: '/login', component: LoginView },
     { path: '/einrichtung', component: SetupView },

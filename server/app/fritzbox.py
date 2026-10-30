@@ -33,16 +33,17 @@ class FritzError(Exception):
     pass
 
 
-def _soap(opener, base: str, action: str, args: dict | None = None) -> dict[str, str]:
+def _soap(opener, base: str, action: str, args: dict | None = None, *, service: str = SERVICE, control: str = CONTROL,
+          timeout: float = 10) -> dict[str, str]:
     """Ein TR-064-Aufruf; liefert die Ausgabefelder (NewExternalPort …) als Text."""
     inner = "".join(f"<{k}>{v}</{k}>" for k, v in (args or {}).items())
     body = ('<?xml version="1.0" encoding="utf-8"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" '
             's:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body>'
-            f'<u:{action} xmlns:u="{SERVICE}">{inner}</u:{action}></s:Body></s:Envelope>')
-    req = urllib.request.Request(base.rstrip("/") + CONTROL, data=body.encode(), method="POST",
-                                 headers={"Content-Type": 'text/xml; charset="utf-8"', "SoapAction": f"{SERVICE}#{action}"})
+            f'<u:{action} xmlns:u="{service}">{inner}</u:{action}></s:Body></s:Envelope>')
+    req = urllib.request.Request(base.rstrip("/") + control, data=body.encode(), method="POST",
+                                 headers={"Content-Type": 'text/xml; charset="utf-8"', "SoapAction": f"{service}#{action}"})
     try:
-        with opener.open(req, timeout=10) as r:
+        with opener.open(req, timeout=timeout) as r:
             raw = r.read(200_000)
     except urllib.error.HTTPError as e:
         if e.code == 401:
@@ -57,11 +58,15 @@ def _soap(opener, base: str, action: str, args: dict | None = None) -> dict[str,
     return {el.tag.rsplit("}", 1)[-1]: (el.text or "") for el in root.iter() if el.tag.rsplit("}", 1)[-1].startswith("New")}
 
 
-def fetch_forwards(url: str, user: str, password: str) -> list[dict]:
-    """Alle IPv4-Portfreigaben: {external_port, protocol, internal_client, internal_port, enabled, description}."""
+def digest_opener(url: str, user: str, password: str):
     pw = urllib.request.HTTPPasswordMgrWithDefaultRealm()
     pw.add_password(None, url, user, password)
-    opener = urllib.request.build_opener(urllib.request.HTTPDigestAuthHandler(pw))
+    return urllib.request.build_opener(urllib.request.HTTPDigestAuthHandler(pw))
+
+
+def fetch_forwards(url: str, user: str, password: str) -> list[dict]:
+    """Alle IPv4-Portfreigaben: {external_port, protocol, internal_client, internal_port, enabled, description}."""
+    opener = digest_opener(url, user, password)
     try:
         count = int(_soap(opener, url, "GetPortMappingNumberOfEntries").get("NewPortMappingNumberOfEntries") or 0)
     except ValueError:

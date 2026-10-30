@@ -335,3 +335,102 @@ class EarlyWarning(Base):
     classified_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True, default=None)
     notified_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True, default=None)
     duplicate_of: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)  # schon gemeldetes Problem
+
+
+class HealthMonitor(Base):
+    """Überwachter Host oder Dienst (Gesundheit). Agenten-Systeme bekommen automatisch einen (system_id gesetzt);
+    eigene Hosts legt der Admin an. `state` ist der zusammengefasste Zustand aller Prüfungen (health.aggregate)."""
+
+    __tablename__ = "health_monitors"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String)
+    slug: Mapped[str] = mapped_column(String, unique=True)        # stabiler Schlüssel für die API (ESP, Home Assistant)
+    host: Mapped[str] = mapped_column(String, default="")         # IP oder Name; Ziel der Prüfungen ohne eigenes Ziel
+    system_id: Mapped[int | None] = mapped_column(ForeignKey("systems.id", ondelete="CASCADE"), nullable=True,
+                                                  unique=True, default=None)
+    critical: Mapped[bool] = mapped_column(Boolean, default=True)  # Alarm bei Ausfall
+    paused: Mapped[bool] = mapped_column(Boolean, default=False)
+    state: Mapped[str] = mapped_column(String, default="unknown")  # up, degraded, down, unknown
+    state_since: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
+    warning: Mapped[str] = mapped_column(String, default="")
+    created_at: Mapped[float] = mapped_column(Float, default=0.0)
+
+
+class HealthCheck(Base):
+    """Eine Prüfung eines Monitors (ping, tcp, http, tls, dns, fritz_host, fritz_wan, heartbeat, agent).
+    Einstellungen in `params` (JSON); Laufzeitzustand daneben, damit die API ohne Engine antworten kann."""
+
+    __tablename__ = "health_checks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    monitor_id: Mapped[int] = mapped_column(ForeignKey("health_monitors.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String)
+    params: Mapped[str] = mapped_column(Text, default="{}")
+    interval_s: Mapped[int] = mapped_column(Integer, default=30)
+    retry_s: Mapped[int] = mapped_column(Integer, default=10)     # Takt nach einem Fehlschlag
+    timeout_s: Mapped[float] = mapped_column(Float, default=5.0)
+    fails_degraded: Mapped[int] = mapped_column(Integer, default=2)
+    fails_down: Mapped[int] = mapped_column(Integer, default=4)
+    paused: Mapped[bool] = mapped_column(Boolean, default=False)
+    beat_hash: Mapped[str | None] = mapped_column(String, nullable=True, unique=True, default=None)  # heartbeat
+    state: Mapped[str] = mapped_column(String, default="unknown")
+    fails: Mapped[int] = mapped_column(Integer, default=0)
+    last_checked: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
+    last_ok: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
+    latency_ms: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
+    error: Mapped[str] = mapped_column(String, default="")
+    state_since: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
+
+
+class HealthSample(Base):
+    """Einzelergebnis je Prüfung (7 Tage), Grundlage der feinen Latenz- und Verfügbarkeitskurven."""
+
+    __tablename__ = "health_samples"
+    __table_args__ = (Index("ix_health_samples_check_ts", "check_id", "ts"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    check_id: Mapped[int] = mapped_column(ForeignKey("health_checks.id", ondelete="CASCADE"))
+    ts: Mapped[float] = mapped_column(Float, index=True)
+    ok: Mapped[bool] = mapped_column(Boolean)
+    latency_ms: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
+
+
+class HealthRollup(Base):
+    """Stundenwerte je Prüfung (ein Jahr): Verfügbarkeit und Latenz für lange Zeiträume."""
+
+    __tablename__ = "health_rollups"
+
+    check_id: Mapped[int] = mapped_column(ForeignKey("health_checks.id", ondelete="CASCADE"), primary_key=True)
+    hour: Mapped[int] = mapped_column(Integer, primary_key=True)   # Beginn der Stunde, Unix-Sekunden
+    total: Mapped[int] = mapped_column(Integer, default=0)
+    ok: Mapped[int] = mapped_column(Integer, default=0)
+    lat_sum: Mapped[float] = mapped_column(Float, default=0.0)
+    lat_n: Mapped[int] = mapped_column(Integer, default=0)
+    lat_max: Mapped[float] = mapped_column(Float, default=0.0)
+
+
+class HealthEvent(Base):
+    """Zustandswechsel eines Monitors; daraus entstehen Verfügbarkeit und Ausfallliste."""
+
+    __tablename__ = "health_events"
+    __table_args__ = (Index("ix_health_events_monitor_ts", "monitor_id", "ts"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    monitor_id: Mapped[int] = mapped_column(ForeignKey("health_monitors.id", ondelete="CASCADE"))
+    ts: Mapped[float] = mapped_column(Float)
+    state: Mapped[str] = mapped_column(String)
+    prev: Mapped[str] = mapped_column(String, default="")
+    detail: Mapped[str] = mapped_column(String, default="")
+
+
+class HealthToken(Base):
+    """Nur-Lese-Token für die Gesundheits-API (ein Token je Abnehmer: ESP, Home Assistant …). Nur der Hash liegt vor."""
+
+    __tablename__ = "health_tokens"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String)
+    token_hash: Mapped[str] = mapped_column(String, unique=True)
+    created_at: Mapped[float] = mapped_column(Float, default=0.0)
+    last_used: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)

@@ -14,6 +14,7 @@ const searchInput = ref(null)
 const NAV = [
   { group: 'Monitor', items: [
     { to: '/', label: 'Overview', icon: 'overview' },
+    { to: '/gesundheit', label: 'Health', icon: 'activity' },
     { to: '/funde', label: 'Findings', icon: 'findings' },
     { to: '/fruehwarnungen', label: 'Early warnings', icon: 'sparkles' },
     { to: '/laeufe', label: 'Scan runs', icon: 'runs' },
