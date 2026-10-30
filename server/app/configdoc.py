@@ -17,7 +17,7 @@ from .context import Context
 from .guards import Guards
 from sqlalchemy import select
 
-from .models import setting
+from .models import put_setting, setting
 
 
 class SectionError(Exception):
@@ -36,9 +36,9 @@ def build_config_router(ctx: Context, guards: Guards, routers: list[APIRouter]) 
     """`routers`: die Router der Endpunkte (Pfade ohne /api), über die geschrieben wird."""
     from .appliances import CONFIG_KEY as APPLIANCES_KEY, _configs
     from .connectors import NPM_CONFIG, NPM_SECRET
+    from .aiproviders import MODEL_ID, TASKS, TASKS_KEY
     from .earlywarning import DEFAULT_FEEDS, FEEDS_KEY, PRODUCTS_KEY, research_config
     from .fritzbox import FRITZ_CONFIG, FRITZ_SECRET
-    from .integrations import MODEL_KEY
     from .integrity import drop_config
     from .models import CoverageExclusion, Snooze, System
     from .notify import load_channels
@@ -69,7 +69,9 @@ def build_config_router(ctx: Context, guards: Guards, routers: list[APIRouter]) 
 
     # --- Lesen je Abschnitt: genau die Form, die der Endpunkt annimmt ---
     def read_claude(s):
-        return {"model": setting(s, MODEL_KEY), "api_key": None}
+        """Das Modell für „classify“, soweit es von Anthropic ist (so wie alte Exporte es kennen); alles andere: leer."""
+        ref = (setting(s, TASKS_KEY) or {}).get("classify") or ""
+        return {"model": ref.removeprefix("anthropic:") if ref.startswith("anthropic:") else None, "api_key": None}
 
     def read_watchdog(s):
         cfg = watchdog_config(ctx)
@@ -94,8 +96,19 @@ def build_config_router(ctx: Context, guards: Guards, routers: list[APIRouter]) 
     # --- Schreiben, wo ein Abschnitt mehr als einen Endpunkt braucht ---
     def write_claude(found, value, current):
         value = value or {}
-        if value.get("model") != current["model"]:
-            raise SectionError("the model is chosen per task under AI now (PUT /api/ai/tasks)")
+        model = value.get("model") or None
+        if model != current["model"]:
+            # Alte Exporte tragen das eine Modell; es wird zur Wahl für „classify“ (leer = automatisch). Direkt
+            # geschrieben, ohne Abgleich mit der Modellliste: der Anbieter muss dafür nicht eingerichtet sein.
+            if model is not None and not (isinstance(model, str) and MODEL_ID.match(model)):
+                raise SectionError("model: invalid model id")
+            with ctx.session_factory() as s:
+                tasks = {t: (setting(s, TASKS_KEY) or {}).get(t) or "" for t in TASKS}
+                tasks["classify"] = f"anthropic:{model}" if model else ""
+                put_setting(s, TASKS_KEY, tasks)
+                ctx.audit(s, found[0].username, "ai.tasks",
+                          ", ".join(f"{t}={r or 'automatic'}" for t, r in tasks.items()))
+                s.commit()
         if value.get("api_key"):
             call(found, "PUT", "/ai/providers/{pid}", {"api_key": value["api_key"]}, pid="anthropic")
 

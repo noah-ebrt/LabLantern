@@ -436,6 +436,33 @@ def test_research_without_web_provider_records_reason(ctx, gitlab_host):
     with ctx.session_factory() as s:
         assert setting(s, ew.RESEARCH_STATE_KEY)["error"] == "needs a provider with web search"
     assert len(fake.calls) == 1   # gelesen wurde die Meldung, recherchiert nichts
+    # Es wurde nicht recherchiert: `at` rückt nicht vor, der nächste Durchgang versucht es billig erneut ...
+    assert "at" not in state["research"] and "at" not in setting_of(ctx, ew.RESEARCH_STATE_KEY)
+    again = ew.run_pass(ctx, fetch=lambda url: [])
+    assert again["research"]["error"] == "needs a provider with web search"
+    # ... und die erste echte Recherche nach dem Einrichten eines Anbieters nimmt das 7-Tage-Fenster
+    claude = use(ctx, Claude(), research="anthropic:claude-sonnet-5-5")
+    ok = ew.run_pass(ctx, fetch=lambda url: [])
+    assert ok["research"]["ok"] is True and "last 7 days" in claude.calls[0]["system"]
+
+
+def test_a_skipped_research_keeps_the_time_of_the_last_real_one(ctx, gitlab_host):
+    from app.models import put_setting
+
+    only_research_and_verify(ctx, enabled=True)
+    use_compat(ctx, OpenAI())
+    with ctx.session_factory() as s:
+        put_setting(s, ew.RESEARCH_STATE_KEY, {"at": 1000.0, "ok": True, "new": 2})
+        s.commit()
+    state = ew.run_pass(ctx, fetch=lambda url: [])
+    assert state["research"] == {"at": 1000.0, "ok": False, "error": "needs a provider with web search"}
+
+
+def setting_of(ctx, key):
+    from app.models import setting
+
+    with ctx.session_factory() as s:
+        return setting(s, key) or {}
 
 
 def test_research_settings_api_has_two_switches_and_ignores_the_old_model(admin):
@@ -444,7 +471,20 @@ def test_research_settings_api_has_two_switches_and_ignores_the_old_model(admin)
     assert r.status_code == 200
     got = client.get("/api/early-warnings").json()["research"]
     assert got == {"enabled": False, "verify": True, "state": {}, "interval_hours": ew.RESEARCH_HOURS}
-    assert client.put("/api/early-warnings/research", headers=h, json={"enabled": True}).status_code == 422   # verify fehlt
+    # Ohne `verify` (alter Client): der gespeicherte Wert bleibt
+    r = client.put("/api/early-warnings/research", headers=h, json={"enabled": True, "model": "claude-x"})
+    assert r.status_code == 200
+    assert client.get("/api/early-warnings").json()["research"]["verify"] is True
+    r = client.put("/api/early-warnings/research", headers=h, json={"enabled": False, "verify": False})
+    r = client.put("/api/early-warnings/research", headers=h, json={"enabled": True})
+    assert r.status_code == 200 and setting_of(env.app.state.ctx, ew.RESEARCH_KEY) == {"enabled": True, "verify": False}
+    # Nichts gespeichert: der alte eine Schalter galt für beides, also folgt `verify` dem `enabled`
+    from app.models import Setting
+    with env.app.state.ctx.session_factory() as s:
+        s.delete(s.get(Setting, ew.RESEARCH_KEY))
+        s.commit()
+    assert client.put("/api/early-warnings/research", headers=h, json={"enabled": False, "model": "x"}).status_code == 200
+    assert setting_of(env.app.state.ctx, ew.RESEARCH_KEY) == {"enabled": False, "verify": False}
 
 
 def test_refresh_with_research_needs_a_research_model(admin):

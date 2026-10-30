@@ -861,12 +861,15 @@ def run_research(ctx: Context, products: list[dict]) -> dict:
     """Web-Recherche: neue Meldungen werden wie Feed-Einträge eingestuft (Feed `web-research`).
     Anbieter und Modell kommen aus der Wahl für „research“; ohne passenden Anbieter steht der Grund im Zustand."""
     with ctx.session_factory() as s:
-        first = not (setting(s, RESEARCH_STATE_KEY) or {}).get("at")
-    state = {"at": time.time(), "ok": False}
+        before = (setting(s, RESEARCH_STATE_KEY) or {}).get("at")
+    first = not before
     try:
         provider, model = resolve(ctx, "research")
     except AiError as e:
-        return _research_failed(ctx, state, str(e))
+        # Es wurde nicht recherchiert: `at` rückt nicht vor. So versucht der nächste Durchgang es billig erneut, und die
+        # erste echte Recherche nach dem Einrichten eines Anbieters nimmt weiter das 7-Tage-Fenster.
+        return _research_failed(ctx, {"at": before} if before else {}, str(e))
+    state = {"at": time.time(), "ok": False}
     state.update(provider=provider.pid, model=model)
     today = datetime.now(timezone.utc).date().isoformat()
     system = RESEARCH_SYSTEM.format(days=7 if first else RESEARCH_DAYS, today=today)
@@ -1029,9 +1032,10 @@ class FeedsIn(BaseModel):
 
 
 class ResearchIn(BaseModel):
-    """Ein altes `model` im Body wird ignoriert (Pydantic verwirft unbekannte Felder); gewählt wird unter KI."""
+    """Ein altes `model` im Body wird ignoriert (Pydantic verwirft unbekannte Felder); gewählt wird unter KI.
+    Fehlt `verify` (alter Client, alter Export), bleibt der gespeicherte Wert, sonst gilt `enabled`."""
     enabled: bool
-    verify: bool
+    verify: bool | None = None
 
 
 STATUS_ORDER = {"betroffen": 0, "unklar": 1, "pending": 2, "nicht_betroffen": 3}
@@ -1127,9 +1131,13 @@ def build_earlywarning_router(ctx: Context, guards: Guards) -> APIRouter:
     @router.put("/early-warnings/research")
     def write_research(body: ResearchIn, found=Depends(guards.require_admin)):
         with ctx.session_factory() as s:
-            put_setting(s, RESEARCH_KEY, {"enabled": body.enabled, "verify": body.verify})
+            verify = body.verify
+            if verify is None:
+                stored = setting(s, RESEARCH_KEY) or {}
+                verify = bool(stored["verify"]) if "verify" in stored else body.enabled
+            put_setting(s, RESEARCH_KEY, {"enabled": body.enabled, "verify": verify})
             ctx.audit(s, found[0].username, "earlywarning.research",
-                      f"research {'on' if body.enabled else 'off'}, verify {'on' if body.verify else 'off'}")
+                      f"research {'on' if body.enabled else 'off'}, verify {'on' if verify else 'off'}")
             s.commit()
         return {"ok": True}
 

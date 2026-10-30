@@ -12,9 +12,6 @@ from .models import put_setting, setting
 from . import notify as notify_mod
 from .notify import is_valid_url, load_channels, save_channels, scheme_of
 
-MODEL_KEY = "claude.model"           # alte Modellwahl; nur noch für den Konfigurationsexport (configdoc), gewählt wird unter /api/ai
-
-
 SMTP_CONFIG_KEY = "smtp.config"
 SMTP_PASSWORD_SECRET = "smtp.password"
 _ADDR = r"^[^\s@<>\r\n]+@[^\s@<>\r\n]+\.[^\s@<>\r\n]+$"
