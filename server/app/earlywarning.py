@@ -1,10 +1,12 @@
 """KI-Frühwarnung (PLAN Abschnitt 5, Phase 6).
 
 Zwei Quellen, ein Bewertungsweg:
-A. Feeds (RSS/Atom, weltweit): nur Einträge, die ein Produkt aus dem Inventar beim Namen nennen, gehen an Claude
-   (Standard: neuestes Haiku), das die Fakten über ein festes Schema meldet. Der Rest geht nie an die KI.
-B. Web-Recherche (höchstens einmal in RESEARCH_HOURS, Standard: neuestes Sonnet): Claude sucht selbst nach frischen
-   Meldungen zu genau diesen Produkten und meldet sie über das gleiche Schema.
+A. Feeds (RSS/Atom, weltweit): nur Einträge, die ein Produkt aus dem Inventar beim Namen nennen, gehen an die KI,
+   die die Fakten über ein festes Schema meldet. Der Rest geht nie an die KI.
+B. Web-Recherche (höchstens einmal in RESEARCH_HOURS): die KI sucht selbst nach frischen Meldungen zu genau diesen
+   Produkten und meldet sie über das gleiche Schema.
+Jede der drei Aufgaben (classify, research, verify) läuft auf dem Anbieter und Modell, die unter „KI“ dafür gewählt
+sind (aiproviders.resolve); scheitert eine, wechselt nichts still zu einem anderen Anbieter.
 
 Inventar: Images, Betriebssysteme, Kernel, von Hand gepflegte Produkte und netznahe Host-Pakete aus den SBOMs
 (WATCHED_PACKAGES, z. B. Tailscale, OpenSSH, Docker).
@@ -33,12 +35,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
-from .claude import ClaudeError, ask_tool, research
+from .aibase import AiError, Provider
+from .aiproviders import any_configured, record_use, resolve
 from .containers import containers_of
 from .context import Context
 from .guards import Guards
-from .integrations import (CLAUDE_MODEL, CLAUDE_SECRET, LAST_USED_KEY, available_models, claude_client,
-                           latest_sonnet, resolve_model)
 from .mailtpl import early_warning_html
 from .models import EarlyWarning, Finding, System, put_setting, setting
 from .rules import classify_early_warning
@@ -47,7 +48,7 @@ log = logging.getLogger("vulnwatch.earlywarning")
 
 FEEDS_KEY = "earlywarning.feeds"
 PRODUCTS_KEY = "earlywarning.products"     # von Hand: [{"name": "TrueNAS", "version": "25.04.2"}]
-RESEARCH_KEY = "earlywarning.research"     # {"enabled": bool, "model": "" = neuestes Sonnet}
+RESEARCH_KEY = "earlywarning.research"     # {"enabled": bool (Recherche), "verify": bool (Prüfung beim Hersteller)}
 STATE_KEY = "ai.state"
 RESEARCH_STATE_KEY = "ai.research"
 DEFAULT_FEEDS = [
@@ -420,15 +421,13 @@ def prefilter(item: dict, products: list[dict], feed_url: str = "") -> list[dict
 
 # ---------- 3. KI ----------
 
-AiError = ClaudeError
-
-
-def ask_claude(client, model: str, item: dict) -> tuple[dict, dict]:
-    """(geprüfte Tool-Eingabe, Archiv-Eintrag). Wirft ClaudeError bei jedem Problem; der Aufrufer macht daraus `unklar`."""
+def ask_ai(provider: Provider, model: str, item: dict) -> tuple[dict, dict]:
+    """(geprüfte Tool-Eingabe, Archiv-Eintrag). Wirft AiError bei jedem Problem; der Aufrufer macht daraus `unklar`."""
     text = f"Title: {item['title']}\nPublished: {item['published']}\nLink: {item['link']}\n\n{item['summary']}"
-    data, response = ask_tool(client, model, SYSTEM, f"<<<ADVISORY\n{text[:12000]}\nADVISORY>>>", TOOL)
-    archive = {"request": {"model": model, "prompt_sha256": hashlib.sha256(text.encode()).hexdigest(),
-                           "chars": len(text)}, "response": response, "at": time.time()}
+    data, response = provider.ask_tool(model, SYSTEM, f"<<<ADVISORY\n{text[:12000]}\nADVISORY>>>", TOOL)
+    archive = {"request": {"provider": provider.pid, "model": model,
+                           "prompt_sha256": hashlib.sha256(text.encode()).hexdigest(), "chars": len(text)},
+               "response": response, "at": time.time()}
     return validate(data), archive
 
 
@@ -443,7 +442,7 @@ def _enum(v, allowed: tuple) -> str:
 def validate(data) -> dict:
     """Die Antwort wird nur so weit übernommen, wie sie dem Schema entspricht."""
     if not isinstance(data, dict):
-        raise ClaudeError("tool input is not an object")
+        raise AiError("tool input is not an object")
     products = []
     for p in (data.get("products") or [])[:10]:
         if not isinstance(p, dict) or not _s(p.get("product")):
@@ -465,7 +464,7 @@ def validate(data) -> dict:
 
 def validate_research(data) -> list[dict]:
     if not isinstance(data, dict):
-        raise ClaudeError("tool input is not an object")
+        raise AiError("tool input is not an object")
     out = []
     for a in (data.get("advisories") or [])[:30]:
         if not isinstance(a, dict) or not _s(a.get("title")):
@@ -800,9 +799,10 @@ def _needs_verify(w: EarlyWarning) -> bool:
             and isinstance(stored.get("result"), dict) and "verified" not in stored)
 
 
-def verify(ctx: Context, client, model: str, w: EarlyWarning) -> None:
+def verify(ctx: Context, provider: Provider, model: str, w: EarlyWarning) -> str | None:
     """Vor der Meldung: Fakten eines „hoch“-Treffers mit der Herstellermeldung abgleichen (Anreißer nennen selten
-    Versionen). Ausnutzung wird dabei nie zurückgenommen. Fehler lassen die bisherige Einstufung stehen."""
+    Versionen). Ausnutzung wird dabei nie zurückgenommen. Fehler lassen die bisherige Einstufung stehen und kommen
+    als Text zurück (sonst None)."""
     stored = json.loads(w.ai_json or "{}")
     matched = json.loads(w.matched)
     installed = sorted({f"- {p['product']} {p['version'] or '(version unknown)'}" for p in matched})
@@ -810,23 +810,27 @@ def verify(ctx: Context, client, model: str, w: EarlyWarning) -> None:
             "Installed here:\n" + "\n".join(installed[:20]))
     system = VERIFY_SYSTEM.format(today=datetime.now(timezone.utc).date().isoformat())
     try:
-        data, archive = research(client, model, system, text, TOOL, max_searches=4)
+        data, archive = provider.research(model, system, text, TOOL, max_searches=4)
         facts = validate(data)
-    except ClaudeError as e:
+    except AiError as e:
         w.ai_json = json.dumps({**stored, "verified": {"at": time.time(), "error": str(e)}})
-        return
+        return str(e)
     before = stored["result"]
     for k in ("exploited", "public_exploit"):
         if before.get(k) == "yes":
             facts[k] = "yes"
     facts["cves"] = sorted(set(facts["cves"]) | set(before.get("cves") or []))
     w.ai_json = json.dumps({**stored, "result": facts, "unverified_result": before,
-                            "verified": {"at": time.time(), "model": model, "searches": archive["searches"],
-                                         "sources": archive["sources"][:10]}})
+                            "verified": {"at": time.time(), "provider": provider.pid, "model": model,
+                                         "searches": archive["searches"], "sources": archive["sources"][:10]}})
+    return None
 
 
 def research_config(s) -> dict:
-    return {"enabled": True, "model": "", **(setting(s, RESEARCH_KEY) or {})}
+    """Zwei Schalter, beide standardmäßig an: die Recherche und die Prüfung beim Hersteller. Das Modell wählt
+    `ai.tasks`; ein altes `model` im gespeicherten Wert wird ignoriert."""
+    cfg = setting(s, RESEARCH_KEY) or {}
+    return {"enabled": bool(cfg.get("enabled", True)), "verify": bool(cfg.get("verify", True))}
 
 
 def research_due(s, now: float | None = None) -> bool:
@@ -844,24 +848,35 @@ def research_prompt(products: list[dict]) -> str:
     return "Products in use (name, installed version, kind, hosts):\n" + "\n".join(lines)
 
 
-def run_research(ctx: Context, client, products: list[dict]) -> dict:
-    """Web-Recherche: neue Meldungen werden wie Feed-Einträge eingestuft (Feed `web-research`)."""
+def _research_failed(ctx: Context, state: dict, error: str) -> dict:
+    """Den Fehlschlag der Recherche festhalten (sichtbar in den Einstellungen) und den Zustand zurückgeben."""
+    state.update(ok=False, error=error)
     with ctx.session_factory() as s:
-        cfg = research_config(s)
+        put_setting(s, RESEARCH_STATE_KEY, state)
+        s.commit()
+    return state
+
+
+def run_research(ctx: Context, products: list[dict]) -> dict:
+    """Web-Recherche: neue Meldungen werden wie Feed-Einträge eingestuft (Feed `web-research`).
+    Anbieter und Modell kommen aus der Wahl für „research“; ohne passenden Anbieter steht der Grund im Zustand."""
+    with ctx.session_factory() as s:
         first = not (setting(s, RESEARCH_STATE_KEY) or {}).get("at")
-    model = cfg["model"] or latest_sonnet(available_models(ctx))
-    state = {"at": time.time(), "model": model, "ok": False}
+    state = {"at": time.time(), "ok": False}
+    try:
+        provider, model = resolve(ctx, "research")
+    except AiError as e:
+        return _research_failed(ctx, state, str(e))
+    state.update(provider=provider.pid, model=model)
     today = datetime.now(timezone.utc).date().isoformat()
     system = RESEARCH_SYSTEM.format(days=7 if first else RESEARCH_DAYS, today=today)
     try:
-        data, archive = research(client, model, system, research_prompt(products), RESEARCH_TOOL)
+        data, archive = provider.research(model, system, research_prompt(products), RESEARCH_TOOL)
         found = validate_research(data)
-    except ClaudeError as e:
-        state["error"] = str(e)
-        with ctx.session_factory() as s:
-            put_setting(s, RESEARCH_STATE_KEY, state)
-            s.commit()
-        return state
+    except AiError as e:
+        record_use(ctx, provider, "research", model, False, str(e))
+        return _research_failed(ctx, state, str(e))
+    record_use(ctx, provider, "research", model, True)
     new = 0
     with ctx.session_factory() as s:
         since = datetime.now(timezone.utc) - timedelta(days=MAX_ITEM_DAYS)
@@ -923,11 +938,14 @@ def run_pass(ctx: Context, fetch=fetch_feed, force_research: bool = False) -> di
                                        ai_json=json.dumps({"summary": item["summary"]})))
                     new += 1
                 s.commit()
-        key = ctx.secrets.get(CLAUDE_SECRET)
-        client = claude_client(ctx, key) if key else None
-        model = resolve_model(ctx) if key else CLAUDE_MODEL
+        try:
+            provider, model = resolve(ctx, "classify")
+            unavailable = None
+        except AiError as e:
+            provider = model = None
+            unavailable = e   # jede ausstehende Meldung wird dann `unklar`, mit diesem Grund
         calls = 0
-        last_used = None
+        last_error = None   # Ergebnis des letzten Aufrufs (für die Anzeige in den Einstellungen)
         with ctx.session_factory() as s:
             pending = s.scalars(select(EarlyWarning).where(EarlyWarning.status == "pending")
                                 .order_by(EarlyWarning.id).limit(MAX_AI_CALLS)).all()
@@ -936,41 +954,52 @@ def run_pass(ctx: Context, fetch=fetch_feed, force_research: bool = False) -> di
                 item = {"title": w.title, "link": w.link, "published": w.published, "summary": stored.get("summary", "")}
                 matched = json.loads(w.matched)
                 try:
-                    if not client:
-                        raise ClaudeError("no Claude API key configured")
+                    if provider is None:
+                        raise unavailable
                     calls += 1
-                    last_used = {"at": datetime.now(timezone.utc).isoformat(), "model": model, "ok": False}
-                    ai, archive = ask_claude(client, model, item)
-                    last_used["ok"] = True
+                    last_error = ""
+                    ai, archive = ask_ai(provider, model, item)
+                    last_error = None
                     w.ai_json = json.dumps({**stored, **archive, "result": ai})
                     apply(s, w, ai, matched)
-                except ClaudeError as e:
-                    w.status, w.detail = "unklar", f"Claude could not read the advisory ({e}); ask again"
+                except AiError as e:
+                    if provider is not None:
+                        last_error = str(e)
+                    w.status, w.detail = "unklar", f"The AI provider could not read the advisory ({e}); ask again"
                     w.affected, w.actions, w.severity = "[]", "[]", None
                     w.ai_json = json.dumps({**stored, "error": str(e), "at": time.time()})
                 w.classified_at = datetime.now(timezone.utc)
             state = {"at": time.time(), "feed_errors": feed_errors, "new": new, "ai_calls": calls,
                      "keywords": len({p["keyword"] for p in products})}
-            if last_used:
-                put_setting(s, LAST_USED_KEY, last_used)
             s.commit()
-            due = client is not None and (force_research or research_due(s))
+            due = (force_research or research_due(s)) and any_configured(ctx)   # ohne Anbieter: nichts zu melden
+        if calls:
+            record_use(ctx, provider, "classify", model, last_error is None, last_error)
         if due:
-            state["research"] = run_research(ctx, client, products)
+            state["research"] = run_research(ctx, products)
         with ctx.session_factory() as s:
-            cfg = research_config(s)
-            if client is not None and cfg["enabled"]:
-                model = cfg["model"] or latest_sonnet(available_models(ctx))
+            if research_config(s)["verify"] and any_configured(ctx):
+                try:
+                    v_provider, v_model = resolve(ctx, "verify")
+                except AiError as e:
+                    v_provider = None
+                    state["verify_error"] = str(e)
+            else:
+                v_provider = None
+            if v_provider is not None:
+                verify_error = None
                 candidates = [w for w in s.scalars(select(EarlyWarning).where(EarlyWarning.severity == "hoch")
                                                    .order_by(EarlyWarning.notified_at.is_not(None), EarlyWarning.id.desc()))
                               if _needs_verify(w)][:MAX_VERIFY]
                 for w in candidates:
-                    verify(ctx, client, model, w)
+                    verify_error = verify(ctx, v_provider, v_model, w)
                     result = json.loads(w.ai_json)["result"]
                     _remove_ai_findings(s, w)
                     apply(s, w, result, json.loads(w.matched))
                     s.commit()   # nie eine Schreibsperre über den nächsten, minutenlangen Aufruf halten
                 state["verified"] = len(candidates)
+                if candidates:
+                    record_use(ctx, v_provider, "verify", v_model, verify_error is None, verify_error)
             s.commit()
             state["notified"] = notify_new(ctx, s)
             put_setting(s, STATE_KEY, state)
@@ -1000,8 +1029,9 @@ class FeedsIn(BaseModel):
 
 
 class ResearchIn(BaseModel):
+    """Ein altes `model` im Body wird ignoriert (Pydantic verwirft unbekannte Felder); gewählt wird unter KI."""
     enabled: bool
-    model: str = Field("", max_length=100, pattern=r"^(claude-[a-z0-9.-]{3,80})?$")
+    verify: bool
 
 
 STATUS_ORDER = {"betroffen": 0, "unklar": 1, "pending": 2, "nicht_betroffen": 3}
@@ -1041,7 +1071,7 @@ def overview_summary(ctx: Context, s) -> dict:
     state = setting(s, STATE_KEY) or {}
     return {"at": state.get("at"), "feed_errors": len(state.get("feed_errors") or {}), "counts": counts,
             "research_at": (setting(s, RESEARCH_STATE_KEY) or {}).get("at"),
-            "ai_configured": ctx.secrets.get(CLAUDE_SECRET) is not None}
+            "ai_configured": any_configured(ctx)}
 
 
 def build_earlywarning_router(ctx: Context, guards: Guards) -> APIRouter:
@@ -1064,7 +1094,7 @@ def build_earlywarning_router(ctx: Context, guards: Guards) -> APIRouter:
                     "products": setting(s, PRODUCTS_KEY, []),
                     "research": {**research_config(s), "state": setting(s, RESEARCH_STATE_KEY) or {},
                                  "interval_hours": RESEARCH_HOURS},
-                    "ai_configured": ctx.secrets.get(CLAUDE_SECRET) is not None}
+                    "ai_configured": any_configured(ctx)}
 
     @router.get("/early-warnings/watched/{system_id}", dependencies=[Depends(guards.require_session)])
     def watched(system_id: int):
@@ -1073,7 +1103,7 @@ def build_earlywarning_router(ctx: Context, guards: Guards) -> APIRouter:
             products = [p for p in inventory_products(s, ctx.settings.data_dir) if p["system_id"] == system_id]
             return {"items": [{"keyword": p["keyword"], "product": p["product"], "version": p.get("version", ""),
                                "group": _watch_group(p), "title_only": bool(p.get("title_only"))} for p in products],
-                    "feeds": len(configured_feeds(s)), "ai_configured": ctx.secrets.get(CLAUDE_SECRET) is not None}
+                    "feeds": len(configured_feeds(s)), "ai_configured": any_configured(ctx)}
 
     @router.put("/early-warnings/config")
     def write_config(body: FeedsIn, found=Depends(guards.require_admin)):
@@ -1097,16 +1127,19 @@ def build_earlywarning_router(ctx: Context, guards: Guards) -> APIRouter:
     @router.put("/early-warnings/research")
     def write_research(body: ResearchIn, found=Depends(guards.require_admin)):
         with ctx.session_factory() as s:
-            put_setting(s, RESEARCH_KEY, {"enabled": body.enabled, "model": body.model})
+            put_setting(s, RESEARCH_KEY, {"enabled": body.enabled, "verify": body.verify})
             ctx.audit(s, found[0].username, "earlywarning.research",
-                      f"{'on' if body.enabled else 'off'}, model {body.model or 'latest Sonnet'}")
+                      f"research {'on' if body.enabled else 'off'}, verify {'on' if body.verify else 'off'}")
             s.commit()
         return {"ok": True}
 
     @router.post("/early-warnings/refresh")
     def refresh(research: bool = Query(False), found=Depends(guards.require_admin)):
-        if research and ctx.secrets.get(CLAUDE_SECRET) is None:
-            raise HTTPException(409, "Web research needs a Claude API key (Settings → AI)")
+        if research:
+            try:
+                resolve(ctx, "research")
+            except AiError:
+                raise HTTPException(409, "Web research needs a provider with web search (Settings → AI)") from None
         with ctx.session_factory() as s:
             ctx.audit(s, found[0].username, "earlywarning.refresh", "pass with web research" if research else "pass")
             s.commit()

@@ -1,15 +1,10 @@
 from typing import Literal
-import json
-import time
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from .aiproviders import (CLAUDE_MODEL, CLAUDE_SECRET, MODEL_ID, MODELS_TTL, RESEARCH_MODEL,  # noqa: F401 - earlywarning importiert von hier
-                          latest_haiku, latest_sonnet)
-from .claude import ClaudeError
 from .context import Context
 from .guards import Guards
 from .mail import MailError, SmtpConfig, send_mail
@@ -17,44 +12,7 @@ from .models import put_setting, setting
 from . import notify as notify_mod
 from .notify import is_valid_url, load_channels, save_channels, scheme_of
 
-MODEL_KEY = "claude.model"           # gewähltes Modell; fehlt = automatisch das neueste Haiku
-MODELS_CACHE = "ai.models"           # Modellliste von Anthropic, 24 h zwischengespeichert
-LAST_USED_KEY = "ai.last_used"       # letzter Aufruf durch die Frühwarnung
-
-
-def claude_client(ctx: Context, key: str):
-    from .claude import make_client
-    return make_client(ctx.settings.anthropic_base_url, key, ctx.claude_factory)
-
-
-def fetch_models(ctx: Context, key: str) -> list[dict]:
-    """Verfügbare Modelle direkt von Anthropic, neueste zuerst. Wirft ClaudeError (der Aufrufer fällt zurück)."""
-    from .claude import list_models
-    return [m for m in list_models(claude_client(ctx, key)) if MODEL_ID.match(m["id"])]
-
-
-def available_models(ctx: Context, refresh: bool = False) -> list[dict]:
-    """Modellliste aus dem Cache; älter als 24 h (oder refresh) wird neu geholt, solange ein Schlüssel da ist."""
-    with ctx.session_factory() as s:
-        cache = setting(s, MODELS_CACHE) or {}
-    key = ctx.secrets.get(CLAUDE_SECRET)
-    if key and (refresh or time.time() - cache.get("at", 0) > MODELS_TTL):
-        try:
-            items = fetch_models(ctx, key)
-            cache = {"at": time.time(), "items": items}
-            with ctx.session_factory() as s:
-                put_setting(s, MODELS_CACHE, cache)
-                s.commit()
-        except ClaudeError:
-            pass   # alte Liste behalten
-    return cache.get("items") or []
-
-
-def resolve_model(ctx: Context) -> str:
-    """Das Modell für die Frühwarnung: das gewählte, sonst das neueste Haiku laut Anthropic."""
-    with ctx.session_factory() as s:
-        chosen = setting(s, MODEL_KEY)
-    return chosen or latest_haiku(available_models(ctx))
+MODEL_KEY = "claude.model"           # alte Modellwahl; nur noch für den Konfigurationsexport (configdoc), gewählt wird unter /api/ai
 
 
 SMTP_CONFIG_KEY = "smtp.config"

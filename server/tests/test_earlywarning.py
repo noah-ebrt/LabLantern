@@ -95,8 +95,8 @@ FACTS = {"products": [{"product": "GitLab", "affected": [{"introduced": "19.0", 
 class Claude:
     """Fake des anthropic-Clients, über ctx.claude_factory eingesetzt: zeichnet Aufrufe auf, antwortet per Werkzeug."""
 
-    def __init__(self, status=200, tool_input=None, research=None):
-        self.status, self.calls, self.keys = status, [], []
+    def __init__(self, status=200, tool_input=None, research=None, error=None):
+        self.status, self.calls, self.keys, self.error = status, [], [], error
         self.tool_input = tool_input or FACTS
         self.research_input = research or {"advisories": []}
         self.messages = SimpleNamespace(create=self.create)
@@ -109,6 +109,8 @@ class Claude:
 
     def create(self, **params):
         self.calls.append(params)
+        if self.error:
+            raise self.error
         if self.status != 200:
             raise sdk_error(self.status)
         last = params["tools"][-1]
@@ -122,9 +124,63 @@ class Claude:
         return SimpleNamespace(id="msg_1", model=params["model"], stop_reason="tool_use", content=content, usage=None)
 
 
-def use(ctx, claude):
+class OpenAI:
+    """Fake des openai-Clients, über ctx.openai_factory(base_url, key) eingesetzt: Chat Completions mit Werkzeugaufruf."""
+
+    def __init__(self, tool_input=None, error=None):
+        self.calls, self.urls, self.error, self.tool_input = [], [], error, tool_input or FACTS
+        self.api_key = None
+        self.chat = SimpleNamespace(completions=SimpleNamespace(create=self.create))
+        self.models = SimpleNamespace(list=lambda: [])
+
+    def __call__(self, base_url, key):
+        self.urls.append(base_url)
+        self.api_key = key
+        return self
+
+    def create(self, **params):
+        self.calls.append(params)
+        if self.error:
+            raise self.error
+        call = SimpleNamespace(function=SimpleNamespace(name=params["tools"][0]["function"]["name"],
+                                                        arguments=json.dumps(self.tool_input)))
+        msg = SimpleNamespace(content=None, tool_calls=[call], refusal=None)
+        return SimpleNamespace(id="chatcmpl-1", model=params["model"], usage=None,
+                               choices=[SimpleNamespace(message=msg, finish_reason="stop")])
+
+
+def use_openai(ctx, fake):
+    ctx.secrets.set("openai.api_key", "sk-" + "t" * 30)
+    ctx.openai_factory = fake
+    return fake
+
+
+def use_compat(ctx, fake):
+    """Eigener OpenAI-kompatibler Endpunkt `c1` (Ollama): Adresse als Geheimnis, Anzeigeeintrag in den Einstellungen."""
+    from app.models import put_setting
+
+    ctx.secrets.set("compat.c1.url", "http://ollama.lan:11434/v1")
+    with ctx.session_factory() as s:
+        put_setting(s, "ai.compat", [{"id": "c1", "name": "Ollama", "display_url": "http://ollama.lan:11434/v1"}])
+        s.commit()
+    ctx.openai_factory = fake
+    return fake
+
+
+def choose(ctx, **tasks):
+    """Die Wahl je Aufgabe setzen (`ai.tasks`), z. B. choose(ctx, classify="anthropic:claude-haiku-6")."""
+    from app.models import put_setting
+
+    with ctx.session_factory() as s:
+        put_setting(s, "ai.tasks", {t: tasks.get(t, "") for t in ("classify", "research", "verify")})
+        s.commit()
+
+
+def use(ctx, claude, **tasks):
     ctx.secrets.set("claude.api_key", "sk-ant-test-0123456789abcdefghij")
     ctx.claude_factory = claude
+    if tasks:
+        choose(ctx, **tasks)
     return claude
 
 
@@ -135,7 +191,7 @@ def gitlab_host(ctx):
     sid = make_system(ctx, "host-b")
     with ctx.session_factory() as s:
         put_setting(s, ew.FEEDS_KEY, ["https://example.org/feed"])
-        put_setting(s, ew.RESEARCH_KEY, {"enabled": False})
+        put_setting(s, ew.RESEARCH_KEY, {"enabled": False, "verify": False})
         s.get(System, sid).inventory_json = json.dumps({"os_id": "ubuntu", "os_version_id": "22.04", "containers": [
             {"name": "gitlab", "image": "gitlab/gitlab-ce:19.5.1-ce.0", "state": "running"}]})
         s.commit()
@@ -176,7 +232,7 @@ def test_wrong_api_key_gives_unclear_not_a_gap(ctx, gitlab_host):
     ew.run_pass(ctx, fetch=lambda url: ew.parse_feed(RSS))
     with ctx.session_factory() as s:
         w = s.scalar(select(EarlyWarning))
-        assert (w.status, w.detail) == ("unklar", "Claude could not read the advisory (Anthropic: key invalid (HTTP 401)); ask again")
+        assert (w.status, w.detail) == ("unklar", "The AI provider could not read the advisory (Anthropic: key invalid (HTTP 401)); ask again")
         assert s.scalar(select(Finding)) is None
 
 
@@ -271,17 +327,134 @@ def test_reason_does_not_repeat_the_version_in_the_tag():
     assert ew.classify(ai, [gl])[1] == "installed versions outside the affected ranges: gitlab/gitlab-ce:19.5.1-ce.0 on host-b"
 
 
-def test_the_pass_uses_the_resolved_model_and_records_last_use(ctx, gitlab_host, monkeypatch):
-    from app import integrations
+def test_the_pass_uses_the_chosen_model_and_records_last_use(ctx, gitlab_host):
     from app.models import setting
 
-    monkeypatch.setattr(ew, "resolve_model", lambda c: "claude-haiku-6")
-    claude = use(ctx, Claude())
+    claude = use(ctx, Claude(), classify="anthropic:claude-haiku-6")
     ew.run_pass(ctx, fetch=lambda url: ew.parse_feed(RSS))
     assert claude.calls[0]["model"] == "claude-haiku-6"
     with ctx.session_factory() as s:
-        last = setting(s, integrations.LAST_USED_KEY)
-    assert last["model"] == "claude-haiku-6" and last["ok"] is True
+        last = setting(s, "ai.last_used.anthropic")
+    assert (last["model"], last["task"], last["ok"]) == ("claude-haiku-6", "classify", True)
+
+
+# ---------- Mehrere Anbieter: jede Aufgabe auf ihrem eigenen ----------
+
+def usage_limit_error():
+    import anthropic
+    import httpx2
+
+    resp = httpx2.Response(400, request=httpx2.Request("POST", "https://api.anthropic.com/v1/messages"))
+    body = {"type": "error", "error": {"type": "invalid_request_error",
+                                       "message": "You have reached your specified API usage limits."}}
+    return anthropic.BadRequestError("x", response=resp, body=body)
+
+
+def only_research_and_verify(ctx, **cfg):
+    from app.models import put_setting
+
+    with ctx.session_factory() as s:
+        put_setting(s, ew.RESEARCH_KEY, {"enabled": False, "verify": False, **cfg})
+        s.commit()
+
+
+def test_each_task_uses_its_own_provider(ctx, gitlab_host):
+    only_research_and_verify(ctx, enabled=True)
+    claude = use(ctx, Claude(), research="anthropic:claude-sonnet-5-5")
+    openai = use_openai(ctx, OpenAI())
+    choose(ctx, classify="openai:gpt-5-mini", research="anthropic:claude-sonnet-5-5")
+    state = ew.run_pass(ctx, fetch=lambda url: ew.parse_feed(RSS), force_research=True)
+    assert state["ai_calls"] == 1 and state["research"]["ok"] is True
+    assert [c["model"] for c in openai.calls] == ["gpt-5-mini"]   # nur die Meldung wird bei OpenAI gelesen
+    assert openai.calls[0]["tools"][0]["function"]["name"] == "report_advisory"
+    assert len(claude.calls) == 2 and {c["model"] for c in claude.calls} == {"claude-sonnet-5-5"}   # nur die Recherche
+    assert claude.calls[-1]["tools"][-1]["name"] == "report_research"
+    from app.models import setting
+    with ctx.session_factory() as s:
+        assert setting(s, "ai.last_used.openai")["task"] == "classify"
+        assert setting(s, "ai.last_used.anthropic")["task"] == "research"
+        assert s.scalar(select(EarlyWarning)).status == "betroffen"
+
+
+def test_failed_provider_is_not_replaced_by_another(ctx, gitlab_host):
+    from app.models import setting
+
+    use(ctx, Claude(error=usage_limit_error()), classify="anthropic:claude-haiku-5-5")
+    openai = use_openai(ctx, OpenAI())
+    ew.run_pass(ctx, fetch=lambda url: ew.parse_feed(RSS))
+    with ctx.session_factory() as s:
+        w = s.scalar(select(EarlyWarning))
+        last = setting(s, "ai.last_used.anthropic")
+    assert w.status == "unklar" and w.detail == (
+        "The AI provider could not read the advisory "
+        "(Anthropic: You have reached your specified API usage limits. (HTTP 400)); ask again")
+    assert openai.calls == []   # kein stiller Wechsel zu OpenAI
+    assert last["ok"] is False and "usage limits" in last["error"]
+
+
+def test_unreachable_compat_endpoint_marks_items_unklar(ctx, gitlab_host):
+    import httpx2
+    import openai as sdk
+
+    down = sdk.APIConnectionError(request=httpx2.Request("POST", "http://ollama.lan:11434/v1/chat/completions"))
+    fake = use_compat(ctx, OpenAI(error=down))
+    choose(ctx, classify="c1:qwen3.8:27b")
+    state = ew.run_pass(ctx, fetch=lambda url: ew.parse_feed(RSS))
+    with ctx.session_factory() as s:
+        w = s.scalar(select(EarlyWarning))
+        assert s.scalar(select(Finding)) is None
+    assert state["ai_calls"] == 1 and fake.calls[0]["model"] == "qwen3.8:27b"
+    assert (w.status, w.detail) == ("unklar", "The AI provider could not read the advisory (Ollama: API unreachable); ask again")
+    assert "ollama.lan" not in w.detail and "ollama.lan" not in w.ai_json
+
+
+def test_verify_has_its_own_switch(ctx, gitlab_host):
+    only_research_and_verify(ctx, enabled=False, verify=True)
+    claude = use(ctx, Claude())
+    state = ew.run_pass(ctx, fetch=lambda url: ew.parse_feed(RSS))
+    assert state["verified"] == 1 and "research" not in state
+    names = [t.get("name") for c in claude.calls for t in c["tools"]]
+    assert "report_research" not in names and len(claude.calls) == 3   # lesen, dann die Prüfung in zwei Schritten
+
+
+def test_verify_without_a_web_provider_is_skipped_and_says_why(ctx, gitlab_host):
+    only_research_and_verify(ctx, enabled=False, verify=True)
+    use_compat(ctx, OpenAI())
+    choose(ctx, classify="c1:qwen3.8:27b")
+    state = ew.run_pass(ctx, fetch=lambda url: ew.parse_feed(RSS))
+    assert "verified" not in state and state["verify_error"] == "needs a provider with web search"
+
+
+def test_research_without_web_provider_records_reason(ctx, gitlab_host):
+    from app.models import setting
+
+    only_research_and_verify(ctx, enabled=True)
+    fake = use_compat(ctx, OpenAI())
+    choose(ctx, classify="c1:qwen3.8:27b")
+    state = ew.run_pass(ctx, fetch=lambda url: ew.parse_feed(RSS), force_research=True)
+    assert state["research"]["ok"] is False and state["research"]["error"] == "needs a provider with web search"
+    with ctx.session_factory() as s:
+        assert setting(s, ew.RESEARCH_STATE_KEY)["error"] == "needs a provider with web search"
+    assert len(fake.calls) == 1   # gelesen wurde die Meldung, recherchiert nichts
+
+
+def test_research_settings_api_has_two_switches_and_ignores_the_old_model(admin):
+    env, client, h = admin
+    r = client.put("/api/early-warnings/research", headers=h, json={"enabled": False, "verify": True, "model": "claude-x"})
+    assert r.status_code == 200
+    got = client.get("/api/early-warnings").json()["research"]
+    assert got == {"enabled": False, "verify": True, "state": {}, "interval_hours": ew.RESEARCH_HOURS}
+    assert client.put("/api/early-warnings/research", headers=h, json={"enabled": True}).status_code == 422   # verify fehlt
+
+
+def test_refresh_with_research_needs_a_research_model(admin):
+    env, client, h = admin
+    ctx = env.app.state.ctx
+    r = client.post("/api/early-warnings/refresh?research=true", headers=h)
+    assert r.status_code == 409 and r.json()["detail"] == "Web research needs a provider with web search (Settings → AI)"
+    use_compat(ctx, OpenAI())   # ein Anbieter ohne Websuche reicht nicht
+    assert client.post("/api/early-warnings/refresh?research=true", headers=h).status_code == 409
+    assert client.get("/api/early-warnings").json()["ai_configured"] is True   # eingerichtet heißt: Adresse gespeichert
 
 
 # ---------- Rework: Host-Pakete, Stufe, Schritte, Sofortmeldung, Web-Recherche ----------
@@ -312,7 +485,7 @@ def pi_host(ctx):
     sid = make_system(ctx, "raspberrypi")
     with ctx.session_factory() as s:
         put_setting(s, ew.FEEDS_KEY, ["https://example.org/thn"])
-        put_setting(s, ew.RESEARCH_KEY, {"enabled": False})
+        put_setting(s, ew.RESEARCH_KEY, {"enabled": False, "verify": False})
         s.get(System, sid).inventory_json = json.dumps({"os_id": "raspbian", "os_version_id": "12",
                                                         "kernel": "6.12.109+rpt-rpi-2712", "containers": []})
         s.commit()
@@ -482,7 +655,7 @@ def test_web_research_adds_new_items_once_and_skips_known_ones(ctx, pi_host):
          "summary": "x", **{**TAILWORM_FACTS, "products": [{"product": "Foo", "affected": [], "fixed_versions": []}]}},
     ]}
     with ctx.session_factory() as s:
-        put_setting(s, ew.RESEARCH_KEY, {"enabled": True, "model": ""})
+        put_setting(s, ew.RESEARCH_KEY, {"enabled": True, "verify": True})
         s.commit()
     claude = use(ctx, Claude(research=found, tool_input=TAILWORM_FACTS))
     state = ew.run_pass(ctx, fetch=lambda url: [])
@@ -510,9 +683,9 @@ def test_research_errors_are_recorded_not_raised(ctx, pi_host):
     from app.models import put_setting
 
     with ctx.session_factory() as s:
-        put_setting(s, ew.RESEARCH_KEY, {"enabled": True, "model": "claude-opus-5-5"})
+        put_setting(s, ew.RESEARCH_KEY, {"enabled": True, "verify": True})
         s.commit()
-    use(ctx, Claude(status=429))
+    use(ctx, Claude(status=429), research="anthropic:claude-opus-5-5")
     state = ew.run_pass(ctx, fetch=lambda url: [], force_research=True)
     assert state["research"] == {**state["research"], "ok": False, "model": "claude-opus-5-5",
                                  "error": "Anthropic: rate limit (HTTP 429)"}
@@ -545,7 +718,7 @@ def test_teasers_are_checked_against_the_vendor_before_alerting(ctx, gitlab_host
     from app.models import put_setting
 
     with ctx.session_factory() as s:
-        put_setting(s, ew.RESEARCH_KEY, {"enabled": True, "model": ""})
+        put_setting(s, ew.RESEARCH_KEY, {"enabled": True, "verify": True})
         put_setting(s, ew.RESEARCH_STATE_KEY, {"at": time.time()})   # Recherche nicht fällig, Prüfung schon
         s.commit()
     vendor = {**TEASER, "products": [{"product": "GitLab CE/EE", "affected": [
