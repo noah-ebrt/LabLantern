@@ -20,6 +20,7 @@ from .appliances import build_appliances_router
 from .configdoc import build_config_router
 from .integrity import build_integrity_router
 from .connectors import build_connectors_router
+from .cftunnel import build_cftunnel_router
 from .fritzbox import build_fritzbox_router
 from .products import build_versions_router
 from .earlywarning import build_earlywarning_router
@@ -122,7 +123,7 @@ def create_app(settings: Settings, clock: Callable[[], float] = time.time) -> Fa
         build_pairing_router(ctx, guards), build_runs_router(ctx, guards), build_schedule_router(ctx, guards),
         build_releases_router(ctx, guards), build_watchdog_router(ctx, guards), build_connectors_router(ctx, guards),
         build_appliances_router(ctx, guards), build_integrity_router(ctx, guards), build_versions_router(ctx, guards),
-        build_earlywarning_router(ctx, guards), build_fritzbox_router(ctx, guards),
+        build_earlywarning_router(ctx, guards), build_fritzbox_router(ctx, guards), build_cftunnel_router(ctx, guards),
     ]
     # Konfiguration als JSON: schreibt über die Endpunkte der Router oben, mit deren Prüfung und Folgen
     api_routers.append(build_config_router(ctx, guards, list(api_routers)))

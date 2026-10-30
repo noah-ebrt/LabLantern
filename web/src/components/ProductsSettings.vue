@@ -14,6 +14,8 @@ import SettingsSection from './SettingsSection.vue'
 const versions = ref(null)
 const npm = ref(null)
 const fritz = ref(null)
+const cf = ref(null)
+const cform = reactive({ account_id: '', token: '' })
 const fform = reactive({ url: '', user: '', password: '' })
 const systems = ref([])
 const form = reactive({ url: '', email: '', password: '', system_id: null })
@@ -21,8 +23,10 @@ const message = ref(null)
 const busy = ref(false)
 
 async function load() {
-  const [v, n, s, f] = await Promise.all([api.get('/api/versions'), api.get('/api/settings/npm'), api.get('/api/systems'),
-    api.get('/api/settings/fritzbox')])
+  const [v, n, s, f, c] = await Promise.all([api.get('/api/versions'), api.get('/api/settings/npm'), api.get('/api/systems'),
+    api.get('/api/settings/fritzbox'), api.get('/api/settings/cftunnel')])
+  cf.value = c
+  if (c.config && !cform.account_id) cform.account_id = c.config.account_id
   versions.value = v
   npm.value = n
   fritz.value = f
@@ -133,6 +137,46 @@ async function removeFritz() {
   if (!confirm('Remove the FRITZ!Box connection? Containers marked by hand stay marked.')) return
   await api.del('/api/settings/fritzbox')
   Object.assign(fform, { url: '', user: '', password: '' })
+  await load()
+}
+
+const cfText = (r) => `${r.tunnels} tunnels, ${Object.values(r.exposed).flat().length} containers or hosts internet-exposed`
+
+async function saveCf() {
+  busy.value = true
+  message.value = null
+  try {
+    await api.put('/api/settings/cftunnel', { account_id: cform.account_id, token: cform.token || null })
+    cform.token = ''
+    const r = await api.post('/api/settings/cftunnel/test')
+    message.value = r.ok ? { kind: 'ok', text: `Connected: ${cfText(r)}.` }
+      : { kind: 'error', text: `Saved, but Cloudflare could not be read: ${r.error}` }
+    await load()
+  } catch (e) {
+    message.value = { kind: 'error', text: e.message }
+  } finally {
+    busy.value = false
+  }
+}
+
+async function testCf() {
+  busy.value = true
+  message.value = null
+  try {
+    const r = await api.post('/api/settings/cftunnel/test')
+    message.value = r.ok ? { kind: 'ok', text: `Connected: ${cfText(r)}.` } : { kind: 'error', text: `Cloudflare could not be read: ${r.error}` }
+    await load()
+  } catch (e) {
+    message.value = { kind: 'error', text: e.message }
+  } finally {
+    busy.value = false
+  }
+}
+
+async function removeCf() {
+  if (!confirm('Remove the Cloudflare Tunnel connection? Containers marked by hand stay marked.')) return
+  await api.del('/api/settings/cftunnel')
+  Object.assign(cform, { account_id: '', token: '' })
   await load()
 }
 
@@ -260,6 +304,36 @@ useLive(['settings', 'findings'], load, 3000)
         <p class="subtext">Create a FRITZ!Box user with the right “FRITZ!Box settings” and enable “Allow access for applications” (Home network › Network › Network settings). vulnwatch only reads the port forward list and never changes it. IPv6 releases are not visible over TR-064; mark those by hand.</p>
         <div class="actions">
           <button class="primary" :disabled="busy || !fform.url || !fform.user"><Icon name="check" :size="15" />{{ busy ? 'Saving & testing…' : 'Save and test' }}</button>
+        </div>
+      </form>
+    </SettingsSection>
+
+    <SettingsSection title="Cloudflare Tunnel">
+      <SettingsList :empty="!cf?.config" empty-text="Not connected. With a read-only API token vulnwatch reads the public hostnames of your Cloudflare Tunnels and marks the containers and hosts behind them as internet-exposed.">
+        <SettingsEntry v-if="cf?.config" icon="link" :title="`Account ${cf.config.account_id}`" mono
+                       :meta="[cf.state?.configured ? (cf.state.ok ? `Last read ${timeAgo(new Date(cf.state.at * 1000).toISOString())}: ${cfText(cf.state)}` : `Last read failed: ${cf.state.error}`) : 'Not read yet']">
+          <template #badge>
+            <span v-if="cf.state?.configured" :class="['badge', cf.state.ok ? 'ok' : 'danger']">{{ cf.state.ok ? 'Connected' : 'Failing' }}</span>
+          </template>
+          <template #actions>
+            <button type="button" class="btn-sm" :disabled="busy" @click="testCf"><Icon name="refresh" :size="14" />Test</button>
+            <button type="button" class="btn-sm btn-delete" :disabled="busy" @click="removeCf"><Icon name="trash" :size="14" />Remove</button>
+          </template>
+          <details v-if="cf.state?.unmatched?.length" class="more" data-test="cf-unmatched">
+            <summary>{{ cf.state.unmatched.length }} tunnel routes without a clear container – mark them on the host</summary>
+            <span v-for="u in cf.state.unmatched" :key="u.what + (u.service || '')" class="more-line"><span class="mono">{{ u.what }}{{ u.service ? ` → ${u.service}` : '' }}</span> · {{ u.why }}</span>
+          </details>
+        </SettingsEntry>
+      </SettingsList>
+
+      <form class="settings-form" @submit.prevent="saveCf">
+        <div class="grid">
+          <label><span class="field-label">Account ID</span><input v-model="cform.account_id" name="cf_account" placeholder="32 hex characters" autocomplete="off" required /></label>
+          <SecretField v-model="cform.token" name="cf_token" label="API token" :set="!!cf?.token?.set" :updated-at="cf?.token?.updated_at" />
+        </div>
+        <p class="subtext">Create an API token with only “Account · Cloudflare Tunnel · Read” for this account. vulnwatch reads the ingress rules of remotely managed tunnels and never changes them. Tunnels managed with a local config.yml are listed as not readable; mark their services by hand.</p>
+        <div class="actions">
+          <button class="primary" :disabled="busy || !cform.account_id"><Icon name="check" :size="15" />{{ busy ? 'Saving & testing…' : 'Save and test' }}</button>
         </div>
       </form>
     </SettingsSection>

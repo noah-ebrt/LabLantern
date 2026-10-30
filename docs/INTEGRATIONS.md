@@ -58,6 +58,20 @@ vulnwatch then reads every 6 hours:
 It never reads private keys, access lists or DNS credentials. The user stays read-only, so vulnwatch cannot renew or
 change certificates.
 
+## Cloudflare Tunnel (optional)
+
+Create an API token under My Profile › API Tokens with only **Account · Cloudflare Tunnel · Read** for your account,
+and enter it with the account ID in Settings, below the FRITZ!Box card. vulnwatch then reads, every 6 hours, the public hostnames of
+every remotely managed tunnel and maps each origin to a container or host:
+
+- `http://<container>:<port>`: the container with that name (the one next to cloudflared if several hosts have it),
+- `http://<IP>:<port>` or `http://<host name>:<port>`: the container or host service on that port,
+- `http://localhost:<port>`: the host running the `cloudflare/cloudflared` container.
+
+A tunnel route is public by definition, so there is no DNS check. Tunnels managed with a local `config.yml` have no
+readable rules; they are listed as not matched, as are origins vulnwatch cannot map. Mark those by hand in the host
+dialog. If the API fails, the last mapping stays and Cloudflare Tunnel shows as an error in the coverage matrix.
+
 ## Devices without agent: TrueNAS and Home Assistant
 
 Added under **Systems → Add host**, not in the settings: each device becomes a host of its own, with findings, a
@@ -219,6 +233,7 @@ vulnwatch has no telemetry and no update check of its own. These are the outboun
 | Grype and OSV-Scanner databases (Anchore, osv.dev) | every run | nothing about you: the worker downloads the databases and scans offline |
 | Container registries of your images (Docker Hub, ghcr.io, …) | every run | image names and tags, to compare digests |
 | endoflife.date | daily | product names (e.g. `debian`, `postgres`) |
+| api.cloudflare.com (with Cloudflare Tunnel connected) | every 6 hours | your API token and account ID; it reads the tunnel list and ingress rules |
 | cloudflare-dns.com (with NPM connected) | every 6 hours | the domain names of your proxy routes, except `.lan`, `.home.arpa`, `.local`, `.internal` |
 | Security feeds (AI early warning, optional) | every two hours | nothing: plain feed downloads |
 | Claude API (AI early warning, optional) | daily and per new feed entry | product names and versions, never secrets, addresses or host names |

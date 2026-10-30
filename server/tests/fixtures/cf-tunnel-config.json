@@ -1,0 +1,8 @@
+{"success": true, "errors": [], "messages": [], "result": {"tunnel_id": "aaaa-1111", "version": 4, "source": "cloudflare",
+  "config": {"ingress": [
+    {"hostname": "vw.example.org", "service": "http://vaultwarden:80", "originRequest": {}},
+    {"hostname": "nas.example.org", "service": "https://10.0.0.6:8443", "originRequest": {"noTLSVerify": true}},
+    {"hostname": "ha.example.org", "service": "http://localhost:8123", "originRequest": {}},
+    {"hostname": "x.example.org", "service": "http://elsewhere.lan:80", "originRequest": {}},
+    {"service": "http_status:404"}
+  ]}}}

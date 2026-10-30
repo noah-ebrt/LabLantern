@@ -26,11 +26,13 @@ class ExposureSource:
 
 
 def sources() -> list[ExposureSource]:
+    from .cftunnel import CF_STATE, refresh_cftunnel
     from .connectors import NPM_STATE, refresh_npm
     from .fritzbox import FRITZ_STATE, refresh_fritz
 
     return [ExposureSource("npm", "NPM", "NPM", NPM_STATE, refresh_npm),
-            ExposureSource("fritzbox", "FRITZ!Box", "router", FRITZ_STATE, refresh_fritz)]
+            ExposureSource("fritzbox", "FRITZ!Box", "router", FRITZ_STATE, refresh_fritz),
+            ExposureSource("cftunnel", "Cloudflare Tunnel", "Cloudflare", CF_STATE, refresh_cftunnel)]
 
 
 def refresh_all(ctx: Context) -> None:

@@ -1,0 +1,4 @@
+{"success": true, "errors": [], "messages": [], "result": [
+  {"id": "aaaa-1111", "name": "home", "status": "healthy", "remote_config": true, "deleted_at": null},
+  {"id": "bbbb-2222", "name": "legacy", "status": "healthy", "remote_config": false, "deleted_at": null}
+]}

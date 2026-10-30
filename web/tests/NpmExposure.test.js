@@ -42,4 +42,25 @@ describe('NPM exposure from public DNS', () => {
       body: { hosts: { 'old.example.org': 'public', 'nas.example.org': 'public' }, entrypoints: {} } })
     expect(calls.some((c) => c.url === '/api/settings/npm/test' && c.method === 'POST')).toBe(true)
   })
+
+  it('saves the Cloudflare Tunnel connection and lists unmatched routes', async () => {
+    const cf = { config: { account_id: 'a'.repeat(32) }, token: { set: true },
+      state: { configured: true, ok: true, at: Date.now() / 1000, tunnels: 2, exposed: { 1: ['vw'] },
+        unmatched: [{ what: 'legacy', why: 'ingress not readable (locally managed config.yml)' }] } }
+    const base = fetch.getMockImplementation()
+    vi.stubGlobal('fetch', vi.fn(async (url, init = {}) => {
+      if (url === '/api/settings/cftunnel') {
+        calls.push({ url, method: init.method || 'GET', body: init.body ? JSON.parse(init.body) : null })
+        return json(init.method === 'PUT' ? { ok: true } : cf)
+      }
+      if (url === '/api/settings/cftunnel/test') return json(cf.state)
+      return base(url, init)
+    }))
+    const w = mount(ProductsSettings, { global: { stubs: { SecretField: true } } })
+    await flushPromises()
+    expect(w.get('[data-test=cf-unmatched]').text()).toContain('locally managed config.yml')
+    await w.get('form.settings-form input[name=cf_account]').element.form.dispatchEvent(new Event('submit'))
+    await flushPromises()
+    expect(calls.find((c) => c.url === '/api/settings/cftunnel' && c.method === 'PUT').body).toEqual({ account_id: 'a'.repeat(32), token: null })
+  })
 })
