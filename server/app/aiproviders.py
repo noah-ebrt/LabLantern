@@ -183,6 +183,34 @@ def record_use(ctx: Context, provider: Provider, task: str, model: str, ok: bool
         s.commit()
 
 
+# ---------- Umstellung der alten Einstellungen ----------
+
+def migrate_ai_settings(s: Session) -> bool:
+    """Einmalig beim Start: aus den Anthropic-only-Einstellungen die Wahl je Aufgabe machen. Läuft nur, solange
+    `ai.tasks` fehlt (danach gilt die neue Wahl) und liefert True, wenn umgestellt wurde. Ohne alte Wahl
+    (auch auf einer frischen Installation) bleibt jede Aufgabe auf „automatisch“. Die alten Schlüssel `claude.api_key`
+    und `claude.model` bleiben unverändert stehen. Der Aufrufer committet."""
+    if s.get(Setting, TASKS_KEY) is not None:
+        return False
+
+    def ref(model) -> str:
+        return f"anthropic:{model}" if model else ""
+
+    old = setting(s, "earlywarning.research") or {}
+    research = ref(old.get("model"))
+    put_setting(s, TASKS_KEY, {"classify": ref(setting(s, "claude.model")), "research": research, "verify": research})
+    enabled = bool(old.get("enabled", True))   # der alte eine Schalter galt für Recherche und Prüfung zugleich
+    put_setting(s, "earlywarning.research", {"enabled": enabled, "verify": enabled})
+    models = setting(s, "ai.models")           # die alte, nur für Anthropic geführte Modellliste und letzte Nutzung
+    if models is not None and s.get(Setting, MODELS_PREFIX + "anthropic") is None:
+        put_setting(s, MODELS_PREFIX + "anthropic", models)
+    last = setting(s, "ai.last_used")
+    if last is not None and s.get(Setting, LAST_USED_PREFIX + "anthropic") is None:
+        put_setting(s, LAST_USED_PREFIX + "anthropic", {**last, "task": "classify"})
+    _drop_settings(s, "ai.models", "ai.last_used")
+    return True
+
+
 # ---------- Eingaben ----------
 
 class ProviderIn(BaseModel):

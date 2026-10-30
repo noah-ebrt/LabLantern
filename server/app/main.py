@@ -31,7 +31,7 @@ from .auth import RateLimiter, new_token, sha256_hex
 from .config import Settings
 from .context import Context
 from .guards import make_guards
-from .aiproviders import build_ai_router
+from .aiproviders import build_ai_router, migrate_ai_settings
 from .integrations import build_integrations_router
 from .internal import build_internal_router
 from .overview import build_overview_router
@@ -70,6 +70,9 @@ def create_app(settings: Settings, clock: Callable[[], float] = time.time) -> Fa
     engine = make_engine(settings.data_dir / "vulnwatch.db")
     init_db(engine)
     session_factory = sessionmaker(engine, expire_on_commit=False)
+    with session_factory() as s:
+        migrate_ai_settings(s)   # alte Anthropic-Einstellungen auf die Wahl je Aufgabe umstellen (einmalig)
+        s.commit()
     settings.master_key_path.parent.mkdir(parents=True, exist_ok=True)
     migrate_master_key(settings.data_dir / "master.key", settings.master_key_path)
     master_key = load_or_create_master_key(settings.master_key_path)
