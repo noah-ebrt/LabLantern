@@ -10,7 +10,7 @@
 ## 2. Configure and start
 
 ```bash
-git clone https://github.com/<owner>/vulnwatch.git
+git clone https://github.com/noah-ebrt/vulwatch.git vulnwatch
 cd vulnwatch/deploy
 cp .env.example .env
 ```

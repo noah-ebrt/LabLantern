@@ -1,18 +1,25 @@
 # vulnwatch
 
+[![CI](https://github.com/noah-ebrt/vulwatch/actions/workflows/ci.yml/badge.svg)](https://github.com/noah-ebrt/vulwatch/actions/workflows/ci.yml)
+
 A self-hosted vulnerability monitor for a homelab or small network. One master collects inventories from small
 agents on your Linux hosts, scans host packages and every running container image, rates the findings with fixed
 rules and tells you every day what is critical, what is merely outdated and which check could not run. The web UI is
 reachable only in your LAN.
 
-- **Agents, no SSH keys:** each host runs a small signed agent (`.deb` / `.rpm`, amd64 and arm64). It opens no port,
-  sends its inventory to the master and accepts only a fixed list of commands. Reboots and agent updates need a
-  passkey touch that the agent verifies itself.
+- **Agents, no SSH keys:** each host runs a small agent (`.deb` / `.rpm`, amd64 and arm64). It opens no port, sends
+  its inventory to the master and accepts only a fixed list of commands. Reboots and agent updates need a passkey
+  touch that the agent verifies itself.
+- **Your own agent builds:** the master builds the agent from `agent/` in this repository and signs it with a key
+  only your install has. Change the agent or `git pull`, rebuild, and one passkey touch updates all hosts.
+- **Devices without an agent:** TrueNAS and Home Assistant are read through their API (version, pending updates,
+  apps, alerts), read-only.
 - **Two scanners:** Grype (with CISA KEV and EPSS) and OSV-Scanner, offline, over host packages and container images.
 - **Versions and end of life:** registry digests for every running image (outdated tag, newer version) and release
   lines from endoflife.date.
-- **Exposure:** reads your Nginx Proxy Manager (read-only) to learn which containers are reachable from the internet
-  and rates their findings higher. It also checks the expiry of their TLS certificates.
+- **Exposure:** reads your Nginx Proxy Manager and FRITZ!Box port forwardings (read-only) to learn which containers
+  are reachable from the internet and rates their findings higher. It also checks the expiry of their TLS
+  certificates.
 - **No silent gaps:** a coverage matrix shows every system × check as ok, finding, queued or error. A canary scan
   in every run proves the scanner still detects a known vulnerability.
 - **Reports and alerts:** daily report and immediate alerts through Apprise (mail, ntfy, Telegram, Signal, …),
@@ -49,7 +56,7 @@ The worker processes untrusted input (SBOMs) and has no access to the database o
 ## Quick start
 
 ```bash
-git clone https://github.com/<owner>/vulnwatch.git && cd vulnwatch/deploy
+git clone https://github.com/noah-ebrt/vulwatch.git vulnwatch && cd vulnwatch/deploy
 cp .env.example .env              # set VULNWATCH_BIND_IP and VULNWATCH_HOSTNAMES
 docker compose up -d --build      # first build takes a few minutes (it also builds and signs the agent)
 docker compose logs server | grep "Setup token"
@@ -62,12 +69,16 @@ the log, then creates your admin account with password and authenticator app.
 Then, in this order:
 
 1. **Settings → Passkeys:** add a passkey. It confirms reboots and agent updates and signs the key list your agents
-   trust, so add it before the first host.
+   trust, so add it before the first host. Browsers allow passkeys only on the DNS name with a trusted certificate:
+   trust the CA first.
 2. **Systems → Add Linux agent:** copy the setup command, run it on the host, compare the pairing code, approve.
 3. **Settings → Notification channels:** add a mail or push channel and send a test.
 4. Optional: offsite watchdog, Nginx Proxy Manager, Claude API key, Prometheus metrics.
 
 The first full run starts at the scheduled time (default 03:00) or with **Scan now** on the overview.
+
+**Updating vulnwatch:** `git pull && docker compose up -d --build` in `deploy/`. When the agent changed, **Systems**
+offers the new version within a minute; **Update all** installs it on every host with one passkey touch.
 
 ## Documentation
 
