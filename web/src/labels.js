@@ -1,6 +1,6 @@
 // Internal values come from the API in German; this maps them to English labels for display.
 const LABELS = {
-  ok: 'OK', fund: 'FINDING', fehler: 'ERROR', offen: 'QUEUED', na: 'N/A',
+  ok: 'OK', fund: 'FINDING', fehler: 'ERROR', offen: 'QUEUED', na: 'N/A', excluded: 'EXCLUDED',
   kritisch: 'CRITICAL', hoch: 'HIGH', mittel: 'MEDIUM', info: 'INFO',
 }
 export const label = (v) => LABELS[v] ?? String(v ?? '').toUpperCase()

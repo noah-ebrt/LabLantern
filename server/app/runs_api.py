@@ -9,9 +9,9 @@ from sqlalchemy.orm import aliased
 
 from .context import Context
 from .guards import Guards
-from .models import Finding, ScanRun, Snooze, System, SystemScanResult
+from .models import CoverageExclusion, Finding, ScanRun, Snooze, System, SystemScanResult
 from .scanrun import ScanAlreadyActive, enqueue_scan_run, request_scan_run
-from .snooze import apply_snoozes, create_snooze
+from .snooze import apply_snoozes, create_exclusion, create_snooze
 
 
 class TriggerIn(BaseModel):
@@ -32,6 +32,12 @@ class SnoozeKeyIn(SnoozeIn):
     component: str = Field(min_length=1, max_length=300)
     system_id: int | None = None
     target: str = Field(default="host", max_length=300)
+
+
+class ExclusionIn(BaseModel):
+    subject: str = Field(min_length=3, max_length=200)
+    until: date
+    reason: str = Field(min_length=3, max_length=500)
 
 
 def _until(d: date) -> datetime:
@@ -188,6 +194,33 @@ def build_runs_router(ctx: Context, guards: Guards) -> APIRouter:
             ended = s.scalars(select(Snooze).where(Snooze.ended_at.is_not(None))
                               .order_by(Snooze.ended_at.desc()).limit(20))
             return {"active": [row(x) for x in active], "ended": [row(x) for x in ended]}
+
+    @router.post("/coverage/exclusions")
+    def exclude_from_coverage(body: ExclusionIn, found=Depends(guards.require_admin)):
+        now = datetime.now(timezone.utc)
+        with ctx.session_factory() as s:
+            kind, _, ident = body.subject.partition(":")
+            if kind != "system" or not ident.isdigit() or not s.get(System, int(ident)):
+                raise HTTPException(422, "Unknown subject: use system:<id> of an existing system")
+            try:
+                ex = create_exclusion(s, body.subject, _until(body.until), body.reason, found[0].username, now)
+            except ValueError as e:
+                raise HTTPException(422, str(e)) from None
+            except LookupError as e:
+                raise HTTPException(409, str(e)) from None
+            s.commit()
+            return {"ok": True, "id": ex.id}
+
+    @router.delete("/coverage/exclusions/{exclusion_id}")
+    def include_in_coverage(exclusion_id: int, found=Depends(guards.require_admin)):
+        with ctx.session_factory() as s:
+            ex = s.get(CoverageExclusion, exclusion_id)
+            if not ex or ex.ended_at is not None:
+                raise HTTPException(404, "Exclusion not found")
+            ex.ended_at, ex.end_reason = datetime.now(timezone.utc), f"removed by {found[0].username}"
+            ctx.audit(s, found[0].username, "exclusion.removed", f"{ex.subject}: {ex.reason}")
+            s.commit()
+        return {"ok": True}
 
     @router.delete("/snoozes/{snooze_id}")
     def remove_snooze(snooze_id: int, found=Depends(guards.require_admin)):

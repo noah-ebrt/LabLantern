@@ -210,6 +210,20 @@ class Snooze(Base):
     end_reason: Mapped[str] = mapped_column(String, default="", server_default="")
 
 
+class CoverageExclusion(Base):
+    """Ausnahme von der Abdeckung mit Grund (z. B. gestoppte Test-VM); gleiche Regeln wie ein Snooze."""
+    __tablename__ = "coverage_exclusions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    subject: Mapped[str] = mapped_column(String)   # system:<id>, später pve-guest:<node>/<vmid>
+    reason: Mapped[str] = mapped_column(String)
+    until: Mapped[datetime] = mapped_column(UTCDateTime())
+    created_by: Mapped[str] = mapped_column(String, default="")
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
+    ended_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True, default=None)
+    end_reason: Mapped[str] = mapped_column(String, default="", server_default="")
+
+
 class SystemScanResult(Base):
     """Ergebnis der Paketprüfung je System und Lauf. Ohne Eintrag oder mit `fehler` gilt die Prüfung nicht als ok."""
 

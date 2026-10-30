@@ -15,6 +15,7 @@ const STATUS_HELP = {
   fehler: 'Could not be checked – see the reason.',
   offen: 'New data or a new host – checked in the next scan run.',
   na: 'The device API does not provide this check.',
+  excluded: 'Excluded from coverage on purpose, see the reason above.',
 }
 
 // Ein mitgelieferter Befehl (z. B. Container neu erstellen) gehört in ein Kopierfeld, nicht in den Fließtext
@@ -46,6 +47,40 @@ async function load() {
 }
 onMounted(load)
 useLive(['systems'], load)
+
+// Ausnahme von der Abdeckung (z. B. gestoppte Test-VM): mit Grund und Datum, höchstens 180 Tage
+const isoDay = (days) => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10)
+const excluding = ref(false)
+const exclude = ref({ until: '', reason: '' })
+const busy = ref(false)
+function openExclude() {
+  exclude.value = { until: isoDay(30), reason: '' }
+  excluding.value = true
+}
+async function submitExclude() {
+  busy.value = true
+  error.value = ''
+  try {
+    await api.post('/api/coverage/exclusions', { subject: `system:${props.systemId}`, ...exclude.value })
+    excluding.value = false
+    await load()
+  } catch (e) {
+    error.value = e.message
+  } finally {
+    busy.value = false
+  }
+}
+async function includeAgain() {
+  busy.value = true
+  try {
+    await api.del(`/api/coverage/exclusions/${row.value.excluded.id}`)
+    await load()
+  } catch (e) {
+    error.value = e.message
+  } finally {
+    busy.value = false
+  }
+}
 </script>
 
 <template>
@@ -53,6 +88,26 @@ useLive(['systems'], load)
     <h3>Coverage</h3>
     <p v-if="error" class="text-danger">{{ error }}</p>
     <template v-else-if="row?.checks">
+      <p v-if="row.excluded" class="notice" data-test="excluded">
+        Excluded from coverage until {{ row.excluded.until.slice(0, 10) }}: {{ row.excluded.reason }}
+        <button type="button" class="btn-sm" data-test="include" :disabled="busy" @click="includeAgain">Include again</button>
+      </p>
+      <template v-else>
+        <button v-if="!excluding" type="button" class="btn-sm" data-test="exclude" @click="openExclude">Exclude from coverage…</button>
+        <form v-else class="exclude" @submit.prevent="submitExclude">
+          <label>Until (max. 180 days)
+            <input v-model="exclude.until" type="date" name="exclude_until" required :min="isoDay(1)" :max="isoDay(180)" />
+          </label>
+          <label>Reason
+            <input v-model="exclude.reason" name="exclude_reason" required minlength="3" maxlength="500" placeholder="e.g. stopped test VM" />
+          </label>
+          <span class="subtext">The host no longer counts against coverage and is shown as excluded with this reason. It counts again on that date.</span>
+          <div class="actions">
+            <button type="button" class="secondary btn-sm" @click="excluding = false">Cancel</button>
+            <button type="submit" class="primary btn-sm" :disabled="busy">Exclude</button>
+          </div>
+        </form>
+      </template>
       <p class="subtext">
         {{ row.status === 'connector' ? 'Last read' : 'Last agent report' }} {{ ago(row.age_hours) }}
         <template v-if="row.status !== 'connector'"> ·
@@ -110,6 +165,8 @@ useLive(['systems'], load)
 </template>
 
 <style scoped>
+.exclude { display: grid; gap: 0.5rem; max-width: 26rem; margin: 0.4rem 0 0.8rem; }
+.exclude .actions { display: flex; gap: 0.5rem; }
 h3 { margin-top: 1.2rem; }
 .label { color: var(--muted); margin-right: 0.4rem; }
 .detail-table th { text-transform: none; letter-spacing: 0; font-size: 0.85rem; color: var(--text); white-space: nowrap; vertical-align: top; }

@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 
 from .freshness import DOCKERHUB, parse_ref
-from .models import AuditLog, Finding, Snooze, System
+from .models import AuditLog, CoverageExclusion, Finding, Snooze, System
 from .report import EN
 
 MAX_SNOOZE_DAYS = 180
@@ -79,6 +79,10 @@ def apply_snoozes(s, now: datetime, system_id: int | None = None) -> list[dict]:
     """Beendet fällige Snoozes und setzt jeden offenen oder zurückgestellten Fund auf den passenden Status.
     Mit `system_id` nur die Funde dieses Systems (Connectoren). Gibt die beendeten Snoozes zurück."""
     s.flush()
+    for ex in s.scalars(select(CoverageExclusion).where(CoverageExclusion.ended_at.is_(None),
+                                                         CoverageExclusion.until <= now)):
+        ex.ended_at, ex.end_reason = now, "expired"
+        _audit(s, now, "system", "exclusion.ended", f"{ex.subject}: expired ({ex.reason})")
     active = list(s.scalars(select(Snooze).where(Snooze.ended_at.is_(None))))
     by_key: dict[tuple[str, str], list[Snooze]] = {}
     for sn in active:
@@ -141,6 +145,24 @@ def ended_since(s, since: datetime | None, now: datetime) -> list[dict]:
     start = since or now - timedelta(days=1)
     return [_row(sn, names) | {"end_reason": sn.end_reason}
             for sn in s.scalars(select(Snooze).where(Snooze.ended_at > start).order_by(Snooze.ended_at))]
+
+
+def create_exclusion(s, subject: str, until: datetime, reason: str, actor: str, now: datetime) -> CoverageExclusion:
+    if not now < until <= now + timedelta(days=MAX_SNOOZE_DAYS):
+        raise ValueError(f"until must be in the future and at most {MAX_SNOOZE_DAYS} days away")
+    if subject in active_exclusions(s, now):
+        raise LookupError(f"{subject} is already excluded")
+    ex = CoverageExclusion(subject=subject, reason=reason, until=until, created_by=actor, created_at=now)
+    s.add(ex)
+    _audit(s, now, actor, "exclusion.created", f"{subject} until {until.date().isoformat()}: {reason}")
+    s.flush()
+    return ex
+
+
+def active_exclusions(s, now: datetime) -> dict[str, CoverageExclusion]:
+    """Nur lesen: abgelaufene zählen nicht mehr; beendet (mit Audit) werden sie in apply_snoozes."""
+    return {ex.subject: ex for ex in s.scalars(select(CoverageExclusion).where(
+        CoverageExclusion.ended_at.is_(None), CoverageExclusion.until > now))}
 
 
 def transfer_accepted_findings(s) -> int:

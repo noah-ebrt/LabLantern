@@ -235,3 +235,77 @@ def test_configdoc_roundtrip_snoozes(admin):
     assert r["ok"], r
     active = client.get("/api/snoozes").json()["active"]
     assert [(x["cve_id"], x["scope"]) for x in active] == [("CVE-2026-7777", "everywhere")]
+
+
+# ---------- Ausnahmen von der Abdeckung (Task 2.3) ----------
+
+def _exclude(client, h, sid, days=30, reason="stopped test VM"):
+    until = (datetime.now(timezone.utc) + timedelta(days=days)).date().isoformat()
+    return client.post("/api/coverage/exclusions", headers=h,
+                       json={"subject": f"system:{sid}", "until": until, "reason": reason})
+
+
+def test_excluded_row_counted_separately(admin):
+    env, client, h = admin
+    ctx = env.app.state.ctx
+    ctx.notifier = Notes()
+    a = make_system(ctx, "host-a")
+    b = make_system(ctx, "test-vm", sbom=False)   # ohne SBOM: Fehler in der Matrix
+    run_once(ctx, [(a, [], None), (b, [], "no SBOM")])
+    before = client.get("/api/overview").json()["coverage_percent"]
+    assert _exclude(client, h, b).status_code == 200
+    ov = client.get("/api/overview").json()
+    row = next(r for r in ov["coverage"] if r["system_name"] == "test-vm")
+    assert row["excluded"]["reason"] == "stopped test VM"
+    assert {c["status"] for c in row["checks"].values()} == {"excluded"}
+    assert ov["coverage_percent"] > before and ov["excluded_count"] == 1
+    assert not any("test-vm" in st.get("detail", "") for st in ov["next_steps"])
+    with ctx.session_factory() as s:
+        assert s.scalar(select(AuditLog).where(AuditLog.action == "exclusion.created")) is not None
+
+
+def test_exclusion_limits_and_removal(admin):
+    env, client, h = admin
+    ctx = env.app.state.ctx
+    sid = make_system(ctx)
+    assert _exclude(client, h, sid, days=181).status_code == 422
+    assert _exclude(client, h, sid, reason="x").status_code == 422
+    assert client.post("/api/coverage/exclusions", headers=h,
+                       json={"subject": "system:9999", "until": "2026-12-01", "reason": "gone"}).status_code == 422
+    r = _exclude(client, h, sid)
+    assert r.status_code == 200
+    assert _exclude(client, h, sid).status_code == 409   # schon ausgenommen
+    assert client.delete(f"/api/coverage/exclusions/{r.json()['id']}", headers=h).status_code == 200
+    row = client.get("/api/overview").json()["coverage"][0]
+    assert row.get("excluded") is None
+
+
+def test_exclusion_expires(session_factory):
+    from app.models import CoverageExclusion
+    from app.snooze import active_exclusions, create_exclusion
+    with session_factory() as s:
+        s.add(System(id=1, name="host-a"))
+        s.commit()
+        create_exclusion(s, "system:1", NOW + timedelta(days=2), "rebuild", "noah", NOW)
+        assert set(active_exclusions(s, NOW)) == {"system:1"}
+        assert active_exclusions(s, NOW + timedelta(days=3)) == {}
+        apply_snoozes(s, NOW + timedelta(days=3))   # beendet auch abgelaufene Ausnahmen (mit Audit)
+        ex = s.scalar(select(CoverageExclusion))
+        assert ex.end_reason == "expired" and ex.ended_at is not None
+
+
+def test_configdoc_roundtrip_exclusions(admin):
+    env, client, h = admin
+    ctx = env.app.state.ctx
+    make_system(ctx, "host-a")
+    sid = make_system(ctx, "test-vm")
+    assert _exclude(client, h, sid).status_code == 200
+    doc = client.get("/api/settings/config").json()
+    [ex] = doc["coverage_exclusions"]
+    assert ex["system"] == "test-vm" and ex["reason"] == "stopped test VM"
+    until = (datetime.now(timezone.utc) + timedelta(days=9)).date().isoformat()
+    doc["coverage_exclusions"] = [{"system": "host-a", "until": until, "reason": "being rebuilt"}]
+    r = client.put("/api/settings/config", headers=h, json=doc).json()
+    assert r["ok"], r
+    rows = {x["system_name"]: x.get("excluded") for x in client.get("/api/overview").json()["coverage"]}
+    assert rows["test-vm"] is None and rows["host-a"]["reason"] == "being rebuilt"

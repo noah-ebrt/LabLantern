@@ -40,7 +40,7 @@ def build_config_router(ctx: Context, guards: Guards, routers: list[APIRouter]) 
     from .fritzbox import FRITZ_CONFIG, FRITZ_SECRET
     from .integrations import MODEL_KEY
     from .integrity import drop_config
-    from .models import Snooze, System
+    from .models import CoverageExclusion, Snooze, System
     from .notify import load_channels
     from .reportpolicy import get_report_policy
     from .schedule import get_schedule, get_short_schedule, get_timezone
@@ -187,6 +187,33 @@ def build_config_router(ctx: Context, guards: Guards, routers: list[APIRouter]) 
                 call(found, "POST", "/snoozes", {**body, "target": x.get("target") or "host",
                                                  "system_id": ids.get(x.get("system"))})
 
+    def read_exclusions(s):
+        names = {x.id: x.name for x in s.scalars(select(System))}
+        return [{"id": ex.id, "system": names.get(int(ex.subject.split(":", 1)[1])), "until": ex.until.date().isoformat(),
+                 "reason": ex.reason}
+                for ex in s.scalars(select(CoverageExclusion).where(CoverageExclusion.ended_at.is_(None))
+                                    .order_by(CoverageExclusion.id)) if ex.subject.startswith("system:")]
+
+    def write_exclusions(found, value, current):
+        """Wie bei den Snoozes: mit id bleibt, ohne id neu, fehlende werden entfernt."""
+        if not isinstance(value, list) or not all(isinstance(x, dict) for x in value):
+            raise SectionError("must be a list of objects")
+        now = {x["id"]: x for x in current}
+        keep = {x["id"] for x in value if x.get("id") is not None}
+        for x in value:
+            if x.get("id") is not None and now.get(x["id"]) != x:
+                raise SectionError(f"exclusion {x['id']} cannot be changed: leave out its id to create it anew")
+        for eid in now.keys() - keep:
+            call(found, "DELETE", "/coverage/exclusions/{exclusion_id}", exclusion_id=eid)
+        with ctx.session_factory() as s:
+            ids = {x.name: x.id for x in s.scalars(select(System))}
+        for x in value:
+            if x.get("id") is None:
+                if x.get("system") not in ids:
+                    raise SectionError(f"no system named {x.get('system')!r}")
+                call(found, "POST", "/coverage/exclusions", {"subject": f"system:{ids[x['system']]}",
+                                                             "until": x.get("until"), "reason": x.get("reason")})
+
     sections = {   # Name: (lesen, schreiben); Reihenfolge = Reihenfolge im Dokument
         "schedule": (lambda s: {k: get_schedule(ctx)[k] for k in ("enabled", "time")}, simple("/settings/schedule")),
         "short_schedule": (lambda s: {k: get_short_schedule(ctx)[k] for k in ("enabled", "hours")},
@@ -205,6 +232,7 @@ def build_config_router(ctx: Context, guards: Guards, routers: list[APIRouter]) 
         "fritzbox": (read_fritzbox, write_fritzbox),
         "appliances": (read_appliances, write_appliances),
         "snoozes": (read_snoozes, write_snoozes),
+        "coverage_exclusions": (read_exclusions, write_exclusions),
     }
 
     def document() -> dict:

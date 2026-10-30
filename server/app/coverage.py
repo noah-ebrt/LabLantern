@@ -91,11 +91,25 @@ def calculate_coverage_matrix(session: Session, now: datetime | None = None, sbo
     from .appliances import connector_checks
     from .products import load_state, open_product_counts, versions_check
     vstate, vcounts = load_state(session), open_product_counts(session)
+    from .snooze import active_exclusions
+    exclusions, excluded = active_exclusions(session, now), 0
 
     for sys in session.scalars(select(System).order_by(System.name)):
         if sys.status == "revoked":
             continue
         age = _hours(now, sys.last_seen)
+        ex = exclusions.get(f"system:{sys.id}")
+        if ex is not None:   # ausgenommen: zählt weder als geprüft noch als Lücke, steht aber mit Grund da
+            excluded += 1
+            detail = f"excluded until {ex.until.date().isoformat()}: {ex.reason}"
+            matrix.append({
+                "system_id": sys.id, "system_name": sys.name, "status": sys.status, "age_hours": age,
+                "is_stale": False, "scan_age_hours": None,
+                "checks": {k: {"status": "excluded", "detail": detail} for k in CHECK_KEYS},
+                "excluded": {"id": ex.id, "reason": ex.reason, "until": ex.until.isoformat(), "by": ex.created_by},
+                "last_scan": None, "image_problems": [], "collection_errors": {},
+            })
+            continue
         if sys.status == "pending":
             matrix.append({
                 "system_id": sys.id, "system_name": sys.name, "status": "pending", "age_hours": age,
@@ -197,6 +211,7 @@ def calculate_coverage_matrix(session: Session, now: datetime | None = None, sbo
         "canary_ok": canary_status == "ok",
         "coverage_percent": round(ok_count / total * 100, 1) if total else 100.0,
         "total_checks": total,
+        "excluded_count": excluded,
         "ok_checks": ok_count,
         "systems": matrix,
     }
