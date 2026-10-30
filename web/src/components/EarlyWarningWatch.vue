@@ -30,7 +30,7 @@ const hint = (i) => [i.product, i.version, i.title_only ? 'matched in advisory t
     <p v-if="error" class="text-danger">{{ error }}</p>
     <template v-else-if="watched?.items">
       <p class="subtext">New advisories from {{ watched.feeds }} feeds are checked for these keywords; only a match goes to the AI.
-        <template v-if="!watched.ai_configured"> No Claude API key is set, so nothing is checked yet.</template></p>
+        <template v-if="!watched.ai_configured"> No AI provider is set, so nothing is checked yet.</template></p>
       <p v-if="!watched.items.length" class="subtext">Nothing from this system yet.</p>
       <div v-for="[name, items] in groups" :key="name" class="group">
         <span class="label">{{ name }} ({{ items.length }})</span>

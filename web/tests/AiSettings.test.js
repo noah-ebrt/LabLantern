@@ -137,4 +137,20 @@ describe('AiSettings', () => {
     const put = calls.find((c) => c.url === '/api/ai/providers/c1' && c.method === 'PUT')
     expect(put.body).toEqual({ name: 'Ollama', base_url: 'http://10.0.0.5:11434/v1' })
   })
+
+  it('shows an error with a retry instead of an empty card when the settings cannot be loaded', async () => {
+    let fail = true
+    const ok = globalThis.fetch
+    vi.stubGlobal('fetch', vi.fn(async (url, init) => (fail && url === '/api/ai'
+      ? new Response(JSON.stringify({ detail: 'Internal Server Error' }), { status: 500, headers: { 'content-type': 'application/json' } })
+      : ok(url, init))))
+    const w = mount(AiSettings)
+    await flushPromises()
+    expect(w.get('[data-test=load-error]').text()).toContain('Could not load the AI settings')
+    fail = false
+    await w.get('[data-test=load-retry]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-test=load-error]').exists()).toBe(false)
+    expect(w.text()).toContain('Anthropic API key')
+  })
 })

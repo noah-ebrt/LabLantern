@@ -24,7 +24,7 @@ const ROW = 86      // Abstand der Agenten untereinander (Knoten + Notiz)
 const PAD_X = 24
 const PAD_TOP = 34
 
-const claude = ref(null)
+const ai = ref(null)   // /api/ai: Anbieter und Wahl je Aufgabe; null = nicht lesbar
 const hostId = ref(null)
 const runId = ref(null)
 const info = ref(null)
@@ -45,12 +45,24 @@ watch(wrap, (el) => {
 })
 onMounted(async () => {
   try {
-    claude.value = await api.get('/api/integrations/claude')
+    ai.value = await api.get('/api/ai')
   } catch {
-    claude.value = null
+    ai.value = null
   }
 })
 onBeforeUnmount(() => observer?.disconnect())
+
+// Anbieter und Modell, die gerade Meldungen lesen (Aufgabe „classify“)
+const aiLine = computed(() => {
+  if (ai.value === null) return 'unknown'
+  const configured = (ai.value.providers || []).filter((p) => p.configured)
+  if (!configured.length) return 'not set'
+  const resolved = ai.value.tasks?.classify?.resolved
+  if (!resolved) return `${configured.map((p) => p.label).join(', ')}, no model chosen`
+  const pid = resolved.split(':')[0]
+  const label = configured.find((p) => p.id === pid)?.label || pid
+  return `${label} (${resolved.slice(pid.length + 1)})`
+})
 
 // Schmale Bildschirme: statt des Canvas (braucht ~1300 px, nur seitlich scrollbar) eine senkrechte Schrittliste
 const COMPACT = '(max-width: 720px)'
@@ -196,7 +208,7 @@ const stages = computed(() => {
       return {
         id: 'ai', kind: 'info', icon: 'sparkles', title: 'AI early warning', col: 3,
         note: passed ? `last pass ${passed}` : 'not run yet',
-        sub: !e?.ai_configured ? 'no Claude key: review by hand'
+        sub: !e?.ai_configured ? 'no AI provider: review by hand'
           : c.betroffen ? `${c.betroffen} affect${c.betroffen === 1 ? 's' : ''} you` + (c.unklar ? ` · ${c.unklar} to review` : '')
             : c.unklar ? `${c.unklar} to review · none affecting you` : 'nothing affects you',
         state: !e?.ai_configured || e.feed_errors ? 'warn' : c.betroffen ? 'bad' : c.unklar ? 'wait' : e.at ? 'ok' : 'idle',
@@ -394,14 +406,14 @@ const failing = computed(() => props.data.coverage.flatMap((s) => Object.entries
 
     <template v-else-if="info === 'ai'">
       <p class="explain">Security feeds are read every 2 hours and at the start of every full run. Only entries from the
-        last 30 days that name a product from your inventory go to Claude, which extracts affected versions; the
+        last 30 days that name a product from your inventory go to the AI provider, which extracts affected versions; the
         comparison with your installed versions is plain code. An entry is affected, not affected or needs review (the advisory gives no comparable versions), never
         silently dropped. Affected entries become findings (high when exploited, otherwise info); the AI can never
         remove or downgrade a finding.</p>
       <dl>
         <dt>Last pass</dt><dd>{{ ew?.at ? fmtDateTime(new Date(ew.at * 1000).toISOString()) : 'never' }}</dd>
         <dt>Last 30 days</dt><dd>{{ ew?.counts?.betroffen || 0 }} affected · {{ ew?.counts?.unklar || 0 }} to review · {{ ew?.counts?.nicht_betroffen || 0 }} not affected</dd>
-        <dt>Claude API key</dt><dd>{{ claude === null ? 'unknown' : claude.configured ? `stored (${claude.model})` : 'not set' }}</dd>
+        <dt>AI provider</dt><dd>{{ aiLine }}</dd>
         <dt>Feeds</dt><dd>{{ ew?.feed_errors ? `${ew.feed_errors} could not be read` : 'all readable' }}</dd>
       </dl>
       <RouterLink to="/fruehwarnungen" class="btn-link" @click="info = null">Open early warnings</RouterLink>

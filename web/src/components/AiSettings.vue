@@ -27,11 +27,17 @@ const choice = reactive({ classify: '', research: '', verify: '' })
 const messages = reactive({})
 const busy = ref(false)
 const tasksMessage = ref(null)
+const loadError = ref(null)
 
 // Auswahl nur beim ersten Laden und nach dem Speichern übernehmen, sonst gingen offene Änderungen verloren
 async function load(adopt = false) {
-  state.value = await api.get('/api/ai')
-  if (adopt) for (const t of TASKS) choice[t.id] = state.value.tasks[t.id]?.ref || ''
+  try {
+    state.value = await api.get('/api/ai')
+    loadError.value = null
+    if (adopt) for (const t of TASKS) choice[t.id] = state.value.tasks[t.id]?.ref || ''
+  } catch (e) {
+    loadError.value = e.message   // nicht als leere Karte stehen lassen
+  }
 }
 
 const providers = computed(() => state.value.providers)
@@ -138,6 +144,11 @@ onMounted(() => load(true))
       the task reports the error and matched advisories wait for review by hand.
       Use dedicated API keys with a strict spend limit.
     </template>
+
+    <p v-if="loadError" class="message error" role="alert" data-test="load-error">
+      Could not load the AI settings: {{ loadError }}
+      <button type="button" class="btn-sm" data-test="load-retry" @click="load(true)"><Icon name="refresh" :size="14" />Retry</button>
+    </p>
 
     <SettingsSection v-for="p in providers" :key="p.id" :title="p.kind === 'compat' ? 'OpenAI-compatible (Ollama, LM Studio, OpenRouter …)' : p.label">
       <SettingsList :empty="!p.configured" empty-text="Not configured.">

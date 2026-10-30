@@ -148,14 +148,14 @@ useLive(['findings', 'settings'], load, 3000)
   <div class="header-row">
     <div>
       <h1>Early warnings</h1>
-      <p class="subtitle">Global security news and a daily web search, narrowed to what you run, read by Claude and compared with your installed versions in code</p>
+      <p class="subtitle">Global security news and a daily web search, narrowed to what you run, read by an AI and compared with your installed versions in code</p>
     </div>
     <div>
       <button class="secondary" :aria-expanded="showConfig" aria-controls="ew-config" @click="toggleConfig">
         <Icon name="settings" :size="15" />Feeds &amp; products
       </button>
       <button v-if="data?.ai_configured && data.research?.enabled" class="secondary" :disabled="!!checking"
-              title="Let Claude search the web for fresh advisories on your products now" @click="checkNow(true)">
+              title="Let the AI search the web for fresh advisories on your products now" @click="checkNow(true)">
         <Icon name="search" :size="15" :class="{ spin: checking === 'research' }" />{{ checking === 'research' ? 'Researching…' : 'Research now' }}
       </button>
       <button class="primary" :disabled="!!checking" @click="checkNow()">
@@ -175,9 +175,9 @@ useLive(['findings', 'settings'], load, 3000)
       <span v-if="researchState.error" class="text-danger"> – {{ researchState.error }}</span>
       <span v-else-if="researchState.ok"> · {{ researchState.new }} new</span>
     </span>
-    <span>Claude
+    <span>AI provider
       <strong v-if="data.ai_configured">configured</strong>
-      <RouterLink v-else to="/einstellungen" class="text-danger">no API key – matched advisories need review by hand</RouterLink>
+      <RouterLink v-else to="/einstellungen" class="text-danger">none set – matched advisories need review by hand</RouterLink>
     </span>
   </section>
 
@@ -193,7 +193,7 @@ useLive(['findings', 'settings'], load, 3000)
     <label>
       <span class="field-label">Feeds</span>
       <textarea v-model="feedsText" rows="6" spellcheck="false" placeholder="https://about.gitlab.com/security-releases.xml" />
-      <span class="subtext">RSS or Atom, one https URL per line. Only entries from the last 30 days that name one of your products reach Claude.</span>
+      <span class="subtext">RSS or Atom, one https URL per line. Only entries from the last 30 days that name one of your products reach the AI provider.</span>
     </label>
     <label>
       <span class="field-label">Products without an agent</span>
@@ -243,7 +243,7 @@ useLive(['findings', 'settings'], load, 3000)
         <div class="ew-main">
           <a :href="w.link" target="_blank" rel="noopener" class="ew-title">{{ w.title }}<Icon name="external" :size="12" /></a>
           <p v-if="w.summary" class="ew-summary">{{ w.summary }}</p>
-          <p class="ew-detail">{{ w.status === 'pending' ? 'Waiting for the next pass (at most 20 entries go to Claude per pass).' : w.detail }}</p>
+          <p class="ew-detail">{{ w.status === 'pending' ? 'Waiting for the next pass (at most 20 entries go to the AI provider per pass).' : w.detail }}</p>
           <ul v-if="w.actions?.length && w.status !== 'nicht_betroffen'" class="ew-steps" aria-label="Recommended steps">
             <li v-for="(a, i) in w.actions" :key="i">
               <span class="ew-step-text"><strong>{{ a.system }}</strong> {{ a.text }}</span>
@@ -276,7 +276,7 @@ useLive(['findings', 'settings'], load, 3000)
 
         <div class="ew-actions">
           <RouterLink v-if="w.status === 'betroffen'" class="btn-sm" :to="{ path: '/funde', query: { source: 'ai', ...(w.cves[0] && { q: w.cves[0] }) } }">Open finding</RouterLink>
-          <button v-if="w.retryable" class="btn-sm" title="Claude could not be asked last time; ask again in the next pass" @click="retry(w)">Ask Claude again</button>
+          <button v-if="w.retryable" class="btn-sm" title="The AI provider could not be asked last time; ask again in the next pass" @click="retry(w)">Ask again</button>
         </div>
       </li>
     </ol>

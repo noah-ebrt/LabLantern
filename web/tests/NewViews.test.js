@@ -47,6 +47,8 @@ describe('EarlyWarningsView', () => {
     expect(w.text()).toContain('bad: HTTP 503')
     expect(w.text()).toContain('Affected1')
     expect(w.findAll('button.btn-sm')).toHaveLength(1)   // nur der KI-Fehler bekommt einen neuen Versuch
+    expect(w.get('button.btn-sm').text()).toBe('Ask again')   // anbieterneutral
+    expect(w.text()).not.toMatch(/Ask Claude|No Claude|Claude API key/)
     await w.get('button.btn-sm').trigger('click')
     await flushPromises()
     expect(calls.some((c) => c.url === '/api/early-warnings/2/retry' && c.method === 'POST')).toBe(true)
