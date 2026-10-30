@@ -455,3 +455,78 @@ def test_configdoc_writes_the_claude_key_through_the_new_route(fakes):
     doc["claude"] = {"model": None, "api_key": AKEY}
     r = client.put("/api/settings/config", headers=h, json=doc)
     assert r.status_code == 200 and ctx.secrets.get("claude.api_key") == AKEY
+
+
+def test_automatic_research_only_picks_models_with_web_search(fakes):
+    env, client, h, ctx = fakes
+    ctx.openai_factory = FakeOpenAI(ids=["gpt-5.2", "gpt-5.2-mini", "gpt-7"])   # gpt-7: neuestes, aber nicht auf der Liste
+    put(client, h, "openai", api_key=OKEY)
+    t = tasks_of(client)
+    assert t["research"]["resolved"] == t["verify"]["resolved"] == "openai:gpt-5.2"
+
+
+def test_automatic_research_skips_anthropic_models_without_web_search(fakes):
+    env, client, h, ctx = fakes
+    ctx.claude_factory = FakeAnthropic(ids=["claude-sonnet-5-5", "claude-sonnet-3-7"])   # 3-7 ist neuer, hat aber keine Websuche
+    put(client, h, "anthropic", api_key=AKEY)
+    assert tasks_of(client)["research"]["resolved"] == "anthropic:claude-sonnet-5-5"
+
+
+def test_failed_model_listing_is_not_retried_for_five_minutes_unless_refreshed(fakes):
+    env, client, h, ctx = fakes
+    ctx.openai_factory = FakeOpenAI(fail=500)
+    put(client, h, "c1", base_url="http://10.0.0.5:11434/v1")
+    client.get("/api/ai"); client.get("/api/ai")
+    assert ctx.openai_factory.listed == 1
+    client.post("/api/ai/providers/c1/refresh", headers=h)
+    assert ctx.openai_factory.listed == 2
+    # nach Ablauf der Sperre wird wieder versucht, und eine alte Liste bleibt bis dahin erhalten
+    with ctx.session_factory() as s:
+        from app.models import put_setting
+        put_setting(s, "ai.models.c1", {"at": 0, "failed_at": 0, "items": [{"id": "m1", "name": "m1", "created_at": ""}]})
+        s.commit()
+    got = client.get("/api/ai").json()["providers"][2]["models"]
+    assert ctx.openai_factory.listed == 3 and [m["id"] for m in got] == ["m1"]
+
+
+def _real_openai(handler, base="http://u:pw@10.0.0.5:11434/v1?token=x"):
+    import httpx2
+    import openai
+
+    return openai.OpenAI(api_key="k", base_url=base, max_retries=2,
+                         http_client=openai.DefaultHttpxClient(transport=httpx2.MockTransport(handler)))
+
+
+def test_endpoint_url_never_reaches_the_log_even_at_debug(admin, caplog):
+    import httpx2
+    from app.openai_client import OpenAIProvider
+
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        return httpx2.Response(200, json={"data": [{"id": "m1", "object": "model", "created": 1, "owned_by": "x"}]})
+
+    with caplog.at_level(logging.DEBUG):
+        assert OpenAIProvider(_real_openai(handler), "c1", "Ollama", True).list_models()[0]["id"] == "m1"
+        _real_openai(handler).models.list()
+    assert seen and "pw" not in caplog.text.replace("pwd", "") and "token=" not in caplog.text and "10.0.0.5" not in caplog.text
+    for name in ("httpx", "httpx2", "httpcore", "openai", "anthropic"):
+        assert logging.getLogger(name).level == logging.WARNING
+
+
+def test_model_listing_and_check_use_a_short_timeout_and_no_retries():
+    import httpx2
+    from app.openai_client import OpenAIProvider
+
+    requests = []
+
+    def handler(request):
+        requests.append(request.extensions["timeout"])
+        return httpx2.Response(500, json={"error": {"message": "down"}})
+
+    provider = OpenAIProvider(_real_openai(handler), "c1", "Ollama", True)
+    with pytest.raises(AiError, match="down"):
+        provider.list_models()
+    assert provider.check()["ok"] is False
+    assert len(requests) == 2 and all(t["connect"] == 10.0 and t["read"] == 10.0 for t in requests)   # je ein Versuch

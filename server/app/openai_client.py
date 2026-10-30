@@ -13,7 +13,7 @@ from typing import Any, Callable
 
 import openai
 
-from .aibase import AiError, short_error
+from .aibase import AiError, quick, short_error
 
 log = logging.getLogger("vulnwatch.openai")
 
@@ -94,14 +94,14 @@ class OpenAIProvider:
 
     def check(self) -> dict:
         try:
-            self._call(lambda: list(self.client.models.list()))
+            self._call(lambda: list(quick(self.client).models.list()))
             return {"ok": True}
         except AiError as e:
             return {"ok": False, "error": str(e)}
 
     def list_models(self) -> list[dict]:
         """Alle Chat-Modelle des Schlüssels (bei eigenen Endpunkten alle gelisteten), neueste zuerst."""
-        models = self._call(lambda: list(self.client.models.list()))
+        models = self._call(lambda: list(quick(self.client).models.list()))
         rows = [(m.id, m.created or 0) for m in models if self.compat or chat_model(m.id)]
         rows.sort(key=lambda r: r[1], reverse=True)
         return [{"id": i, "name": i, "created_at": datetime.fromtimestamp(c, timezone.utc).isoformat() if c else ""}

@@ -62,6 +62,10 @@ def _prepare_setup_token(ctx: Context) -> None:
 def create_app(settings: Settings, clock: Callable[[], float] = time.time) -> FastAPI:
     # Apprise protokolliert auf DEBUG jede geladene Kanal-URL samt Token. Das darf auch bei DEBUG-Logging nie ins Log.
     logging.getLogger("apprise").setLevel(logging.WARNING)
+    # Die HTTP-Bibliotheken protokollieren jede Anfrage-URL (INFO: httpx; DEBUG: die SDKs). Die Adresse eines eigenen
+    # KI-Endpunkts kann Zugangsdaten tragen (user:pw@, ?token=). Das darf auch bei DEBUG-Logging nie ins Log.
+    for name in ("httpx", "httpx2", "httpcore", "openai", "anthropic"):
+        logging.getLogger(name).setLevel(logging.WARNING)
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     engine = make_engine(settings.data_dir / "vulnwatch.db")
     init_db(engine)

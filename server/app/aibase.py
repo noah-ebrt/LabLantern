@@ -5,6 +5,13 @@ from typing import Protocol
 MAX_ERROR = 300
 
 
+def quick(client):
+    """Derselbe Client mit kurzer Frist und ohne Wiederholungen, für Schlüsselprüfung und Modellliste: die Oberfläche
+    wartet darauf, ein toter Endpunkt soll sie nicht minutenlang blockieren. Fakes ohne `with_options` bleiben unverändert."""
+    fn = getattr(client, "with_options", None)
+    return fn(timeout=10.0, max_retries=0) if fn else client
+
+
 class AiError(Exception):
     """Jeder Fehler beim Aufruf eines Anbieters; die Frühwarnung macht daraus „needs review“, nie eine Lücke."""
 

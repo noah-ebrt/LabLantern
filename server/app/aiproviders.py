@@ -29,6 +29,7 @@ TASKS_KEY = "ai.tasks"                    # {"classify": ref, "research": ref, "
 MODELS_PREFIX = "ai.models."              # + pid: {"at", "items"}, 24 h zwischengespeichert
 LAST_USED_PREFIX = "ai.last_used."        # + pid: {"at", "task", "model", "ok", "error"?}
 MODELS_TTL = 24 * 3600
+FAILED_TTL = 300                          # nach einem Fehlschlag 5 Minuten nicht neu versuchen (außer mit refresh)
 
 CLAUDE_MODEL = "claude-haiku-5-5"         # nur Rückfall, wenn die Modellliste von Anthropic nicht erreichbar ist
 RESEARCH_MODEL = "claude-sonnet-5-5"      # Rückfall für die Web-Recherche
@@ -111,17 +112,18 @@ def models_for(ctx: Context, pid: str, refresh: bool = False) -> list[dict]:
     provider = _make(ctx, pid)
     if provider is None:
         return []
-    if refresh or time.time() - cache.get("at", 0) > MODELS_TTL:
+    now = time.time()
+    if refresh or (now - cache.get("at", 0) > MODELS_TTL and now - cache.get("failed_at", 0) > FAILED_TTL):
         try:
             items = provider.list_models()
             if pid == "anthropic":
                 items = [m for m in items if MODEL_ID.match(m["id"])]
-            cache = {"at": time.time(), "items": items}
-            with ctx.session_factory() as s:
-                put_setting(s, key, cache)
-                s.commit()
+            cache = {"at": now, "items": items}
         except AiError:
-            pass   # alte Liste behalten
+            cache = {**cache, "failed_at": now}   # alte Liste behalten, aber nicht bei jedem Aufruf neu anfragen
+        with ctx.session_factory() as s:
+            put_setting(s, key, cache)
+            s.commit()
     return [{**m, "web": _web(pid, m["id"])} for m in cache.get("items") or []]
 
 
@@ -155,11 +157,15 @@ def resolve(ctx: Context, task: str) -> tuple[Provider, str]:
         raise AiError("no AI provider configured")
     if task in WEB_TASKS and not any(p.web_search for p in provs.values()):
         raise AiError("needs a provider with web search")
+    web = task in WEB_TASKS
     if "anthropic" in provs:
         models = models_for(ctx, "anthropic")
+        if web:
+            models = [m for m in models if m["web"]]   # nur Modelle mit Websuche
         return provs["anthropic"], latest_haiku(models) if task == "classify" else latest_sonnet(models)
     if "openai" in provs:
-        ids = [m["id"] for m in models_for(ctx, "openai")]
+        items = models_for(ctx, "openai")
+        ids = [m["id"] for m in items if m["web"] or not web]
         want = (lambda i: "-mini" in i) if task == "classify" else _OPENAI_FLAGSHIP.match
         model = next((i for i in ids if want(i)), None)
         if model:

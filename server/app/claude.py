@@ -11,7 +11,7 @@ from typing import Any, Callable
 
 import anthropic
 
-from .aibase import AiError, short_error
+from .aibase import AiError, quick, short_error
 
 log = logging.getLogger("vulnwatch.claude")
 
@@ -149,10 +149,10 @@ class AnthropicProvider:
         self.client = client
 
     def check(self) -> dict:
-        return check_key(self.client)
+        return check_key(quick(self.client))
 
     def list_models(self) -> list[dict]:
-        return list_models(self.client)
+        return list_models(quick(self.client))
 
     def ask_tool(self, model: str, system: str, text: str, tool: dict) -> tuple[dict, dict]:
         return ask_tool(self.client, model, system, text, tool)
