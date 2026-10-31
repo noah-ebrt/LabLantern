@@ -98,6 +98,13 @@ def render(ctx: Context) -> str:
                   int(bool(last.get("ok"))), check=kind)
     age = worker_last_seen(ctx)["age_seconds"]
     m.add("vulnwatch_worker_last_seen_age_seconds", "Seconds since the scan worker last asked for a job.", age)
+    from .models import HealthMonitor
+
+    with ctx.session_factory() as s:
+        for mon in s.scalars(select(HealthMonitor).order_by(HealthMonitor.slug)):
+            value = -1 if mon.paused else {"up": 1, "degraded": 0.5, "down": 0}.get(mon.state, -1)
+            m.add("vulnwatch_health_state", "Health monitor: 1 up, 0.5 degraded, 0 down, -1 unknown or paused.", value,
+                  monitor=mon.slug, name=mon.name)
     return m.text()
 
 

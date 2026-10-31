@@ -3,7 +3,7 @@ import json
 
 from app.earlywarning import _matches, inventory_products
 from app.integrity import DEFAULTS, is_sharp_drop
-from app.models import System, put_setting
+from app.models import System, put_setting, setting
 from tests.test_scan_flow import ctx, make_system, raw, run_once  # noqa: F401 (Fixture)
 
 
@@ -68,6 +68,39 @@ def test_config_document_reads_without_secrets_and_writes_through_the_endpoints(
     assert r["results"]["schedule"].startswith("error") and r["results"]["finding_drop"].startswith("error: percent")
     assert r["results"]["nonsense"] == "error: unknown section"
     assert [c["name"] for c in client.get("/api/integrations/notifications").json()["channels"]] == ["Mail"]
+
+
+def test_an_old_export_still_imports_research_and_claude(admin):
+    """Exporte von vor den KI-Anbietern: `research` mit `model` und ohne `verify`, `claude` mit dem einen Modell."""
+    env, client, h = admin
+    ctx = env.app.state.ctx
+    doc = client.get("/api/settings/config").json()
+    assert doc["research"] == {"enabled": True, "verify": True} and doc["claude"] == {"model": None, "api_key": None}
+    r = client.put("/api/settings/config", headers=h, json={
+        "research": {"enabled": False, "model": "claude-sonnet-5-5"},
+        "claude": {"model": "claude-haiku-5-5", "api_key": None}}).json()
+    assert r["ok"], r
+    assert r["results"]["research"] == r["results"]["claude"] == "saved"
+    with ctx.session_factory() as s:
+        assert setting(s, "ai.tasks") == {"classify": "anthropic:claude-haiku-5-5", "research": "", "verify": ""}
+        assert setting(s, "earlywarning.research") == {"enabled": False, "verify": True}   # verify bleibt wie gespeichert
+    assert r["config"]["claude"]["model"] == "claude-haiku-5-5"   # der Export bleibt lesbar und rund
+    again = client.put("/api/settings/config", headers=h, json=r["config"]).json()
+    assert again["results"]["claude"] == "unchanged"
+    # ein leeres Modell heißt „automatisch“; die Wahl für research/verify bleibt unberührt
+    with ctx.session_factory() as s:
+        put_setting(s, "ai.tasks", {"classify": "anthropic:claude-haiku-5-5", "research": "anthropic:claude-sonnet-5-5",
+                                    "verify": ""})
+        s.commit()
+    r = client.put("/api/settings/config", headers=h, json={"claude": {"model": None, "api_key": None}}).json()
+    assert r["results"]["claude"] == "saved"
+    with ctx.session_factory() as s:
+        assert setting(s, "ai.tasks") == {"classify": "", "research": "anthropic:claude-sonnet-5-5", "verify": ""}
+    # eine ungültige Kennung wird abgelehnt, ohne sie zu wiederholen
+    r = client.put("/api/settings/config", headers=h, json={"claude": {"model": "evil model\n", "api_key": None}}).json()
+    assert r["results"]["claude"] == "error: model: invalid model id"
+    r = client.put("/api/settings/config", headers=h, json={"claude": {"model": "claude-haiku-5-5\n", "api_key": None}}).json()
+    assert r["results"]["claude"] == "error: model: invalid model id"   # auch kein Zeilenende am Schluss
 
 
 def test_config_document_needs_a_login(env):

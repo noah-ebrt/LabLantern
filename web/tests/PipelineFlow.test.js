@@ -20,9 +20,19 @@ const systems = [
   { id: 2, name: 'pi', status: 'active', state: 'online', online: true, age_hours: 1.2, last_seen: minutesAgo(72) },
 ]
 
+const ai = {
+  providers: [{ id: 'anthropic', label: 'Anthropic', configured: true }, { id: 'c1', label: 'Ollama', configured: true }],
+  tasks: { classify: { ref: '', resolved: 'c1:qwen3.8:27b', error: null } },
+}
+let fetchMock
+
 beforeEach(() => {
-  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ configured: true, model: 'claude-haiku-5-5' }),
-    { status: 200, headers: { 'content-type': 'application/json' } })))
+  // Die Karte fragt /api/ai (Anbieter + Wahl je Aufgabe); die alte Route /api/integrations/claude gibt es nicht mehr
+  fetchMock = vi.fn(async (url) => {
+    const body = String(url).includes('/api/ai') ? ai : {}
+    return new Response(JSON.stringify(body), { status: String(url).includes('/api/ai') ? 200 : 404, headers: { 'content-type': 'application/json' } })
+  })
+  vi.stubGlobal('fetch', fetchMock)
 })
 afterEach(() => vi.unstubAllGlobals())
 
@@ -56,7 +66,22 @@ describe('PipelineFlow', () => {
     expect(w.findComponent({ name: 'RunDetailModal' }).props('runId')).toBe(7)
     await flushPromises()
     await node(w, 'AI early warning').trigger('click')
-    expect(w.find('.modal').text()).toContain('stored (claude-haiku-5-5)')
+    expect(w.find('.modal').text()).toContain('AI provider')
+    expect(w.find('.modal').text()).toContain('Ollama (qwen3.8:27b)')
+    expect(w.find('.modal').text()).not.toContain('Claude')
+    expect(fetchMock.mock.calls.map((c) => String(c[0])).some((u) => u.includes('/api/integrations/claude'))).toBe(false)
+  })
+
+  it('says so when no provider is set or the classify model is not chosen yet', async () => {
+    const calls = { providers: [{ id: 'c1', label: 'Ollama', configured: true }], tasks: { classify: { ref: '', resolved: null, error: 'choose a model (no automatic choice for this provider)' } } }
+    fetchMock.mockImplementation(async () => new Response(JSON.stringify(calls), { status: 200, headers: { 'content-type': 'application/json' } }))
+    const w = mountFlow()
+    await flushPromises()
+    await node(w, 'AI early warning').trigger('click')
+    expect(w.find('.modal').text()).toContain('Ollama, no model chosen')
+    const none = mountFlow({ ...data, early_warning: { ...data.early_warning, ai_configured: false } })
+    expect(node(none, 'AI early warning').text()).toContain('no AI provider: review by hand')
+    expect(node(none, 'AI early warning').text()).not.toContain('Claude')
   })
 
   it('Run now emits trigger; during collection agents that have not reported pulse', async () => {

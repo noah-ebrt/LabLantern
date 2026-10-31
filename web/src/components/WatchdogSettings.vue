@@ -106,9 +106,11 @@ async function remove(kind) {
 const health = computed(() => {
   const s = state.value
   if (!s) return null
-  if (!anySet.value) return { tone: 'neutral', text: 'Optional · not set up' }
-  if (['heartbeat', 'run', 'short'].some(failing)) return { tone: 'danger', text: 'Ping failing' }
-  return s.heartbeat?.set && s.run?.set ? { tone: 'ok', text: 'Active' } : { tone: 'warning', text: 'Partly set up' }
+  if (!anySet.value) return { tone: 'neutral', text: 'Not set up' }
+  const broken = ['heartbeat', 'run', 'short'].find(failing)
+  if (broken) return { tone: 'danger', text: 'Ping failing', target: `set-wd-${broken}` }
+  const missing = ['heartbeat', 'run'].find((k) => !s[k]?.set)
+  return missing ? { tone: 'warning', text: 'Partly set up', target: `set-wd-${missing}` } : { tone: 'ok', text: 'Active' }
 })
 
 onMounted(load)
@@ -126,14 +128,14 @@ useLive(['settings'], load)
 
       <form v-else class="settings-form" @submit.prevent="save">
         <div class="controls">
-          <div class="seg" role="tablist" aria-label="Monitor">
-            <button v-for="[v, l] in PROVIDERS" :key="v" type="button" role="tab" :aria-selected="config.provider === v"
+          <div class="seg" role="radiogroup" aria-label="Monitoring service">
+            <button v-for="[v, l] in PROVIDERS" :key="v" type="button" role="radio" :aria-checked="config.provider === v"
                     :class="['seg-btn', { active: config.provider === v }]" @click="config.provider = v">{{ l }}</button>
           </div>
           <label class="interval">
-            <span class="field-label">Heartbeat</span>
+            <span class="field-label">Ping every</span>
             <select v-model.number="config.heartbeat_minutes" name="heartbeat_minutes">
-              <option v-for="m in state.heartbeat_choices" :key="m" :value="m">every {{ m }} min</option>
+              <option v-for="m in state.heartbeat_choices" :key="m" :value="m">{{ m }} min</option>
             </select>
           </label>
         </div>
@@ -145,7 +147,7 @@ useLive(['settings'], load)
 
         <SettingsSection title="Checks" :count="CHECKS.filter((c) => state[c.key]?.set).length">
           <SettingsList>
-            <SettingsEntry v-for="c in CHECKS" :key="c.key" :icon="c.icon" :title="c.title"
+            <SettingsEntry v-for="c in CHECKS" :id="`set-wd-${c.key}`" :key="c.key" :icon="c.icon" :title="c.title"
                            :meta="[c.what, `Monitor: ${setup(c.key)}`]">
               <template #badge>
                 <span :class="['badge', !state[c.key].set ? 'neutral' : failing(c.key) ? 'danger' : 'ok']">

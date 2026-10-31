@@ -565,7 +565,7 @@ onMounted(() => {
           <strong>No agent packages on this master yet</strong>
           <span class="subtext">The stack builds and signs the agent when it starts; that takes a few minutes the first time.
             If it does not appear, check <code>docker compose logs agent-build agent-sign</code> in <code>deploy/</code> and
-            <RouterLink to="/einstellungen" @click="showAddModal = false">Settings → Agent releases</RouterLink>.</span>
+            <RouterLink to="/einstellungen?tab=system#set-release" @click="showAddModal = false">Settings → System → Agent release</RouterLink>.</span>
         </div>
       </li>
       <li>

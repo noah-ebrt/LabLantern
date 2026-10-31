@@ -62,9 +62,9 @@ The services:
 Open `https://<name>:8443`. The setup wizard needs the setup token from the log (it is new on every start until the
 setup is done), then an authenticator app (TOTP) and a password. Afterwards:
 
-1. **Settings → Passkeys → Add passkey.**
+1. **Settings → System → Passkeys → Add passkey.**
 2. Add hosts ([AGENTS.md](AGENTS.md)). The agent packages are built on the first start; until they are ready,
-   "Add Linux agent" says so. **Settings → Agent releases** shows the version and the signing key.
+   "Add Linux agent" says so. **Settings → System → Agent release** shows the version and the signing key.
 
 ### Trust the certificate authority
 

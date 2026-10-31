@@ -22,12 +22,15 @@ reachable only in your LAN.
 - **Exposure:** reads Nginx Proxy Manager, Traefik labels, Cloudflare Tunnel and the port forwards of a FRITZ!Box,
   OPNsense or UniFi router (all read-only) to learn which containers are reachable from the internet, checks proxy
   hostnames against public DNS, and rates their findings higher. It also checks the expiry of the NPM certificates.
+- **Health monitoring:** uptime and response times of every host. Agents are watched automatically; other devices
+  get ping, TCP, HTTP(S), TLS expiry, DNS, FRITZ!Box presence and internet or heartbeat checks. A read-only API
+  serves the states to status LEDs, Home Assistant or scripts.
 - **No silent gaps:** a coverage matrix shows every system × check as ok, finding, queued or error, and every
   exposure source as a check of its own. A canary scan in every run proves the scanner still detects a known
   vulnerability. Findings can be snoozed and hosts excluded, always with a reason and an end date.
 - **Reports and alerts:** daily report and immediate alerts through Apprise (mail, ntfy, Telegram, Signal, …),
   optional offsite watchdog (Healthchecks, Uptime Kuma or any URL), optional Prometheus metrics.
-- **AI early warning (optional):** global security feeds every two hours plus a daily web search by Claude, narrowed
+- **AI early warning (optional):** global security feeds every two hours plus a daily web search by AI (Anthropic, OpenAI or a local Ollama), narrowed
   to the images, OS and host packages you run. Versions are compared in code. A new hit arrives immediately with
   severity, the command to fix it per host, or the advisory's mitigation when there is no fix yet.
 
@@ -72,12 +75,12 @@ the log, then creates your admin account with password and authenticator app.
 
 Then, in this order:
 
-1. **Settings → Passkeys:** add a passkey. It confirms reboots and agent updates and signs the key list your agents
+1. **Settings → System → Passkeys:** add a passkey. It confirms reboots and agent updates and signs the key list your agents
    trust, so add it before the first host. Browsers allow passkeys only on the DNS name with a trusted certificate:
    trust the CA first.
 2. **Systems → Add Linux agent:** copy the setup command, run it on the host, compare the pairing code, approve.
-3. **Settings → Notification channels:** add a mail or push channel and send a test.
-4. Optional: offsite watchdog, Nginx Proxy Manager, Claude API key, Prometheus metrics.
+3. **Settings → Alerts & reports → Channels:** add a mail or push channel and send a test.
+4. Optional: offsite watchdog, Nginx Proxy Manager, AI provider (Anthropic, OpenAI or Ollama), Prometheus metrics.
 
 The first full run starts at the scheduled time (default 03:00) or with **Scan now** on the overview. For a first
 finding right away: connect one host, press **Scan now**, and watch the pipeline on the overview. The first run also
@@ -92,6 +95,7 @@ offers the new version within a minute; **Update all** installs it on every host
 | --- | --- |
 | [docs/INSTALL.md](docs/INSTALL.md) | install, DNS and certificates, updates, backup and restore, moving to another host, troubleshooting |
 | [docs/AGENTS.md](docs/AGENTS.md) | adding hosts, what an agent collects, commands, updates, removal, changing the agent |
+| [docs/HEALTH.md](docs/HEALTH.md) | health monitoring: checks, thresholds, alerts, router checks, heartbeat, API for status LEDs and other devices |
 | [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) | notifications, schedule and report frequency, snooze and exclusions, offsite watchdog, exposure sources (NPM, Traefik, Cloudflare Tunnel, FRITZ!Box, OPNsense, UniFi), TrueNAS, Home Assistant and Proxmox VE, collector scripts, version check, AI early warning, sharp drop alarm, configuration as JSON, Prometheus, what leaves your network |
 | [collectors/README.md](collectors/README.md) | collector scripts for Unraid, Synology and OpenWrt, and the report format for your own |
 | [SECURITY.md](SECURITY.md) | threat model: what a compromised master, agent or worker can and cannot do |

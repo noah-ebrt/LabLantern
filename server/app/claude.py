@@ -11,6 +11,8 @@ from typing import Any, Callable
 
 import anthropic
 
+from .aibase import AiError, quick, short_error
+
 log = logging.getLogger("vulnwatch.claude")
 
 # Modelle, die den serverseitigen Refusal-Fallback ("default") annehmen; für sie wird er immer mitgeschickt
@@ -20,10 +22,16 @@ FALLBACK_BETA = "server-side-fallback-2026-07-01"
 WEB_SEARCH_DYNAMIC = ("claude-opus-5", "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-5",
                       "claude-sonnet-4-6", "claude-fable")
 MAX_PAUSES = 4
+# Modelle mit serverseitiger Websuche (Präfixe); ältere Modelle (z. B. Claude 3) werden für Recherche nicht angeboten
+ANTHROPIC_WEB = ("claude-opus-4", "claude-sonnet-4", "claude-haiku-4-5", "claude-opus-5", "claude-sonnet-5",
+                 "claude-haiku-5", "claude-fable")
 
 
-class ClaudeError(Exception):
-    """Jeder Fehler beim Aufruf; die Frühwarnung macht daraus „needs review“, nie eine Lücke."""
+ClaudeError = AiError   # Alias: bestehende Importe und `earlywarning.AiError` bleiben unverändert
+
+
+def anthropic_web(model_id: str) -> bool:
+    return model_id.startswith(ANTHROPIC_WEB)
 
 
 def make_client(base_url: str, key: str, factory: Callable[[str], Any] | None = None) -> anthropic.Anthropic:
@@ -32,25 +40,25 @@ def make_client(base_url: str, key: str, factory: Callable[[str], Any] | None = 
     return anthropic.Anthropic(api_key=key, base_url=base_url, timeout=120.0, max_retries=2)
 
 
-def _call(fn):
-    """SDK-Fehler in einen Satz übersetzen, ohne Schlüssel oder Antworttexte zu zeigen."""
+def _call(client, fn):
+    """SDK-Fehler in einen Satz übersetzen; bei sonstigen HTTP-Fehlern mit der Meldung des Anbieters, ohne Schlüssel."""
     try:
         return fn()
     except anthropic.AuthenticationError:
-        raise ClaudeError("Claude API: key invalid (HTTP 401)") from None
+        raise ClaudeError("Anthropic: key invalid (HTTP 401)") from None
     except anthropic.PermissionDeniedError:
-        raise ClaudeError("Claude API: key not permitted (HTTP 403)") from None
+        raise ClaudeError("Anthropic: key not permitted (HTTP 403)") from None
     except anthropic.RateLimitError:
-        raise ClaudeError("Claude API: rate limit (HTTP 429)") from None
+        raise ClaudeError("Anthropic: rate limit (HTTP 429)") from None
     except anthropic.APIStatusError as e:
-        raise ClaudeError(f"Claude API HTTP {e.status_code}") from None
+        raise ClaudeError(short_error("Anthropic", e.status_code, e.body, getattr(client, "api_key", None))) from None
     except anthropic.APIConnectionError:
-        raise ClaudeError("Claude API unreachable") from None
+        raise ClaudeError("Anthropic: API unreachable") from None
 
 
 def check_key(client: anthropic.Anthropic) -> dict:
     try:
-        _call(lambda: client.models.list(limit=1))
+        _call(client, lambda: client.models.list(limit=1))
         return {"ok": True}
     except ClaudeError as e:
         return {"ok": False, "error": str(e)}
@@ -61,14 +69,14 @@ def list_models(client: anthropic.Anthropic) -> list[dict]:
     def fetch():
         return [{"id": m.id, "name": m.display_name or m.id,
                  "created_at": m.created_at.isoformat() if m.created_at else ""} for m in client.models.list(limit=100)]
-    return sorted(_call(fetch), key=lambda m: m["created_at"], reverse=True)
+    return sorted(_call(client, fetch), key=lambda m: m["created_at"], reverse=True)
 
 
 def _create(client: anthropic.Anthropic, **params):
     model = params["model"]
     if model in FALLBACK_MODELS:   # Ablehnung durch Sicherheitsfilter: Anthropic leitet an ein passendes Modell weiter
-        return _call(lambda: client.beta.messages.create(betas=[FALLBACK_BETA], fallbacks="default", **params))
-    return _call(lambda: client.messages.create(**params))
+        return _call(client, lambda: client.beta.messages.create(betas=[FALLBACK_BETA], fallbacks="default", **params))
+    return _call(client, lambda: client.messages.create(**params))
 
 
 def _tool_input(resp, name: str) -> dict:
@@ -97,8 +105,9 @@ def research(client: anthropic.Anthropic, model: str, system: str, text: str, to
              max_searches: int = 15) -> tuple[dict, dict]:
     """Recherche mit Websuche (serverseitig bei Anthropic) in zwei Schritten: erst nur suchen (ohne Bericht-Werkzeug
     kann das Modell die Suche nicht überspringen), dann das Ergebnis über `tool` melden.
-    `pause_turn` (Server-Werkzeug braucht mehr Runden) wird fortgesetzt, höchstens MAX_PAUSES-mal."""
-    search = web_search_tool(model, max_searches)
+    `pause_turn` (Server-Werkzeug braucht mehr Runden) wird fortgesetzt, höchstens MAX_PAUSES-mal. `max_searches` gilt
+    für die ganze Recherche (`max_uses` zählt je Anfrage, Fortsetzungen fingen sonst von vorn an). Automatisches
+    Prompt-Caching: Fortsetzungen lesen den bisherigen Verlauf zum Cache-Preis."""
     user = {"role": "user", "content": text}
     found: list = []
     searches, sources, usage = 0, [], []
@@ -106,7 +115,7 @@ def research(client: anthropic.Anthropic, model: str, system: str, text: str, to
     def call(messages, tools):
         nonlocal searches
         resp = _create(client, model=model, max_tokens=16000, system=system, tools=tools, messages=messages,
-                       output_config={"effort": "medium"})
+                       output_config={"effort": "medium"}, cache_control={"type": "ephemeral"})
         searches += sum(1 for b in resp.content if b.type == "server_tool_use")
         sources.extend(r.url for b in resp.content if b.type == "web_search_tool_result" and isinstance(b.content, list)
                        for r in b.content if getattr(r, "url", None))
@@ -115,9 +124,10 @@ def research(client: anthropic.Anthropic, model: str, system: str, text: str, to
 
     resp = None
     for _ in range(MAX_PAUSES + 1):
-        resp = call([user, {"role": "assistant", "content": found}] if found else [user], [search])
+        resp = call([user, {"role": "assistant", "content": found}] if found else [user],
+                    [web_search_tool(model, max(max_searches - searches, 1))])
         found = [*found, *resp.content]
-        if resp.stop_reason != "pause_turn":
+        if resp.stop_reason != "pause_turn" or searches >= max_searches:
             break
     if resp.stop_reason == "refusal":
         raise ClaudeError("Claude declined the request")
@@ -129,3 +139,25 @@ def research(client: anthropic.Anthropic, model: str, system: str, text: str, to
     archive = {"id": resp.id, "model": resp.model, "stop_reason": resp.stop_reason, "searches": searches,
                "usage": usage, "sources": list(dict.fromkeys(sources))[:50]}
     return _tool_input(resp, tool["name"]), archive
+
+
+class AnthropicProvider:
+    """Anthropic hinter der gemeinsamen Anbieter-Schnittstelle (aibase.Provider); ruft die Funktionen dieses Moduls."""
+    pid = "anthropic"
+    label = "Anthropic"
+    web_search = True
+
+    def __init__(self, client):
+        self.client = client
+
+    def check(self) -> dict:
+        return check_key(quick(self.client))
+
+    def list_models(self) -> list[dict]:
+        return list_models(quick(self.client))
+
+    def ask_tool(self, model: str, system: str, text: str, tool: dict) -> tuple[dict, dict]:
+        return ask_tool(self.client, model, system, text, tool)
+
+    def research(self, model: str, system: str, text: str, tool: dict, max_searches: int = 15) -> tuple[dict, dict]:
+        return research(self.client, model, system, text, tool, max_searches)

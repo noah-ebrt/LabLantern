@@ -1,0 +1,7 @@
+{
+  "name": "vulnwatch",
+  "private": true,
+  "scripts": {
+    "deploy": "sh deploy/deploy.sh"
+  }
+}

@@ -41,10 +41,17 @@ TOPICS_BY_TABLE = {
     "findings": "findings",
     "early_warnings": "findings",
     "passkeys": "settings",
+    "health_monitors": "health",
+    "health_checks": "health",
+    "health_events": "health",
+    "health_tokens": "health",
 }
 # Spalten, die sich ständig ändern, ohne dass die Anzeige es braucht (der Long-Poll schreibt jede Sekunde).
 # Ob ein Agent dadurch verbunden/getrennt wirkt, meldet der Wächter.
-IGNORED_COLUMNS = {"systems": {"last_contact"}}
+IGNORED_COLUMNS = {"systems": {"last_contact"},
+                   # jede Prüfung schreibt alle paar Sekunden Messwerte; gemeldet wird nur ein Zustandswechsel
+                   "health_checks": {"fails", "last_checked", "last_ok", "latency_ms", "error"},
+                   "health_tokens": {"last_used"}}
 IGNORED_SETTINGS = {"worker.last_seen"}
 
 
@@ -72,7 +79,8 @@ class EventHub:
         self.max_subscribers = max_subscribers
         self.heartbeat = heartbeat
         self.watch_interval = watch_interval
-        self.snapshot: Callable[[], object] | None = None   # für den Wächter (in main.py gesetzt)
+        # für den Wächter (in main.py gesetzt): {Thema: Wert}; ändert sich ein Wert, geht dieses Thema raus
+        self.snapshot: Callable[[], dict[str, object]] | None = None
         self._lock = threading.Lock()
         self._subs: dict[asyncio.Queue, asyncio.AbstractEventLoop] = {}
         self._watcher: asyncio.Task | None = None
@@ -119,8 +127,8 @@ class EventHub:
         while self.subscriber_count:
             try:
                 snap = await asyncio.to_thread(self.snapshot)
-                if last is not None and snap != last:
-                    self.publish(["systems"])
+                if last is not None:
+                    self.publish([topic for topic, value in snap.items() if last.get(topic) != value])
                 last = snap
             except Exception:   # der Wächter darf nie den Strom mitreißen
                 log.exception("live-update watcher failed")

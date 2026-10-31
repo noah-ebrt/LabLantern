@@ -4,7 +4,8 @@ import { api } from '../api.js'
 import { useLive } from '../live.js'
 import Icon from './Icon.vue'
 import SettingsCard from './SettingsCard.vue'
-import SettingsSection from './SettingsSection.vue'
+import SettingsEntry from './SettingsEntry.vue'
+import SettingsList from './SettingsList.vue'
 import ToggleSwitch from './ToggleSwitch.vue'
 
 // Sofort-Alarm, wenn die offenen Funde eines Hosts in einem Lauf stark fallen (übernommener Worker, geschönte SBOM)
@@ -30,30 +31,42 @@ async function save() {
   }
 }
 
-const status = computed(() => (form.enabled ? { tone: 'ok', text: `On · ${form.percent} %` } : { tone: 'warning', text: 'Off' }))
+const status = computed(() => (form.enabled ? { tone: 'ok', text: 'Drop alarm on' } : { tone: 'warning', text: 'Drop alarm off', target: 'set-drop' }))
 onMounted(load)
 useLive(['settings'], load, 3000)
 </script>
 
 <template>
-  <SettingsCard icon="shield" title="Sharp drop alarm" subtitle="Immediate alert when a host's open findings fall sharply in one run" :status="status">
-    <SettingsSection title="Rule">
-      <form class="settings-form" @submit.prevent="save">
-        <ToggleSwitch v-model="form.enabled" name="drop_enabled" label="Alert on a sharp drop" />
-        <div class="grid">
-          <label><span class="field-label">Drop of at least (%)</span>
-            <input v-model.number="form.percent" name="drop_percent" type="number" min="10" max="100" :disabled="!form.enabled" required /></label>
-          <label><span class="field-label">Only from findings before</span>
-            <input v-model.number="form.min_findings" name="drop_min" type="number" min="1" :disabled="!form.enabled" required /></label>
-        </div>
-        <p class="subtext">A compromised worker or an agent with a doctored SBOM can report a host as clean. This catches it: from
-          {{ form.min_findings }} open scanner findings on, a fall of {{ form.percent }} % or more in one run sends an immediate alert.
-          A large update can trigger it too; the alert says what to check.</p>
-        <div class="actions">
-          <button class="primary" :disabled="busy"><Icon name="check" :size="15" />{{ busy ? 'Saving…' : 'Save' }}</button>
-        </div>
-      </form>
-    </SettingsSection>
-    <p v-if="message" class="message" :class="message.kind" role="status">{{ message.text }}</p>
+  <SettingsCard icon="shield" title="Alert rules" subtitle="Immediate alerts beyond new critical and high findings" :status="status">
+    <form class="settings-form" @submit.prevent="save">
+      <SettingsList label="Alert rules">
+        <SettingsEntry id="set-drop" icon="shield" title="Sharp drop in findings"
+                       :meta="form.enabled ? `Alerts when a host's open findings fall by ${form.percent} % or more in one run` : 'Off'">
+          <template #actions>
+            <ToggleSwitch v-model="form.enabled" name="drop_enabled" label="Alert on a sharp drop in findings" />
+          </template>
+          <div class="grid drop-fields">
+            <label><span class="field-label">Alert at a drop of (%)</span>
+              <input v-model.number="form.percent" name="drop_percent" type="number" min="10" max="100" :disabled="!form.enabled" required /></label>
+            <label><span class="field-label">Only for hosts with at least … open findings</span>
+              <input v-model.number="form.min_findings" name="drop_min" type="number" min="1" :disabled="!form.enabled" required /></label>
+          </div>
+          <span class="subtext">Catches a compromised worker or a doctored SBOM that reports a host as clean. A large update can trigger it too; the alert says what to check.</span>
+        </SettingsEntry>
+        <SettingsEntry icon="sparkles" title="Early warning fails" meta="Set with the AI early warning sources">
+          <template #actions>
+            <RouterLink to="/einstellungen?tab=ai#set-ai-sources" class="btn-link btn-sm">Open<Icon name="chevron" :size="14" /></RouterLink>
+          </template>
+        </SettingsEntry>
+      </SettingsList>
+      <div class="actions">
+        <button class="primary" :disabled="busy"><Icon name="check" :size="15" />{{ busy ? 'Saving…' : 'Save alert rules' }}</button>
+      </div>
+      <p v-if="message" class="message" :class="message.kind" role="status">{{ message.text }}</p>
+    </form>
   </SettingsCard>
 </template>
+
+<style scoped>
+.drop-fields { max-width: 40rem; }
+</style>

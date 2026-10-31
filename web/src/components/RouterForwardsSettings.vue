@@ -5,8 +5,7 @@ import { timeAgo } from '../time.js'
 import Icon from './Icon.vue'
 import SecretField from './SecretField.vue'
 import SettingsEntry from './SettingsEntry.vue'
-import SettingsList from './SettingsList.vue'
-import SettingsSection from './SettingsSection.vue'
+import SettingsFold from './SettingsFold.vue'
 
 // Portfreigaben aus OPNsense und UniFi (PLAN-extensions D2), Gegenstück zum FRITZ!Box-Abschnitt
 const emit = defineEmits(['changed'])
@@ -28,6 +27,8 @@ const busy = ref(false)
 const message = reactive({ opnsense: null, unifi: null })
 
 const summary = (st) => `${st.forwards} port forwards, ${Object.values(st.exposed || {}).flat().length} containers or hosts internet-exposed`
+const badge = (cfg, st) => (!cfg ? { tone: 'neutral', text: 'Not connected' } : !st?.configured ? { tone: 'neutral', text: 'Not read yet' }
+  : st.ok ? { tone: 'ok', text: 'Connected' } : { tone: 'danger', text: 'Failing' })
 const stateLine = (st) => !st?.configured ? 'Not read yet'
   : st.ok ? `Last read ${timeAgo(new Date(st.at * 1000).toISOString())}: ${summary(st)}` : `Last read failed: ${st.error}`
 
@@ -78,40 +79,37 @@ onMounted(() => Promise.all(Object.keys(ROUTERS).map((k) => load(k).catch(() => 
 </script>
 
 <template>
-  <SettingsSection v-for="(r, kind) in ROUTERS" :key="kind" :title="`${r.label} port forwards`" :data-test="`router-${kind}`">
-    <SettingsList :empty="!data[kind]?.config" :empty-text="r.empty">
-      <SettingsEntry v-if="data[kind]?.config" icon="link" :title="data[kind].config.url" mono
-                     :meta="[kind === 'opnsense' ? `API key ${data[kind].config.key}` : `Site ${data[kind].config.site}`, stateLine(data[kind].state)]">
-        <template #badge>
-          <span v-if="data[kind].state?.configured" :class="['badge', data[kind].state.ok ? 'ok' : 'danger']">{{ data[kind].state.ok ? 'Connected' : 'Failing' }}</span>
-        </template>
-        <template #actions>
-          <button type="button" class="btn-sm" :disabled="busy" @click="act(kind, () => test(kind))"><Icon name="refresh" :size="14" />Test</button>
-          <button v-if="data[kind].state?.error?.includes('certificate changed')" type="button" class="btn-sm" :disabled="busy" @click="trust(kind)">Trust new certificate</button>
-          <button type="button" class="btn-sm btn-delete" :disabled="busy" @click="remove(kind)"><Icon name="trash" :size="14" />Remove</button>
-        </template>
-        <details v-if="data[kind].state?.unmatched?.length" class="more" :data-test="`router-${kind}-unmatched`">
-          <summary>{{ data[kind].state.unmatched.length }} port forwards without a clear container – mark them on the host</summary>
-          <span v-for="u in data[kind].state.unmatched" :key="u.forward" class="more-line"><span class="mono">{{ u.forward }}</span>{{ u.description ? ` (${u.description})` : '' }} · {{ u.reason }}</span>
-        </details>
-      </SettingsEntry>
-    </SettingsList>
-
-    <form class="settings-form" @submit.prevent="save(kind)">
-      <div class="grid">
-        <label><span class="field-label">URL</span><input v-model="forms[kind].url" :name="`${kind}_url`" :placeholder="r.url" autocomplete="off" required /></label>
-        <label v-if="kind === 'opnsense'"><span class="field-label">API key</span><input v-model="forms[kind].key" name="opnsense_key" autocomplete="off" required /></label>
-        <label v-else><span class="field-label">Site</span><input v-model="forms[kind].site" name="unifi_site" autocomplete="off" required /></label>
-        <SecretField v-model="forms[kind].secret" :name="`${kind}_secret`" :label="r.secret" :set="!!data[kind]?.secret?.set" :updated-at="data[kind]?.secret?.updated_at" />
+  <SettingsEntry v-for="(r, kind) in ROUTERS" :id="`set-${kind}`" :key="kind" icon="link" :title="`${r.label} port forwards`" :data-test="`router-${kind}`"
+                 :meta="data[kind]?.config ? [`${data[kind].config.url} · ${kind === 'opnsense' ? `API key ${data[kind].config.key}` : `site ${data[kind].config.site}`}`, stateLine(data[kind].state)] : r.empty">
+    <template #badge><span :class="['badge', badge(data[kind]?.config, data[kind]?.state).tone]">{{ badge(data[kind]?.config, data[kind]?.state).text }}</span></template>
+    <template v-if="data[kind]?.config" #actions>
+      <button type="button" class="btn-sm" :disabled="busy" @click="act(kind, () => test(kind))"><Icon name="refresh" :size="14" />Test</button>
+      <button v-if="data[kind].state?.error?.includes('certificate changed')" type="button" class="btn-sm" :disabled="busy" @click="trust(kind)">Trust new certificate</button>
+      <button type="button" class="btn-sm btn-delete" :disabled="busy" @click="remove(kind)"><Icon name="trash" :size="14" />Remove</button>
+    </template>
+    <SettingsFold v-if="data[kind]?.state?.unmatched?.length" class="more" :data-test="`router-${kind}-unmatched`"
+                  :title="`${data[kind].state.unmatched.length} port forwards without a clear container – mark them on the host`">
+      <div>
+        <span v-for="u in data[kind].state.unmatched" :key="u.forward" class="more-line"><span class="mono">{{ u.forward }}</span>{{ u.description ? ` (${u.description})` : '' }} · {{ u.reason }}</span>
       </div>
-      <!-- eslint-disable-next-line vue/no-v-html -- feste Texte aus dieser Datei -->
-      <p class="subtext" v-html="r.help" />
-      <p v-if="message[kind]" :class="['message', message[kind].kind]">{{ message[kind].text }}</p>
-      <div class="actions">
-        <button class="primary" :disabled="busy || !forms[kind].url"><Icon name="check" :size="15" />{{ busy ? 'Saving & testing…' : 'Save and test' }}</button>
-      </div>
-    </form>
-  </SettingsSection>
+    </SettingsFold>
+    <SettingsFold :id="`set-${kind}-form`" :title="data[kind]?.config ? 'Edit connection' : `Connect ${r.label}`" :open="!!message[kind]">
+      <form class="settings-form" @submit.prevent="save(kind)">
+        <div class="grid">
+          <label><span class="field-label">URL</span><input v-model="forms[kind].url" :name="`${kind}_url`" :placeholder="r.url" autocomplete="off" required /></label>
+          <label v-if="kind === 'opnsense'"><span class="field-label">API key</span><input v-model="forms[kind].key" name="opnsense_key" autocomplete="off" required /></label>
+          <label v-else><span class="field-label">Site</span><input v-model="forms[kind].site" name="unifi_site" autocomplete="off" required /></label>
+          <SecretField v-model="forms[kind].secret" :name="`${kind}_secret`" :label="r.secret" :set="!!data[kind]?.secret?.set" :updated-at="data[kind]?.secret?.updated_at" />
+        </div>
+        <!-- eslint-disable-next-line vue/no-v-html -- feste Texte aus dieser Datei -->
+        <p class="subtext" v-html="r.help" />
+        <p v-if="message[kind]" :class="['message', message[kind].kind]">{{ message[kind].text }}</p>
+        <div class="actions">
+          <button class="primary" :disabled="busy || !forms[kind].url"><Icon name="check" :size="15" />{{ busy ? 'Saving & testing…' : 'Save and test' }}</button>
+        </div>
+      </form>
+    </SettingsFold>
+  </SettingsEntry>
 </template>
 
 <style scoped>

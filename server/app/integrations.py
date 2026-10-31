@@ -1,14 +1,10 @@
 from typing import Literal
-import json
-import re
-import time
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from .claude import ClaudeError
 from .context import Context
 from .guards import Guards
 from .mail import MailError, SmtpConfig, send_mail
@@ -16,59 +12,6 @@ from .models import put_setting, setting
 from . import notify as notify_mod
 from .notify import is_valid_url, load_channels, save_channels, scheme_of
 
-CLAUDE_SECRET = "claude.api_key"
-CLAUDE_MODEL = "claude-haiku-5-5"   # nur Rückfall, wenn die Modellliste von Anthropic nicht erreichbar ist
-MODEL_KEY = "claude.model"           # gewähltes Modell; fehlt = automatisch das neueste Haiku
-MODELS_CACHE = "ai.models"           # Modellliste von Anthropic, 24 h zwischengespeichert
-RESEARCH_MODEL = "claude-sonnet-5-5"  # Rückfall für die Web-Recherche
-LAST_USED_KEY = "ai.last_used"       # letzter Aufruf durch die Frühwarnung
-MODELS_TTL = 24 * 3600
-_MODEL_ID = re.compile(r"^claude-[a-z0-9.-]{3,80}$")
-
-
-def claude_client(ctx: Context, key: str):
-    from .claude import make_client
-    return make_client(ctx.settings.anthropic_base_url, key, ctx.claude_factory)
-
-
-def fetch_models(ctx: Context, key: str) -> list[dict]:
-    """Verfügbare Modelle direkt von Anthropic, neueste zuerst. Wirft ClaudeError (der Aufrufer fällt zurück)."""
-    from .claude import list_models
-    return [m for m in list_models(claude_client(ctx, key)) if _MODEL_ID.match(m["id"])]
-
-
-def available_models(ctx: Context, refresh: bool = False) -> list[dict]:
-    """Modellliste aus dem Cache; älter als 24 h (oder refresh) wird neu geholt, solange ein Schlüssel da ist."""
-    with ctx.session_factory() as s:
-        cache = setting(s, MODELS_CACHE) or {}
-    key = ctx.secrets.get(CLAUDE_SECRET)
-    if key and (refresh or time.time() - cache.get("at", 0) > MODELS_TTL):
-        try:
-            items = fetch_models(ctx, key)
-            cache = {"at": time.time(), "items": items}
-            with ctx.session_factory() as s:
-                put_setting(s, MODELS_CACHE, cache)
-                s.commit()
-        except ClaudeError:
-            pass   # alte Liste behalten
-    return cache.get("items") or []
-
-
-def latest_haiku(models: list[dict]) -> str:
-    haiku = [m for m in models if "haiku" in m["id"]]
-    return haiku[0]["id"] if haiku else CLAUDE_MODEL
-
-
-def latest_sonnet(models: list[dict]) -> str:
-    sonnet = [m for m in models if "sonnet" in m["id"]]
-    return sonnet[0]["id"] if sonnet else RESEARCH_MODEL
-
-
-def resolve_model(ctx: Context) -> str:
-    """Das Modell für die Frühwarnung: das gewählte, sonst das neueste Haiku laut Anthropic."""
-    with ctx.session_factory() as s:
-        chosen = setting(s, MODEL_KEY)
-    return chosen or latest_haiku(available_models(ctx))
 SMTP_CONFIG_KEY = "smtp.config"
 SMTP_PASSWORD_SECRET = "smtp.password"
 _ADDR = r"^[^\s@<>\r\n]+@[^\s@<>\r\n]+\.[^\s@<>\r\n]+$"
@@ -115,14 +58,6 @@ def smtp_apprise_url(c: SmtpChannelIn) -> str:
     if c.security != "none":
         params += f"&mode={c.security}"
     return f"{scheme}://{auth}{c.host}:{c.port}?{params}"
-
-
-class ModelIn(BaseModel):
-    model: str | None = Field(default=None, max_length=100)   # None = automatisch das neueste Haiku
-
-
-class ClaudeIn(BaseModel):
-    api_key: str = Field(min_length=20, max_length=400, pattern=r"^[^\s]+$")
 
 
 def load_smtp_config(s: Session) -> SmtpConfig | None:
@@ -257,59 +192,5 @@ def build_integrations_router(ctx: Context, guards: Guards) -> APIRouter:
             ctx.audit(s, found[0].username, "integration.notifications.tested", "ok" if not failed else error)
             s.commit()
         return {"ok": not failed, "error": error}
-
-    # --- Claude API (Frühwarnung, Phase 6) ---
-
-    @router.get("/claude", dependencies=[Depends(guards.require_session)])
-    def get_claude():
-        meta = ctx.secrets.meta(CLAUDE_SECRET)
-        with ctx.session_factory() as s:
-            chosen, last = setting(s, MODEL_KEY), setting(s, LAST_USED_KEY)
-        models = available_models(ctx)
-        return {"configured": meta["set"], "api_key": meta, "model": chosen or latest_haiku(models),
-                "selected": chosen, "auto_model": latest_haiku(models), "last_used": last}
-
-    @router.get("/claude/models", dependencies=[Depends(guards.require_session)])
-    def get_models(refresh: bool = False):
-        models = available_models(ctx, refresh=refresh)
-        return {"items": models, "auto": latest_haiku(models)}
-
-    @router.put("/claude/model")
-    def put_model(body: ModelIn, found=Depends(guards.require_admin)):
-        if body.model is not None and not _MODEL_ID.match(body.model):
-            raise HTTPException(422, "Unknown model id")
-        with ctx.session_factory() as s:
-            put_setting(s, MODEL_KEY, body.model)
-            ctx.audit(s, found[0].username, "integration.claude.model", body.model or "automatic (latest Haiku)")
-            s.commit()
-        return {"ok": True, "model": body.model or latest_haiku(available_models(ctx))}
-
-    @router.put("/claude")
-    def put_claude(body: ClaudeIn, found=Depends(guards.require_admin)):
-        ctx.secrets.set(CLAUDE_SECRET, body.api_key)
-        with ctx.session_factory() as s:
-            ctx.audit(s, found[0].username, "integration.claude.saved", "API key changed")
-            s.commit()
-        return {"ok": True}
-
-    @router.delete("/claude")
-    def delete_claude(found=Depends(guards.require_admin)):
-        ctx.secrets.delete(CLAUDE_SECRET)
-        with ctx.session_factory() as s:
-            ctx.audit(s, found[0].username, "integration.claude.removed", "API key deleted")
-            s.commit()
-        return {"ok": True}
-
-    @router.post("/claude/test")
-    def test_claude(found=Depends(guards.require_admin)):
-        key = ctx.secrets.get(CLAUDE_SECRET)
-        if key is None:
-            raise HTTPException(409, "No Claude API key configured")
-        from .claude import check_key
-        result = check_key(claude_client(ctx, key))
-        with ctx.session_factory() as s:
-            ctx.audit(s, found[0].username, "integration.claude.tested", "ok" if result["ok"] else "error")
-            s.commit()
-        return result
 
     return router

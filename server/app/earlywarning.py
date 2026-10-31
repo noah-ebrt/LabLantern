@@ -1,10 +1,12 @@
 """KI-Frühwarnung (PLAN Abschnitt 5, Phase 6).
 
 Zwei Quellen, ein Bewertungsweg:
-A. Feeds (RSS/Atom, weltweit): nur Einträge, die ein Produkt aus dem Inventar beim Namen nennen, gehen an Claude
-   (Standard: neuestes Haiku), das die Fakten über ein festes Schema meldet. Der Rest geht nie an die KI.
-B. Web-Recherche (höchstens einmal in RESEARCH_HOURS, Standard: neuestes Sonnet): Claude sucht selbst nach frischen
-   Meldungen zu genau diesen Produkten und meldet sie über das gleiche Schema.
+A. Feeds (RSS/Atom, weltweit): nur Einträge, die ein Produkt aus dem Inventar beim Namen nennen, gehen an die KI,
+   die die Fakten über ein festes Schema meldet. Der Rest geht nie an die KI.
+B. Web-Recherche (höchstens einmal in RESEARCH_HOURS): die KI sucht selbst nach frischen Meldungen zu genau diesen
+   Produkten und meldet sie über das gleiche Schema.
+Jede der drei Aufgaben (classify, research, verify) läuft auf dem Anbieter und Modell, die unter „KI“ dafür gewählt
+sind (aiproviders.resolve); scheitert eine, wechselt nichts still zu einem anderen Anbieter.
 
 Inventar: Images, Betriebssysteme, Kernel, von Hand gepflegte Produkte und netznahe Host-Pakete aus den SBOMs
 (WATCHED_PACKAGES, z. B. Tailscale, OpenSSH, Docker).
@@ -33,12 +35,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
-from .claude import ClaudeError, ask_tool, research
+from .aibase import AiError, Provider
+from .aiproviders import any_configured, record_use, resolve
 from .containers import containers_of
 from .context import Context
 from .guards import Guards
-from .integrations import (CLAUDE_MODEL, CLAUDE_SECRET, LAST_USED_KEY, available_models, claude_client,
-                           latest_sonnet, resolve_model)
 from .mailtpl import early_warning_html
 from .models import EarlyWarning, Finding, System, put_setting, setting
 from .rules import classify_early_warning
@@ -47,7 +48,7 @@ log = logging.getLogger("vulnwatch.earlywarning")
 
 FEEDS_KEY = "earlywarning.feeds"
 PRODUCTS_KEY = "earlywarning.products"     # von Hand: [{"name": "TrueNAS", "version": "25.04.2"}]
-RESEARCH_KEY = "earlywarning.research"     # {"enabled": bool, "model": "" = neuestes Sonnet}
+RESEARCH_KEY = "earlywarning.research"     # {"enabled": bool (Recherche), "verify": bool (Prüfung beim Hersteller)}
 STATE_KEY = "ai.state"
 RESEARCH_STATE_KEY = "ai.research"
 DEFAULT_FEEDS = [
@@ -64,9 +65,43 @@ MAX_FEED_BYTES = 10_000_000
 MAX_ITEM_DAYS = 30         # ältere Einträge (Feeds mit ganzer Historie) gehen nie an die KI
 MAX_ITEMS_PER_FEED = 200
 MAX_AI_CALLS = 20          # je Durchgang; der Rest bleibt `pending` und kommt im nächsten dran
-INTERVAL_HOURS = 2
-RESEARCH_HOURS = 20        # Web-Recherche höchstens einmal am Tag (mit Sonnet etwa 0,20–0,40 $ je Durchgang)
+INTERVAL_HOURS = 2         # Vorgabe; einstellbar unter `earlywarning.ai`
+RESEARCH_HOURS = 20        # Vorgabe: Web-Recherche höchstens einmal am Tag (mit Sonnet etwa 0,20–0,40 $ je Durchgang)
 RESEARCH_DAYS = 3          # Suchfenster; der erste Lauf schaut 7 Tage zurück
+AI_KEY = "earlywarning.ai"   # {"level", "pass_hours", "research_hours", "max_searches", Schalter: SWITCHES}
+# KI-Stufen: full = alles mit KI (Recherche, Prüfung beim Hersteller per Websuche). balanced = Recherche seltener,
+# die Prüfung zuerst aus der NVD, KI nur ohne NVD-Daten; dazu der CISA-KEV-Katalog als Feed. minimal = keine
+# Recherche, Prüfung nur aus der NVD, KEV-Feed; die KI liest nur noch die Feed-Einträge (das günstige Modell).
+LEVELS = ("full", "balanced", "minimal")
+PASS_HOURS_RANGE = (1, 24)
+RESEARCH_HOURS_RANGE = (6, 336)
+MAX_SEARCHES_RANGE = (5, 30)   # Websuchen je Recherche (je 0,01 $); die gefundenen Seiten liest das Modell mit
+# Quellen und Sicherheitsnetze, unabhängig von der Stufe, alle standardmäßig an
+SWITCH_DEFAULTS = {"kev": True, "release_feeds": True, "health_alerts": True, "miss_check": True}
+SWITCHES = tuple(SWITCH_DEFAULTS)
+HEALTH_KEY = "earlywarning.health"   # {"problems": {Schlüssel: {"since", "text", "alerted"}}, "streaks", "feeds_down"}
+FEED_DOWN_HOURS = 24
+FAIL_STREAK = 2            # so viele Durchgänge in Folge mit Fehler beim Anbieter, dann Alarm (einer ist oft ein Ausreißer)
+MISS_KEY = "earlywarning.misscheck"
+MISS_DAYS = 7              # wöchentlich
+MISS_WINDOW = 30           # Tage, die die Prüfung zurückschaut
+GHSA_URL = "https://api.github.com/advisories?type=reviewed&per_page=100&published=%3E{since}&page={page}"
+GHSA_DAYS = MISS_DAYS + 1   # je Woche etwa 400–500 geprüfte Advisories; ein Tag Überlappung
+MAX_GHSA_PAGES = 10
+RELATED_DAYS = (14, 7)     # ohne CVE: Meldung zum selben Produkt bis 14 Tage vor bis 7 Tage nach dem KEV-Eintrag
+MAX_RELEASE_FEEDS = 40
+# Release-Notizen: nur Einträge mit klarem Sicherheitsbezug gehen an die KI. Ein bloßes „security“ trifft auch
+# „step-security/harden-runner“ oder „/settings/security“, „bypass“ auch eine Einstellung (an echten Feeds geprüft)
+SECURITY_WORDS = re.compile(r"\b(?:cve-\d{4}-\d{4,7}|ghsa(?:-\w{4}){3}|vulnerab\w*|exploit\w*|rce|xss|csrf|ssrf|"
+                            r"sicherheits\w*|security (?:fix|release|update|patch|advisory|issue|bug)\w*)\b"
+                            r"|\bfix\(security\)", re.I)
+SLACK = 15 * 60            # Durchgänge starten nie genau im Takt; ohne Spielraum fiele jede Runde um einen Takt später
+KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+NVD_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0?cveId="
+NVD_PAUSE = 6.5            # ohne API-Schlüssel erlaubt die NVD 5 Abrufe je 30 s
+MAX_NVD_CVES = 2           # je Meldung
+NVD_RETRY_HOURS = 24       # ohne NVD-Analyse („Awaiting Analysis“) erneut fragen, höchstens NVD_RETRY_DAYS lang
+NVD_RETRY_DAYS = 7
 MAX_RESEARCH_PRODUCTS = 80
 MIN_KEYWORD = 4
 GENERIC = {"server", "latest", "proxy", "manager", "base", "core", "web", "app", "api", "data", "linux", "docker",
@@ -238,11 +273,50 @@ def fetch_feed(url: str) -> list[dict]:
             data = r.read(MAX_FEED_BYTES + 1)
         if len(data) > MAX_FEED_BYTES:
             raise FeedError(f"feed larger than {MAX_FEED_BYTES // 1_000_000} MB, use a smaller feed")
-        return parse_feed(data)
+        return parse_kev(data) if url == KEV_URL else parse_feed(data)
     except urllib.error.HTTPError as e:
         raise FeedError(f"HTTP {e.code}") from None
     except (urllib.error.URLError, OSError) as e:
         raise FeedError(f"unreachable ({getattr(e, 'reason', e)})") from None
+
+
+def parse_kev(data: bytes) -> list[dict]:
+    """CISA-Katalog ausgenutzter Lücken (JSON) als Feed-Einträge: Hersteller und Produkt im Titel, damit auch Pakete
+    und Betriebssysteme (nur Titel) vorgefiltert werden; die KI liest sie wie jede andere Meldung."""
+    try:
+        doc = json.loads(data)
+    except ValueError:
+        raise FeedError("KEV catalog is not valid JSON") from None
+    items = []
+    vulns = doc.get("vulnerabilities") if isinstance(doc, dict) else None
+    for v in vulns if isinstance(vulns, list) else []:
+        cve = _s(v.get("cveID"), 32) if isinstance(v, dict) else ""
+        if not re.match(r"^CVE-\d{4}-\d{4,7}$", cve):
+            continue
+        added = _s(v.get("dateAdded"), 10)
+        summary = (f"{_s(v.get('vulnerabilityName'), 300)}. {_s(v.get('shortDescription'), 2000)} CISA lists {cve} as "
+                   f"actively exploited (Known Exploited Vulnerabilities catalog, added {added}). "
+                   f"Required action: {_s(v.get('requiredAction'), 500)}")
+        items.append({"id": cve, "title": f"{_s(v.get('vendorProject'))} {_s(v.get('product'))}: {cve} exploited",
+                      "link": f"https://nvd.nist.gov/vuln/detail/{cve}", "published": added, "summary": summary})
+    return items
+
+
+def release_feeds(products: list[dict]) -> dict[str, list[str]]:
+    """GitHub-Release-Feeds der Images aus dem Label org.opencontainers.image.source, je Feed die Stichwörter. Nur wenn
+    der Repo-Name zum Stichwort passt: ein eigenes Image auf nginx-Basis erbt sonst das Label von nginx."""
+    feeds: dict[str, list[str]] = {}
+    for p in products:
+        m = re.match(r"^https://github\.com/([\w.-]+)/([\w.-]+?)(?:\.git)?/?$", p.get("source") or "")
+        if p["kind"] != "image" or not m:
+            continue
+        repo = set(re.split(r"[^a-z0-9]+", f"{m[1]} {m[2]}".lower()))
+        if not any(t in repo for t in re.split(r"[^a-z0-9]+", p["keyword"]) if len(t) >= MIN_KEYWORD and t not in GENERIC):
+            continue
+        keywords = feeds.setdefault(f"https://github.com/{m[1]}/{m[2]}/releases.atom", [])
+        if p["keyword"] not in keywords:
+            keywords.append(p["keyword"])
+    return dict(list(feeds.items())[:MAX_RELEASE_FEEDS])
 
 
 def configured_feeds(s) -> list[str]:
@@ -345,6 +419,7 @@ def inventory_products(s, data_dir: Path | None = None) -> list[dict]:
             out.append({**base, "keyword": _keyword(ref), "product": ref, "version": version, "kind": "image",
                         "target": f"image:{ref[:200]}"[:300], "pinned": pinned,
                         "project_dir": (c.get("labels") or {}).get("com.docker.compose.project.working_dir", ""),
+                        "source": (c.get("labels") or {}).get("org.opencontainers.image.source", ""),
                         "project": (c.get("labels") or {}).get("com.docker.compose.project", "")})
         if inv.get("os_id"):
             os_kw = "debian" if inv["os_id"] == "raspbian" else inv["os_id"]
@@ -424,15 +499,13 @@ def prefilter(item: dict, products: list[dict], feed_url: str = "") -> list[dict
 
 # ---------- 3. KI ----------
 
-AiError = ClaudeError
-
-
-def ask_claude(client, model: str, item: dict) -> tuple[dict, dict]:
-    """(geprüfte Tool-Eingabe, Archiv-Eintrag). Wirft ClaudeError bei jedem Problem; der Aufrufer macht daraus `unklar`."""
+def ask_ai(provider: Provider, model: str, item: dict) -> tuple[dict, dict]:
+    """(geprüfte Tool-Eingabe, Archiv-Eintrag). Wirft AiError bei jedem Problem; der Aufrufer macht daraus `unklar`."""
     text = f"Title: {item['title']}\nPublished: {item['published']}\nLink: {item['link']}\n\n{item['summary']}"
-    data, response = ask_tool(client, model, SYSTEM, f"<<<ADVISORY\n{text[:12000]}\nADVISORY>>>", TOOL)
-    archive = {"request": {"model": model, "prompt_sha256": hashlib.sha256(text.encode()).hexdigest(),
-                           "chars": len(text)}, "response": response, "at": time.time()}
+    data, response = provider.ask_tool(model, SYSTEM, f"<<<ADVISORY\n{text[:12000]}\nADVISORY>>>", TOOL)
+    archive = {"request": {"provider": provider.pid, "model": model,
+                           "prompt_sha256": hashlib.sha256(text.encode()).hexdigest(), "chars": len(text)},
+               "response": response, "at": time.time()}
     return validate(data), archive
 
 
@@ -447,7 +520,7 @@ def _enum(v, allowed: tuple) -> str:
 def validate(data) -> dict:
     """Die Antwort wird nur so weit übernommen, wie sie dem Schema entspricht."""
     if not isinstance(data, dict):
-        raise ClaudeError("tool input is not an object")
+        raise AiError("tool input is not an object")
     products = []
     for p in (data.get("products") or [])[:10]:
         if not isinstance(p, dict) or not _s(p.get("product")):
@@ -469,7 +542,7 @@ def validate(data) -> dict:
 
 def validate_research(data) -> list[dict]:
     if not isinstance(data, dict):
-        raise ClaudeError("tool input is not an object")
+        raise AiError("tool input is not an object")
     out = []
     for a in (data.get("advisories") or [])[:30]:
         if not isinstance(a, dict) or not _s(a.get("title")):
@@ -798,15 +871,24 @@ VERIFY_SYSTEM = (
 MAX_VERIFY = 3   # je Durchgang; jede Prüfung kostet einige Cent
 
 
-def _needs_verify(w: EarlyWarning) -> bool:
+def _needs_verify(w: EarlyWarning, now: float | None = None) -> bool:
+    """Noch nicht geprüft, oder die NVD hatte noch keine Analyse: dann einmal am Tag erneut, eine Woche lang."""
     stored = json.loads(w.ai_json or "{}")
-    return (w.severity == "hoch" and w.status in ("betroffen", "unklar") and bool(json.loads(w.affected or "[]"))
-            and isinstance(stored.get("result"), dict) and "verified" not in stored)
+    if not (w.severity == "hoch" and w.status in ("betroffen", "unklar") and bool(json.loads(w.affected or "[]"))
+            and isinstance(stored.get("result"), dict)):
+        return False
+    done = stored.get("verified")
+    if not isinstance(done, dict) or done.get("source") != "none":
+        return done is None
+    now = now or time.time()
+    created = w.created_at.replace(tzinfo=w.created_at.tzinfo or timezone.utc).timestamp() if w.created_at else now
+    return now - (done.get("at") or 0) > NVD_RETRY_HOURS * 3600 and now - created < NVD_RETRY_DAYS * 86400
 
 
-def verify(ctx: Context, client, model: str, w: EarlyWarning) -> None:
+def verify(ctx: Context, provider: Provider, model: str, w: EarlyWarning) -> str | None:
     """Vor der Meldung: Fakten eines „hoch“-Treffers mit der Herstellermeldung abgleichen (Anreißer nennen selten
-    Versionen). Ausnutzung wird dabei nie zurückgenommen. Fehler lassen die bisherige Einstufung stehen."""
+    Versionen). Ausnutzung wird dabei nie zurückgenommen. Fehler lassen die bisherige Einstufung stehen und kommen
+    als Text zurück (sonst None)."""
     stored = json.loads(w.ai_json or "{}")
     matched = json.loads(w.matched)
     installed = sorted({f"- {p['product']} {p['version'] or '(version unknown)'}" for p in matched})
@@ -814,28 +896,154 @@ def verify(ctx: Context, client, model: str, w: EarlyWarning) -> None:
             "Installed here:\n" + "\n".join(installed[:20]))
     system = VERIFY_SYSTEM.format(today=datetime.now(timezone.utc).date().isoformat())
     try:
-        data, archive = research(client, model, system, text, TOOL, max_searches=4)
+        data, archive = provider.research(model, system, text, TOOL, max_searches=4)
         facts = validate(data)
-    except ClaudeError as e:
+    except AiError as e:
         w.ai_json = json.dumps({**stored, "verified": {"at": time.time(), "error": str(e)}})
-        return
+        return str(e)
     before = stored["result"]
     for k in ("exploited", "public_exploit"):
         if before.get(k) == "yes":
             facts[k] = "yes"
     facts["cves"] = sorted(set(facts["cves"]) | set(before.get("cves") or []))
     w.ai_json = json.dumps({**stored, "result": facts, "unverified_result": before,
-                            "verified": {"at": time.time(), "model": model, "searches": archive["searches"],
-                                         "sources": archive["sources"][:10]}})
+                            "verified": {"at": time.time(), "source": "ai", "provider": provider.pid, "model": model,
+                                         "searches": archive["searches"], "sources": archive["sources"][:10],
+                                         "usage": archive.get("usage")}})
+    return None
+
+
+# ---------- 5b. Prüfung ohne KI: NVD ----------
+
+_nvd_last = 0.0
+
+
+def fetch_nvd(cve: str) -> dict:
+    """Ein CVE-Datensatz der NVD (API 2.0), gedrosselt. Es geht nur die CVE-Nummer hinaus, nie das Inventar."""
+    global _nvd_last
+    wait = _nvd_last + NVD_PAUSE - time.monotonic()
+    if wait > 0:
+        time.sleep(wait)
+    _nvd_last = time.monotonic()
+    req = urllib.request.Request(NVD_URL + cve, headers={"User-Agent": "vulnwatch", "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:  # noqa: S310 (feste https-URL)
+            return nvd_facts(json.loads(r.read(MAX_FEED_BYTES)))
+    except urllib.error.HTTPError as e:
+        raise FeedError(f"NVD: HTTP {e.code}") from None
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        raise FeedError(f"NVD: unreachable ({getattr(e, 'reason', e)})") from None
+
+
+def nvd_facts(doc: dict) -> dict:
+    """Produkte mit Versionsbereichen aus den CPE-Konfigurationen, Schweregrad (CVSS) und aktive Ausnutzung (CISA KEV).
+    Ohne Analyse („Awaiting Analysis“) bleibt `products` leer. Produktname = CPE-Produkt („gitlab“, „truenas scale“)."""
+    vulns = doc.get("vulnerabilities") if isinstance(doc, dict) else None
+    cve = (vulns[0] or {}).get("cve") or {} if isinstance(vulns, list) and vulns else {}
+    products: dict[str, list[dict]] = {}
+    for conf in cve.get("configurations") or []:
+        for node in conf.get("nodes") or []:
+            for m in node.get("cpeMatch") or []:
+                parts = str(m.get("criteria") or "").split(":")
+                if not m.get("vulnerable") or len(parts) < 6 or parts[2] not in ("a", "o"):
+                    continue   # Hardware (h) und „läuft auf“-Bedingungen sind kein installierter Stand
+                version = parts[5]
+                if version not in ("*", "-", ""):
+                    r = {"introduced": version, "fixed": "", "last_affected": version}
+                else:
+                    r = {"introduced": m.get("versionStartIncluding") or m.get("versionStartExcluding") or "",
+                         "fixed": m.get("versionEndExcluding") or "", "last_affected": m.get("versionEndIncluding") or ""}
+                if r["fixed"] or r["last_affected"]:   # nur „ab X“ ohne Ende sagt nichts über installierte Stände
+                    products.setdefault(parts[4].replace("_", " "), []).append({k: _s(v, 64) for k, v in r.items()})
+    severity = "unknown"
+    for key in ("cvssMetricV40", "cvssMetricV31", "cvssMetricV30"):
+        for metric in (cve.get("metrics") or {}).get(key) or []:
+            severity = _enum(str((metric.get("cvssData") or {}).get("baseSeverity") or "").lower(),
+                             ("critical", "high", "medium", "low"))
+            if severity != "unknown":
+                break
+        if severity != "unknown":
+            break
+    return {"products": [{"product": name, "affected": ranges[:20],
+                          "fixed_versions": sorted({r["fixed"] for r in ranges if r["fixed"]})[:20]}
+                         for name, ranges in products.items()],
+            "severity": severity, "exploited": "yes" if cve.get("cisaExploitAdd") else "unknown"}
+
+
+def nvd_verify(before: dict, matched: list[dict], lookup=fetch_nvd) -> dict | None:
+    """Die Fakten der KI mit der NVD prüfen: Für jedes Stichwort, das die NVD mit Versionsbereichen kennt, gelten ihre
+    Bereiche statt der aus dem Anreißer; Ausnutzung wird nie zurückgenommen. None, wenn die NVD keines der
+    betroffenen Produkte mit Versionen kennt (noch nicht analysiert, keine CVE in der Meldung)."""
+    found = [lookup(c) for c in (before.get("cves") or [])[:MAX_NVD_CVES]]
+    nvd = [p for f in found for p in f["products"] if any(_matches(p["product"], m["keyword"]) for m in matched)]
+    if not nvd:
+        return None
+    covered = [m["keyword"] for m in matched if any(_matches(p["product"], m["keyword"]) for p in nvd)]
+    kept = [p for p in before.get("products") or [] if not any(_matches(p["product"], k) for k in covered)]
+    severities = [f["severity"] for f in found if f["severity"] != "unknown"]
+    exploited = "yes" if "yes" in (before.get("exploited"), *(f["exploited"] for f in found)) else before.get("exploited")
+    return {**before, "products": nvd + kept, "exploited": exploited,
+            "severity": max(severities, key=("low", "medium", "high", "critical").index) if severities
+            else before.get("severity", "unknown"),
+            "fix_available": "yes" if any(p["fixed_versions"] for p in nvd) else before.get("fix_available", "unknown")}
+
+
+def check(ctx: Context, w: EarlyWarning, level: str, provider: Provider | None, model: str | None,
+          lookup=fetch_nvd) -> tuple[str | None, bool]:
+    """Prüfung beim Hersteller je nach KI-Stufe: full mit KI; balanced zuerst die NVD, KI nur ohne NVD-Daten;
+    minimal nur die NVD. (Fehler, mit KI geprüft)."""
+    if level != "full":
+        stored = json.loads(w.ai_json or "{}")
+        before = stored["result"]
+        try:
+            facts, error = nvd_verify(before, json.loads(w.matched), lookup), None
+        except FeedError as e:
+            facts, error = None, str(e)
+        if facts is not None:
+            w.ai_json = json.dumps({**stored, "result": facts, "unverified_result": before,
+                                    "verified": {"at": time.time(), "source": "nvd", "cves": before["cves"][:MAX_NVD_CVES]}})
+            return None, False
+        if level == "minimal" or provider is None:
+            w.ai_json = json.dumps({**stored, "verified": {"at": time.time(), "source": "none",
+                                                           "error": error or "no NVD analysis with versions yet"}})
+            return None, False
+        error = verify(ctx, provider, model, w)
+        done = json.loads(w.ai_json)
+        done["verified"]["nvd"] = "missing"   # für die Kostenschätzung: Anteil, den die NVD nicht abdeckt
+        w.ai_json = json.dumps(done)
+        return error, True
+    return verify(ctx, provider, model, w), True
 
 
 def research_config(s) -> dict:
-    return {"enabled": True, "model": "", **(setting(s, RESEARCH_KEY) or {})}
+    """Zwei Schalter, beide standardmäßig an: die Recherche und die Prüfung beim Hersteller. Das Modell wählt
+    `ai.tasks`; ein altes `model` im gespeicherten Wert wird ignoriert."""
+    cfg = setting(s, RESEARCH_KEY) or {}
+    return {"enabled": bool(cfg.get("enabled", True)), "verify": bool(cfg.get("verify", True))}
+
+
+def ai_config(s) -> dict:
+    """KI-Stufe und Takte (Vorgabe: full, alle 2 h, Recherche alle 20 h)."""
+    cfg = setting(s, AI_KEY) or {}
+    clamp = lambda v, d, r: min(max(int(v), r[0]), r[1]) if isinstance(v, int) else d  # noqa: E731
+    return {"level": cfg.get("level") if cfg.get("level") in LEVELS else "full",
+            "pass_hours": clamp(cfg.get("pass_hours"), INTERVAL_HOURS, PASS_HOURS_RANGE),
+            "research_hours": clamp(cfg.get("research_hours"), RESEARCH_HOURS, RESEARCH_HOURS_RANGE),
+            "max_searches": clamp(cfg.get("max_searches"), 15, MAX_SEARCHES_RANGE),
+            **{k: cfg[k] if isinstance(cfg.get(k), bool) else SWITCH_DEFAULTS[k] for k in SWITCHES}}
 
 
 def research_due(s, now: float | None = None) -> bool:
+    cfg = ai_config(s)
     last = (setting(s, RESEARCH_STATE_KEY) or {}).get("at") or 0
-    return research_config(s)["enabled"] and (now or time.time()) - last > RESEARCH_HOURS * 3600
+    return (research_config(s)["enabled"] and cfg["level"] != "minimal"
+            and (now or time.time()) - last > cfg["research_hours"] * 3600 - SLACK)
+
+
+def pass_due(s, now: float | None = None) -> bool:
+    """Der Zeitplan tickt stündlich; ein Durchgang läuft, wenn der letzte den eingestellten Takt zurückliegt."""
+    last = (setting(s, STATE_KEY) or {}).get("at") or 0
+    return (now or time.time()) - last > ai_config(s)["pass_hours"] * 3600 - SLACK
 
 
 def research_prompt(products: list[dict]) -> str:
@@ -848,24 +1056,39 @@ def research_prompt(products: list[dict]) -> str:
     return "Products in use (name, installed version, kind, hosts):\n" + "\n".join(lines)
 
 
-def run_research(ctx: Context, client, products: list[dict]) -> dict:
-    """Web-Recherche: neue Meldungen werden wie Feed-Einträge eingestuft (Feed `web-research`)."""
+def _research_failed(ctx: Context, state: dict, error: str) -> dict:
+    """Den Fehlschlag der Recherche festhalten (sichtbar in den Einstellungen) und den Zustand zurückgeben."""
+    state.update(ok=False, error=error)
     with ctx.session_factory() as s:
-        cfg = research_config(s)
-        first = not (setting(s, RESEARCH_STATE_KEY) or {}).get("at")
-    model = cfg["model"] or latest_sonnet(available_models(ctx))
-    state = {"at": time.time(), "model": model, "ok": False}
+        put_setting(s, RESEARCH_STATE_KEY, state)
+        s.commit()
+    return state
+
+
+def run_research(ctx: Context, products: list[dict], max_searches: int = 15) -> dict:
+    """Web-Recherche: neue Meldungen werden wie Feed-Einträge eingestuft (Feed `web-research`).
+    Anbieter und Modell kommen aus der Wahl für „research“; ohne passenden Anbieter steht der Grund im Zustand."""
+    with ctx.session_factory() as s:
+        before = (setting(s, RESEARCH_STATE_KEY) or {}).get("at")
+    first = not before
+    try:
+        provider, model = resolve(ctx, "research")
+    except AiError as e:
+        # Es wurde nicht recherchiert: `at` rückt nicht vor. So versucht der nächste Durchgang es billig erneut, und die
+        # erste echte Recherche nach dem Einrichten eines Anbieters nimmt weiter das 7-Tage-Fenster.
+        return _research_failed(ctx, {"at": before} if before else {}, str(e))
+    state = {"at": time.time(), "ok": False}
+    state.update(provider=provider.pid, model=model)
     today = datetime.now(timezone.utc).date().isoformat()
     system = RESEARCH_SYSTEM.format(days=7 if first else RESEARCH_DAYS, today=today)
     try:
-        data, archive = research(client, model, system, research_prompt(products), RESEARCH_TOOL)
+        data, archive = provider.research(model, system, research_prompt(products), RESEARCH_TOOL,
+                                          max_searches=max_searches)
         found = validate_research(data)
-    except ClaudeError as e:
-        state["error"] = str(e)
-        with ctx.session_factory() as s:
-            put_setting(s, RESEARCH_STATE_KEY, state)
-            s.commit()
-        return state
+    except AiError as e:
+        record_use(ctx, provider, "research", model, False, str(e))
+        return _research_failed(ctx, state, str(e))
+    record_use(ctx, provider, "research", model, True)
     new = 0
     with ctx.session_factory() as s:
         since = datetime.now(timezone.utc) - timedelta(days=MAX_ITEM_DAYS)
@@ -896,15 +1119,19 @@ def run_research(ctx: Context, client, products: list[dict]) -> dict:
     return state
 
 
-def run_pass(ctx: Context, fetch=fetch_feed, force_research: bool = False) -> dict:
-    """Feeds abrufen, vorfiltern, neue Einträge einstufen, fällige Recherche, neue Treffer melden.
-    Liefert den gespeicherten Zustand."""
+def run_pass(ctx: Context, fetch=fetch_feed, force_research: bool = False, lookup=fetch_nvd) -> dict:
+    """Feeds abrufen, vorfiltern, neue Einträge einstufen, fällige Recherche, Prüfung beim Hersteller, neue Treffer
+    melden. Liefert den gespeicherten Zustand."""
     if not _lock.acquire(blocking=False):
         return {"busy": True}
     try:
         with ctx.session_factory() as s:
-            feeds = configured_feeds(s)
+            cfg = ai_config(s)
+            level = cfg["level"]
             products = inventory_products(s, ctx.settings.data_dir)
+            # KEV: ausgenutzte Lücken, strukturiert und ohne Websuche; Release-Feeds: die eigenen Notizen der Projekte
+            releases = release_feeds(products) if cfg["release_feeds"] else {}
+            feeds = configured_feeds(s) + ([KEV_URL] if cfg["kev"] else []) + list(releases)
         feed_errors, new = {}, 0
         for url in feeds:
             try:
@@ -916,7 +1143,11 @@ def run_pass(ctx: Context, fetch=fetch_feed, force_research: bool = False) -> di
                 for item in items:
                     if not is_recent(item):
                         continue
-                    matched = prefilter(item, products, url)
+                    if url in releases:   # gilt für die Stichwörter des Repos, aber nur, wenn es um Sicherheit geht
+                        sec = SECURITY_WORDS.search(f"{item['title']} {item['summary']}")
+                        matched = [p for p in products if p["keyword"] in releases[url]] if sec else []
+                    else:
+                        matched = prefilter(item, products, url)
                     if not matched:
                         continue
                     key = hashlib.sha256(f"{url}\n{item['id']}".encode()).hexdigest()
@@ -927,11 +1158,14 @@ def run_pass(ctx: Context, fetch=fetch_feed, force_research: bool = False) -> di
                                        ai_json=json.dumps({"summary": item["summary"]})))
                     new += 1
                 s.commit()
-        key = ctx.secrets.get(CLAUDE_SECRET)
-        client = claude_client(ctx, key) if key else None
-        model = resolve_model(ctx) if key else CLAUDE_MODEL
+        try:
+            provider, model = resolve(ctx, "classify")
+            unavailable = None
+        except AiError as e:
+            provider = model = None
+            unavailable = e   # jede ausstehende Meldung wird dann `unklar`, mit diesem Grund
         calls = 0
-        last_used = None
+        last_error = None   # Ergebnis des letzten Aufrufs (für die Anzeige in den Einstellungen)
         with ctx.session_factory() as s:
             pending = s.scalars(select(EarlyWarning).where(EarlyWarning.status == "pending")
                                 .order_by(EarlyWarning.id).limit(MAX_AI_CALLS)).all()
@@ -940,48 +1174,253 @@ def run_pass(ctx: Context, fetch=fetch_feed, force_research: bool = False) -> di
                 item = {"title": w.title, "link": w.link, "published": w.published, "summary": stored.get("summary", "")}
                 matched = json.loads(w.matched)
                 try:
-                    if not client:
-                        raise ClaudeError("no Claude API key configured")
+                    if provider is None:
+                        raise unavailable
                     calls += 1
-                    last_used = {"at": datetime.now(timezone.utc).isoformat(), "model": model, "ok": False}
-                    ai, archive = ask_claude(client, model, item)
-                    last_used["ok"] = True
+                    last_error = ""
+                    ai, archive = ask_ai(provider, model, item)
+                    last_error = None
                     w.ai_json = json.dumps({**stored, **archive, "result": ai})
                     apply(s, w, ai, matched)
-                except ClaudeError as e:
-                    w.status, w.detail = "unklar", f"Claude could not read the advisory ({e}); ask again"
+                except AiError as e:
+                    if provider is not None:
+                        last_error = str(e)
+                    w.status, w.detail = "unklar", f"The AI provider could not read the advisory ({e}); ask again"
                     w.affected, w.actions, w.severity = "[]", "[]", None
                     w.ai_json = json.dumps({**stored, "error": str(e), "at": time.time()})
                 w.classified_at = datetime.now(timezone.utc)
+                s.commit()   # nie eine Schreibsperre über die nächsten, womöglich minutenlangen Aufrufe halten (SQLite)
             state = {"at": time.time(), "feed_errors": feed_errors, "new": new, "ai_calls": calls,
                      "keywords": len({p["keyword"] for p in products})}
-            if last_used:
-                put_setting(s, LAST_USED_KEY, last_used)
+            classify_error = last_error if calls else (str(unavailable) if unavailable is not None and pending else None)
+            outcomes = {"classify": (bool(calls) or classify_error is not None, classify_error)}
             s.commit()
-            due = client is not None and (force_research or research_due(s))
+            due = (force_research or research_due(s)) and any_configured(ctx)   # ohne Anbieter: nichts zu melden
+        if calls:
+            record_use(ctx, provider, "classify", model, last_error is None, last_error)
         if due:
-            state["research"] = run_research(ctx, client, products)
+            state["research"] = run_research(ctx, products, cfg["max_searches"])
         with ctx.session_factory() as s:
-            cfg = research_config(s)
-            if client is not None and cfg["enabled"]:
-                model = cfg["model"] or latest_sonnet(available_models(ctx))
+            verify_on = research_config(s)["verify"]
+            v_provider = v_model = verify_error = None
+            ai_checks = 0
+            if verify_on and level != "minimal" and any_configured(ctx):
+                try:
+                    v_provider, v_model = resolve(ctx, "verify")
+                except AiError as e:
+                    state["verify_error"] = str(e)
+            # full prüft nur mit KI; darunter geht die NVD auch ohne Anbieter
+            if verify_on and (v_provider is not None or level != "full"):
                 candidates = [w for w in s.scalars(select(EarlyWarning).where(EarlyWarning.severity == "hoch")
                                                    .order_by(EarlyWarning.notified_at.is_not(None), EarlyWarning.id.desc()))
                               if _needs_verify(w)][:MAX_VERIFY]
                 for w in candidates:
-                    verify(ctx, client, model, w)
+                    error, by_ai = check(ctx, w, level, v_provider, v_model, lookup)
+                    if by_ai:
+                        ai_checks, verify_error = ai_checks + 1, error
                     result = json.loads(w.ai_json)["result"]
                     _remove_ai_findings(s, w)
                     apply(s, w, result, json.loads(w.matched))
                     s.commit()   # nie eine Schreibsperre über den nächsten, minutenlangen Aufruf halten
                 state["verified"] = len(candidates)
+                if ai_checks:
+                    record_use(ctx, v_provider, "verify", v_model, verify_error is None, verify_error)
             s.commit()
             state["notified"] = notify_new(ctx, s)
+            outcomes["verify"] = (ai_checks > 0 or "verify_error" in state, verify_error or state.get("verify_error"))
+            update_health(ctx, s, state, outcomes)
             put_setting(s, STATE_KEY, state)
             s.commit()
         return state
     finally:
         _lock.release()
+
+
+# ---------- 8. Ausfälle melden ----------
+
+def update_health(ctx: Context, s, state: dict, outcomes: dict, now: float | None = None) -> dict:
+    """Ausfälle der Frühwarnung erkennen und je Problem einmal melden, ebenso die Erholung: ein Anbieter scheitert
+    FAIL_STREAK Durchgänge in Folge, die letzte Recherche schlug fehl, ein Feed ist über FEED_DOWN_HOURS nicht
+    erreichbar. `outcomes`: {Aufgabe: (lief, Fehler oder None)}. Liefert die aktuellen Probleme."""
+    now = now or time.time()
+    cfg = ai_config(s)
+    health = setting(s, HEALTH_KEY) or {}
+    streaks, last, old = health.get("streaks") or {}, health.get("errors") or {}, health.get("problems") or {}
+    found = {}
+    for task, label in (("classify", "Reading advisories"), ("verify", "The vendor check")):
+        ran, error = outcomes.get(task, (False, None))
+        if ran:
+            streaks[task] = streaks.get(task, 0) + 1 if error else 0
+            if error:
+                last[task] = error
+        if streaks.get(task, 0) >= FAIL_STREAK:
+            found[task] = f"{label} failed {streaks[task]} passes in a row: {last.get(task)}"
+    research = setting(s, RESEARCH_STATE_KEY) or {}
+    if research_config(s)["enabled"] and cfg["level"] != "minimal" and research.get("ok") is False and research.get("error"):
+        found["research"] = f"Web research failed: {research['error']}"
+    errors = state.get("feed_errors") or {}
+    down = {u: (health.get("feeds_down") or {}).get(u, now) for u in errors}
+    for url, since in down.items():
+        if now - since > FEED_DOWN_HOURS * 3600:
+            found[f"feed:{url}"] = f"Feed unreachable for {round((now - since) / 3600)} h: {url} ({errors[url]})"
+    problems = {k: {"since": (old.get(k) or {}).get("since", now), "text": text,
+                    "alerted": (old.get(k) or {}).get("alerted", False)} for k, text in found.items()}
+    new = [p for p in problems.values() if not p["alerted"]]
+    resolved = [p for k, p in old.items() if k not in problems and p.get("alerted")]
+    if cfg["health_alerts"] and ctx.notifier is not None and (new or resolved):
+        lines = ([f"- {p['text']}" for p in new] + (["", "Resolved:"] if new and resolved else [])
+                 + [f"- {p['text']}" for p in resolved])
+        title = ("vulnwatch: early warning has a problem" if new else "vulnwatch: early warning works again")
+        ok, _ = ctx.notifier(title, "\n".join(lines) + "\n\nDetails under Early warnings.", None, kind="alert")
+        if ok:
+            for p in new:
+                p["alerted"] = True
+        else:   # die Erholung beim nächsten Durchgang erneut melden
+            problems.update({k: {**p, "resolved": True} for k, p in old.items() if k not in problems and p.get("alerted")})
+    put_setting(s, HEALTH_KEY, {"problems": problems, "streaks": streaks, "errors": last, "feeds_down": down})
+    return problems
+
+
+def health_problems(s) -> list[dict]:
+    return [{"key": k, **p} for k, p in ((setting(s, HEALTH_KEY) or {}).get("problems") or {}).items()
+            if not p.get("resolved")]
+
+
+# ---------- 9. Wöchentliche Abdeckungsprüfung ----------
+
+def fetch_ghsa(since: str) -> list[dict]:
+    """Geprüfte GitHub-Advisories seit `since` (YYYY-MM-DD), ohne Anmeldung (60 Abrufe je Stunde reichen)."""
+    out: list[dict] = []
+    for page in range(1, MAX_GHSA_PAGES + 1):
+        req = urllib.request.Request(GHSA_URL.format(since=since, page=page), headers={
+            "User-Agent": "vulnwatch", "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"})
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:  # noqa: S310 (feste https-URL)
+                items = json.loads(r.read(MAX_FEED_BYTES))
+        except urllib.error.HTTPError as e:
+            raise FeedError(f"GitHub advisories: HTTP {e.code}") from None
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            raise FeedError(f"GitHub advisories: unreachable ({getattr(e, 'reason', e)})") from None
+        if not isinstance(items, list):
+            raise FeedError("GitHub advisories: unexpected answer")
+        out += [a for a in items if isinstance(a, dict)]
+        if len(items) < 100:
+            break
+    return out
+
+
+def _cve_index(s) -> tuple[dict[str, list[tuple[datetime, str, int]]], dict[str, list[tuple[datetime, str, int]]]]:
+    """CVE → [(gesehen am, Feed, Meldung)] aus allen Frühwarnungen (Fakten vor und nach der Prüfung, Titel), dazu
+    dasselbe je Stichwort: Nachrichten nennen oft keine CVE („Plex2Shell exploit chain…“)."""
+    index: dict[str, list] = {}
+    by_keyword: dict[str, list] = {}
+    for w in s.scalars(select(EarlyWarning)):
+        try:
+            d = json.loads(w.ai_json or "{}")
+        except ValueError:
+            d = {}
+        cves = set(re.findall(r"CVE-\d{4}-\d{4,7}", w.title or ""))
+        for k in ("result", "unverified_result"):
+            if isinstance(d.get(k), dict):
+                cves |= {c for c in d[k].get("cves") or [] if isinstance(c, str)}
+        created = w.created_at or datetime.now(timezone.utc)
+        seen = created if created.tzinfo else created.replace(tzinfo=timezone.utc)
+        for c in cves:
+            index.setdefault(c, []).append((seen, w.feed, w.id))
+        try:
+            keywords = {m.get("keyword") for m in json.loads(w.matched or "[]") if isinstance(m, dict)}
+        except ValueError:
+            keywords = set()
+        for k in keywords - {None}:
+            by_keyword.setdefault(k, []).append((seen, w.feed, w.id))
+    return index, by_keyword
+
+
+def miss_check(s, products: list[dict], kev: list[dict], ghsa: list[dict], now: float | None = None) -> dict:
+    """Wie gut war die Frühwarnung? Für jede ausgenutzte Lücke (KEV) der letzten MISS_WINDOW Tage, die ein Produkt
+    betrifft: vorher von Feeds oder Recherche gemeldet (`early`, mit Vorsprung in Tagen), erst danach (`late`), ohne
+    CVE eine Meldung zum selben Produkt um diese Zeit (`related`), nur über den KEV-Feed (`kev_only`) oder gar nicht
+    (`missed`). GitHub-Advisories (hoch/kritisch) zu Paketen, deren
+    Name einem Produkt entspricht: gesehen oder nicht (`possible` – der Name allein ist kein sicherer Treffer)."""
+    now = now or time.time()
+    start = datetime.fromtimestamp(now, timezone.utc) - timedelta(days=MISS_WINDOW)
+    index, by_keyword = _cve_index(s)
+    rows = []
+    for item in kev:
+        added = published_at(item.get("published") or "")
+        hit = prefilter(item, products, KEV_URL) if added is not None and added >= start else []
+        if not hit:
+            continue
+        days = lambda x: (added.date() - x[0].date()).days  # noqa: E731 (Kalendertage; KEV nennt nur das Datum)
+        seen = index.get(item["id"], [])
+        other = sorted(x for x in seen if x[1] != KEV_URL)
+        near = sorted(x for k in {p["keyword"] for p in hit} for x in by_keyword.get(k, [])
+                      if x[1] != KEV_URL and -RELATED_DAYS[1] <= days(x) <= RELATED_DAYS[0])
+        if other:
+            status, first = ("early" if days(other[0]) >= 0 else "late"), other[0]
+        elif near:
+            status, first = "related", near[0]
+        else:
+            status, first = ("kev_only" if seen else "missed"), (seen[0] if seen else None)
+        rows.append({"cve": item["id"], "title": item["title"], "added": item["published"], "status": status,
+                     "lead_days": days(first) if status in ("early", "late", "related") else None,
+                     "warning_id": first[2] if first else None})
+    apps = [p for p in products if p["kind"] in ("image", "manual", "appliance")]
+    advisories = []
+    for a in ghsa:
+        if a.get("severity") not in ("high", "critical"):
+            continue
+        names = {str((v.get("package") or {}).get("name") or "").rsplit("/", 1)[-1]
+                 for v in a.get("vulnerabilities") or [] if isinstance(v, dict)}
+        hit = sorted({p["keyword"] for p in apps for n in names if n and _matches(n, p["keyword"])})
+        if not hit:
+            continue
+        cve = a.get("cve_id") or ""
+        advisories.append({"id": _s(a.get("ghsa_id"), 40), "cve": cve, "summary": _s(a.get("summary"), 200),
+                           "products": hit, "published": _s(a.get("published_at"), 10),
+                           "url": _s(a.get("html_url"), 300), "status": "seen" if cve in index else "possible"})
+    count = lambda xs, st: sum(1 for x in xs if x["status"] == st)  # noqa: E731
+    return {"at": now, "window_days": MISS_WINDOW, "kev": rows, "ghsa": advisories,
+            "counts": {st: count(rows, st) for st in ("early", "late", "related", "kev_only", "missed")}
+            | {"ghsa_seen": count(advisories, "seen"), "ghsa_possible": count(advisories, "possible")}}
+
+
+def miss_due(s, now: float | None = None) -> bool:
+    last = (setting(s, MISS_KEY) or {}).get("at") or 0
+    return ai_config(s)["miss_check"] and (now or time.time()) - last > MISS_DAYS * 86400 - SLACK
+
+
+def run_miss_check(ctx: Context, fetch=fetch_feed, advisories=fetch_ghsa) -> dict:
+    """KEV und GitHub-Advisories holen, abgleichen, speichern; bei Lücken eine Nachricht. Fehler einer Quelle stehen
+    im Ergebnis, die andere zählt trotzdem."""
+    now = time.time()
+    errors, kev, ghsa = {}, [], []
+    try:
+        kev = fetch(KEV_URL)
+    except FeedError as e:
+        errors["kev"] = str(e)
+    since = (datetime.fromtimestamp(now, timezone.utc) - timedelta(days=GHSA_DAYS)).date().isoformat()
+    try:
+        ghsa = advisories(since)
+    except FeedError as e:
+        errors["ghsa"] = str(e)
+    with ctx.session_factory() as s:
+        result = {**miss_check(s, inventory_products(s, ctx.settings.data_dir), kev, ghsa, now), "errors": errors}
+        put_setting(s, MISS_KEY, result)
+        s.commit()
+    c = result["counts"]
+    gaps = [r for r in result["kev"] if r["status"] in ("missed", "late", "kev_only")]
+    possible = [a for a in result["ghsa"] if a["status"] == "possible"]
+    if (gaps or possible) and ctx.notifier is not None:
+        lines = [f"Exploited issues (CISA KEV) for your products in the last {MISS_WINDOW} days: {len(result['kev'])}; "
+                 f"warned early {c['early']}, late {c['late']}, same product without CVE {c['related']}, "
+                 f"only via KEV {c['kev_only']}, missed {c['missed']}."]
+        lines += [f"- {r['cve']} {r['title']}: {r['status'].replace('_', ' ')}" for r in gaps[:20]]
+        if possible:
+            lines += ["", "GitHub advisories (high/critical) for packages named like your products, not seen:"]
+            lines += [f"- {a['id']} {a['cve']} {', '.join(a['products'])}: {a['summary']}" for a in possible[:20]]
+        ctx.notifier("vulnwatch: early warning coverage check", "\n".join(lines), None, kind="report")
+    return result
 
 
 def warnings_since(s, since: datetime | None) -> dict:
@@ -998,14 +1437,118 @@ def warnings_since(s, since: datetime | None) -> dict:
 
 # ---------- API ----------
 
+# ---------- 6b. Kostenschätzung ----------
+
+# USD je 1 Mio. Tokens (Eingabe, Ausgabe), Anthropic-Listenpreise Stand 2026-10; das längste passende Präfix gilt.
+# Andere Anbieter: kein Preis bekannt (eigene Endpunkte wie Ollama kosten nichts außer Strom).
+PRICES = {"claude-haiku-5-5": (0.10, 0.50), "claude-haiku-4-5": (1.0, 5.0), "claude-sonnet-5-5": (2.0, 10.0),
+          "claude-sonnet-5": (2.0, 10.0), "claude-sonnet-4-6": (3.0, 15.0), "claude-opus-5-5": (4.0, 20.0),
+          "claude-opus-5": (5.0, 25.0), "claude-opus-4": (5.0, 25.0), "claude-fable": (10.0, 50.0)}
+SEARCH_USD = 0.01          # je Websuche (10 $ je 1000)
+COST_DAYS = 14             # Messfenster für Häufigkeiten
+# Annahmen, solange nichts gemessen ist (Werte aus den ersten echten Läufen)
+DEFAULT_USE = {"classify": (4000, 500, 0), "research": (75000, 3000, 18), "verify": (35000, 1500, 8)}
+
+
+def price(pid: str, model: str) -> tuple[float, float] | None:
+    if pid != "anthropic":
+        return None
+    hit = max((k for k in PRICES if model.startswith(k)), key=len, default=None)
+    return PRICES[hit] if hit else None
+
+
+def _use(usage) -> tuple[int, int, int] | None:
+    """(Eingabe, Ausgabe, Websuchen) einer Antwort oder einer Liste von Antworten (Anthropic oder OpenAI)."""
+    items = usage if isinstance(usage, list) else [usage]
+    items = [u for u in items if isinstance(u, dict)]
+    if not items:
+        return None
+    # Cache: Schreiben kostet 1,25×, Lesen 0,1× des Eingabepreises; gezählt in Eingabe-Token zum vollen Preis
+    tin = round(sum((u.get("input_tokens") or u.get("prompt_tokens") or 0) + 1.25 * (u.get("cache_creation_input_tokens") or 0)
+                    + 0.1 * (u.get("cache_read_input_tokens") or 0) for u in items))
+    tout = sum(u.get("output_tokens") or u.get("completion_tokens") or 0 for u in items)
+    return tin, tout, sum(((u.get("server_tool_use") or {}).get("web_search_requests") or 0) for u in items)
+
+
+def _avg(rows: list[tuple[int, int, int]], default: tuple[int, int, int]) -> tuple[int, int, int]:
+    return tuple(round(sum(r[i] for r in rows) / len(rows)) for i in range(3)) if rows else default
+
+
+def cost_basis(ctx: Context, s, now: float | None = None) -> dict:
+    """Grundlage der Kostenschätzung: je Aufgabe Modell, Preis je Aufruf (gemessen, sonst Annahme) und Häufigkeit
+    pro Tag aus den letzten COST_DAYS Tagen. Die Oberfläche rechnet daraus den Monat je Stufe und Takt."""
+    now = now or time.time()
+    since = datetime.fromtimestamp(now, timezone.utc) - timedelta(days=COST_DAYS)
+    first = s.scalar(select(func.min(EarlyWarning.created_at)))
+    if first is not None and first.tzinfo is None:
+        first = first.replace(tzinfo=timezone.utc)
+    days = min(COST_DAYS, max(1.0, (now - first.timestamp()) / 86400)) if first else COST_DAYS
+    classify, verify, classified, checks, nvd_hits, nvd_tries = [], [], 0, 0, 0, 0
+    for created, classified_at, aj in s.execute(select(EarlyWarning.created_at, EarlyWarning.classified_at,
+                                                       EarlyWarning.ai_json).where(EarlyWarning.ai_json.is_not(None))):
+        try:
+            d = json.loads(aj)
+        except ValueError:
+            continue
+        resp = d.get("response") if isinstance(d.get("response"), dict) else {}
+        if isinstance(resp.get("usage"), dict) and (u := _use(resp["usage"])):
+            classify.append(u)
+            if classified_at and classified_at.replace(tzinfo=classified_at.tzinfo or timezone.utc) >= since:
+                classified += 1
+        v = d.get("verified")
+        if isinstance(v, dict):
+            if v.get("source") == "ai" and (u := _use(v.get("usage"))):
+                verify.append(u)
+            if (v.get("at") or 0) >= since.timestamp() and v.get("source") != "none":
+                checks += 1
+            if v.get("source") in ("nvd", "none") or v.get("nvd") == "missing":
+                nvd_tries += 1
+                nvd_hits += v.get("source") == "nvd"
+    research = setting(s, RESEARCH_STATE_KEY) or {}
+    measured = {"classify": classify[-50:], "verify": verify[-20:],
+                "research": [u] if (u := _use(research.get("usage"))) else []}
+    out = {"days": round(days, 1), "search_usd": SEARCH_USD}
+    for task in ("classify", "research", "verify"):
+        try:
+            provider, model = resolve(ctx, task)
+            pid, error = provider.pid, None
+        except AiError as e:
+            pid = model = None
+            error = str(e)
+        tin, tout, searches = _avg(measured[task], DEFAULT_USE[task])
+        p = price(pid, model) if pid else None
+        out[task] = {"model": model, "provider": pid, "error": error, "measured": len(measured[task]), "price": p,
+                     "tokens_in": tin, "tokens_out": tout, "searches": searches,
+                     "usd": round(tin / 1e6 * p[0] + tout / 1e6 * p[1] + searches * SEARCH_USD, 5) if p else None}
+    out["classify"]["per_day"] = round(classified / days, 2)
+    out["verify"]["per_day"] = round(checks / days, 2)
+    out["verify"]["nvd_share"] = round(nvd_hits / nvd_tries, 2) if nvd_tries else None
+    out["verify"]["nvd_measured"] = nvd_tries
+    return out
+
+
+class AiLevelIn(BaseModel):
+    """Fehlende Schalter (alter Client, alter Export) sind an."""
+    level: str = Field(pattern="^(full|balanced|minimal)$")
+    pass_hours: int = Field(ge=PASS_HOURS_RANGE[0], le=PASS_HOURS_RANGE[1])
+    research_hours: int = Field(ge=RESEARCH_HOURS_RANGE[0], le=RESEARCH_HOURS_RANGE[1])
+    max_searches: int = Field(default=15, ge=MAX_SEARCHES_RANGE[0], le=MAX_SEARCHES_RANGE[1])
+    kev: bool = True
+    release_feeds: bool = True
+    health_alerts: bool = True
+    miss_check: bool = True
+
+
 class FeedsIn(BaseModel):
     feeds: list[str] = Field(default_factory=list, max_length=50)
     products: list[dict] = Field(default_factory=list, max_length=200)
 
 
 class ResearchIn(BaseModel):
+    """Ein altes `model` im Body wird ignoriert (Pydantic verwirft unbekannte Felder); gewählt wird unter KI.
+    Fehlt `verify` (alter Client, alter Export), bleibt der gespeicherte Wert, sonst gilt `enabled`."""
     enabled: bool
-    model: str = Field("", max_length=100, pattern=r"^(claude-[a-z0-9.-]{3,80})?$")
+    verify: bool | None = None
 
 
 STATUS_ORDER = {"betroffen": 0, "unklar": 1, "pending": 2, "nicht_betroffen": 3}
@@ -1045,7 +1588,7 @@ def overview_summary(ctx: Context, s) -> dict:
     state = setting(s, STATE_KEY) or {}
     return {"at": state.get("at"), "feed_errors": len(state.get("feed_errors") or {}), "counts": counts,
             "research_at": (setting(s, RESEARCH_STATE_KEY) or {}).get("at"),
-            "ai_configured": ctx.secrets.get(CLAUDE_SECRET) is not None}
+            "ai_configured": any_configured(ctx)}
 
 
 def build_earlywarning_router(ctx: Context, guards: Guards) -> APIRouter:
@@ -1067,8 +1610,9 @@ def build_earlywarning_router(ctx: Context, guards: Guards) -> APIRouter:
                     "feeds": configured_feeds(s), "default_feeds": DEFAULT_FEEDS,
                     "products": setting(s, PRODUCTS_KEY, []),
                     "research": {**research_config(s), "state": setting(s, RESEARCH_STATE_KEY) or {},
-                                 "interval_hours": RESEARCH_HOURS},
-                    "ai_configured": ctx.secrets.get(CLAUDE_SECRET) is not None}
+                                 "interval_hours": ai_config(s)["research_hours"], "level": ai_config(s)["level"]},
+                    "health": health_problems(s), "coverage": setting(s, MISS_KEY),
+                    "ai_configured": any_configured(ctx)}
 
     @router.get("/early-warnings/watched/{system_id}", dependencies=[Depends(guards.require_session)])
     def watched(system_id: int):
@@ -1077,7 +1621,7 @@ def build_earlywarning_router(ctx: Context, guards: Guards) -> APIRouter:
             products = [p for p in inventory_products(s, ctx.settings.data_dir) if p["system_id"] == system_id]
             return {"items": [{"keyword": p["keyword"], "product": p["product"], "version": p.get("version", ""),
                                "group": _watch_group(p), "title_only": bool(p.get("title_only"))} for p in products],
-                    "feeds": len(configured_feeds(s)), "ai_configured": ctx.secrets.get(CLAUDE_SECRET) is not None}
+                    "feeds": len(configured_feeds(s)), "ai_configured": any_configured(ctx)}
 
     @router.put("/early-warnings/config")
     def write_config(body: FeedsIn, found=Depends(guards.require_admin)):
@@ -1101,16 +1645,49 @@ def build_earlywarning_router(ctx: Context, guards: Guards) -> APIRouter:
     @router.put("/early-warnings/research")
     def write_research(body: ResearchIn, found=Depends(guards.require_admin)):
         with ctx.session_factory() as s:
-            put_setting(s, RESEARCH_KEY, {"enabled": body.enabled, "model": body.model})
+            verify = body.verify
+            if verify is None:
+                stored = setting(s, RESEARCH_KEY) or {}
+                verify = bool(stored["verify"]) if "verify" in stored else body.enabled
+            put_setting(s, RESEARCH_KEY, {"enabled": body.enabled, "verify": verify})
             ctx.audit(s, found[0].username, "earlywarning.research",
-                      f"{'on' if body.enabled else 'off'}, model {body.model or 'latest Sonnet'}")
+                      f"research {'on' if body.enabled else 'off'}, verify {'on' if verify else 'off'}")
             s.commit()
         return {"ok": True}
 
+    @router.get("/early-warnings/ai-level", dependencies=[Depends(guards.require_session)])
+    def read_ai_level():
+        with ctx.session_factory() as s:
+            feeds = release_feeds(inventory_products(s, ctx.settings.data_dir))
+            return {**ai_config(s), "research": research_config(s), "basis": cost_basis(ctx, s),
+                    "release_feeds_found": [{"url": u, "keywords": k} for u, k in feeds.items()]}
+
+    @router.put("/early-warnings/ai-level")
+    def write_ai_level(body: AiLevelIn, found=Depends(guards.require_admin)):
+        with ctx.session_factory() as s:
+            put_setting(s, AI_KEY, body.model_dump())
+            off = [k for k in SWITCHES if not getattr(body, k)]
+            ctx.audit(s, found[0].username, "earlywarning.ai_level",
+                      f"level {body.level}, pass every {body.pass_hours} h, research every {body.research_hours} h "
+                      f"with up to {body.max_searches} searches" + (f", off: {', '.join(off)}" if off else ""))
+            s.commit()
+        return {"ok": True}
+
+    @router.post("/early-warnings/coverage-check")
+    def coverage_check(found=Depends(guards.require_admin)):
+        with ctx.session_factory() as s:
+            ctx.audit(s, found[0].username, "earlywarning.coverage_check", "")
+            s.commit()
+        threading.Thread(target=run_miss_check, args=(ctx,), daemon=True, name="coverage-check").start()
+        return {"ok": True, "started": True}
+
     @router.post("/early-warnings/refresh")
     def refresh(research: bool = Query(False), found=Depends(guards.require_admin)):
-        if research and ctx.secrets.get(CLAUDE_SECRET) is None:
-            raise HTTPException(409, "Web research needs a Claude API key (Settings → AI)")
+        if research:
+            try:
+                resolve(ctx, "research")
+            except AiError:
+                raise HTTPException(409, "Web research needs a provider with web search (Settings → AI)") from None
         with ctx.session_factory() as s:
             ctx.audit(s, found[0].username, "earlywarning.refresh", "pass with web research" if research else "pass")
             s.commit()

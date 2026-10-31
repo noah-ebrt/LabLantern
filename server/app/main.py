@@ -25,6 +25,8 @@ from .collector_api import build_collector_router
 from .routerforwards import build_routerforwards_router
 from .traefik import build_traefik_router
 from .fritzbox import build_fritzbox_router
+from .health import HealthEngine
+from .health_api import build_health_router
 from .products import build_versions_router
 from .earlywarning import build_earlywarning_router
 from .metrics import build_metrics_router
@@ -33,6 +35,7 @@ from .auth import RateLimiter, new_token, sha256_hex
 from .config import Settings
 from .context import Context
 from .guards import make_guards
+from .aiproviders import build_ai_router, migrate_ai_settings
 from .integrations import build_integrations_router
 from .internal import build_internal_router
 from .overview import build_overview_router
@@ -63,10 +66,17 @@ def _prepare_setup_token(ctx: Context) -> None:
 def create_app(settings: Settings, clock: Callable[[], float] = time.time) -> FastAPI:
     # Apprise protokolliert auf DEBUG jede geladene Kanal-URL samt Token. Das darf auch bei DEBUG-Logging nie ins Log.
     logging.getLogger("apprise").setLevel(logging.WARNING)
+    # Die HTTP-Bibliotheken protokollieren jede Anfrage-URL (INFO: httpx; DEBUG: die SDKs). Die Adresse eines eigenen
+    # KI-Endpunkts kann Zugangsdaten tragen (user:pw@, ?token=). Das darf auch bei DEBUG-Logging nie ins Log.
+    for name in ("httpx", "httpx2", "httpcore", "openai", "anthropic"):
+        logging.getLogger(name).setLevel(logging.WARNING)
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     engine = make_engine(settings.data_dir / "vulnwatch.db")
     init_db(engine)
     session_factory = sessionmaker(engine, expire_on_commit=False)
+    with session_factory() as s:
+        migrate_ai_settings(s)   # alte Anthropic-Einstellungen auf die Wahl je Aufgabe umstellen (einmalig)
+        s.commit()
     settings.master_key_path.parent.mkdir(parents=True, exist_ok=True)
     migrate_master_key(settings.data_dir / "master.key", settings.master_key_path)
     master_key = load_or_create_master_key(settings.master_key_path)
@@ -87,18 +97,23 @@ def create_app(settings: Settings, clock: Callable[[], float] = time.time) -> Fa
     # Läuft nur im echten Serverprozess: Der Lebenszyklus startet ihn, Unit-Tests ohne Server lassen ihn aus.
     scheduler = build_scheduler(ctx)
     ctx.on_schedule_change = lambda: apply_schedule(scheduler, ctx)
+    # Gesundheitsüberwachung: eigener Thread mit Prüf-Pool, ebenfalls nur im echten Serverprozess
+    health = HealthEngine(ctx)
 
     @asynccontextmanager
     async def lifespan(_app):
         scheduler.start()
-        log.info("Scheduler started (daily run, maintenance, release check)")
+        health.start()
+        log.info("Scheduler started (daily run, maintenance, release check, health checks)")
         try:
             yield
         finally:
+            health.stop()
             scheduler.shutdown(wait=False)
 
     app = FastAPI(title="vulnwatch", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     app.state.scheduler = scheduler
+    app.state.health = health
     app.state.ctx = ctx
     # Live-Updates: jeder Commit meldet die berührten Themen an offene Browser-Ströme
     hub = EventHub()
@@ -106,10 +121,12 @@ def create_app(settings: Settings, clock: Callable[[], float] = time.time) -> Fa
     def live_tick():
         with session_factory() as s:
             expire_pairings(ctx, s)   # abgelaufene Anfragen verschwinden auch ohne Neuladen
-        return live_snapshot(ctx)
+        # zeitabhängig, ohne Schreibzugriff: Agenten verbunden/getrennt und ob die Gesundheitsprüfungen laufen
+        return {"systems": live_snapshot(ctx), "health": health.ok()}
 
     hub.snapshot = live_tick
     install_db_hooks(session_factory, hub)
+    health.publish = hub.publish
     app.state.events = hub
 
     @app.exception_handler(RequestValidationError)
@@ -121,14 +138,15 @@ def create_app(settings: Settings, clock: Callable[[], float] = time.time) -> Fa
         )
     guards = make_guards(ctx)
     api_routers = [
-        build_router(ctx, guards), build_integrations_router(ctx, guards), build_overview_router(ctx, guards),
+        build_router(ctx, guards), build_integrations_router(ctx, guards), build_ai_router(ctx, guards),
+        build_overview_router(ctx, guards),
         build_agent_router(ctx, guards), build_commands_router(ctx, guards), build_passkeys_router(ctx, guards),
         build_pairing_router(ctx, guards), build_runs_router(ctx, guards), build_schedule_router(ctx, guards),
         build_releases_router(ctx, guards), build_watchdog_router(ctx, guards), build_connectors_router(ctx, guards),
         build_appliances_router(ctx, guards), build_integrity_router(ctx, guards), build_versions_router(ctx, guards),
         build_earlywarning_router(ctx, guards), build_fritzbox_router(ctx, guards), build_cftunnel_router(ctx, guards),
-        build_traefik_router(ctx, guards), build_collector_router(ctx, guards),
-        build_routerforwards_router(ctx, guards),
+        build_traefik_router(ctx, guards), build_health_router(ctx, guards, health),
+        build_collector_router(ctx, guards), build_routerforwards_router(ctx, guards),
     ]
     # Konfiguration als JSON: schreibt über die Endpunkte der Router oben, mit deren Prüfung und Folgen
     api_routers.append(build_config_router(ctx, guards, list(api_routers)))

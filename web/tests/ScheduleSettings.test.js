@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ScheduleSettings from '../src/components/ScheduleSettings.vue'
+import ReportSettings from '../src/components/ReportSettings.vue'
 import { setCsrf } from '../src/api.js'
 
 let calls
@@ -44,11 +45,11 @@ describe('ScheduleSettings', () => {
     const w = mount(ScheduleSettings)
     await flushPromises()
 
-    expect(w.text()).toContain('Daily Vulnerability Scan')
+    expect(w.text()).toContain('Scan schedule')
     expect(w.text()).toContain('Active')
     expect(w.get('input[role=switch]').element.checked).toBe(true)
     expect(w.get('input[name=time]').element.value).toBe('04:00')
-    expect(w.text()).toContain('2026')
+    expect(w.text()).toContain('next Sun')
   })
 
   it('erlaubt das Umschalten und Speichern des Zeitplans', async () => {
@@ -68,13 +69,16 @@ describe('ScheduleSettings', () => {
     expect(put.body).toEqual({ enabled: false, time: '04:00' })
     const short = calls.find((c) => c.method === 'PUT' && c.url === '/api/settings/short-schedule')
     expect(short.body).toEqual({ enabled: true, hours: 12 })
-    expect(w.text()).toContain('Schedule settings saved successfully.')
+    expect(w.text()).toContain('Schedule saved.')
+    expect(calls.some((c) => c.url === '/api/settings/report-policy' && c.method === 'PUT')).toBe(false)
   })
+})
 
+describe('ReportSettings', () => {
   it('speichert Berichtshäufigkeit mit Wochentag und Pause', async () => {
-    const w = mount(ScheduleSettings)
+    const w = mount(ReportSettings)
     await flushPromises()
-    expect(w.text()).toContain('Report frequency')
+    expect(w.text()).toContain('How often')
     await w.get('select[name=report_frequency]').setValue('weekly')
     await w.get('select[name=report_weekday]').setValue('4')
     await w.get('input[name=paused_until]').setValue('2026-12-24')
@@ -85,7 +89,7 @@ describe('ScheduleSettings', () => {
   })
 
   it('leere Pause wird als null gespeichert', async () => {
-    const w = mount(ScheduleSettings)
+    const w = mount(ReportSettings)
     await flushPromises()
     expect(w.find('select[name=report_weekday]').exists()).toBe(false)
     await w.find('form').trigger('submit')

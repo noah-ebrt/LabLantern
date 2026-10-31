@@ -53,6 +53,9 @@ services:
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     tmpfs: [/tmp]
+    # Gesundheitsprüfung per Ping: unprivilegierte ICMP-Sockets statt NET_RAW (gilt nur im Netz dieses Containers)
+    sysctls:
+      net.ipv4.ping_group_range: "0 2147483647"
     environment:
       VULNWATCH_PLAIN_HTTP: "1"  # TLS terminiert der Proxy
       VULNWATCH_PORT: "8000"

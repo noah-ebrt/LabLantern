@@ -56,8 +56,8 @@ const changed = computed(() => Object.entries(results.value || {}).filter(([, v]
 </script>
 
 <template>
-  <SettingsCard icon="settings" title="Configuration as JSON" subtitle="Every setting in one document: edit, copy to another install, or script it via PUT /api/settings/config">
-    <SettingsSection title="Document">
+  <SettingsCard icon="settings" title="Configuration as JSON" subtitle="Every setting in one document: edit it, copy it to another install, or script it with PUT /api/settings/config">
+    <SettingsSection title="Document" id="set-config">
       <div v-if="!loaded" class="actions start">
         <button type="button" class="btn-sm" @click="load"><Icon name="download" :size="14" />Load current configuration</button>
       </div>

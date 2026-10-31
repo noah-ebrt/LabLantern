@@ -261,3 +261,11 @@ button.link:hover { color: var(--text); background: none; }
 
 /* Einstellungskarten: Formulare unter den Einträgen */
 .settings-form .message, .settings-card .message { margin: 0; }
+
+/* Ziel eines Sprungs in den Einstellungen (Suche, Statuszeile, #ziel): kurz umrandet, dann wieder ruhig */
+.found { animation: found 1.8s var(--ease); scroll-margin-top: 5rem; }
+@keyframes found {
+  0%, 35% { outline: 2px solid var(--text-2); outline-offset: 4px; }
+  100% { outline: 2px solid transparent; outline-offset: 4px; }
+}
+@media (prefers-reduced-motion: reduce) { .found { animation: none; outline: 2px solid var(--text-2); outline-offset: 4px; } }

@@ -9,8 +9,10 @@ from dataclasses import dataclass
 from functools import partial
 from typing import Callable
 
+from sqlalchemy import select
+
 from .context import Context
-from .models import put_setting, setting
+from .models import System, put_setting, setting
 
 log = logging.getLogger("vulnwatch.exposure")
 
@@ -114,3 +116,31 @@ def source_rows(s, now: float) -> list[dict]:
                      "exposed": sum(len(v) for v in (state.get("exposed") or {}).values()),
                      "unmatched": len(state.get("unmatched") or [])})
     return rows
+
+
+def _unmatched_line(u: dict) -> dict:
+    """Die Quellen bauen ihre Einträge verschieden; die Detailansicht braucht nur "was" und "warum"."""
+    if "domains" in u:   # NPM
+        what = f"{', '.join(u['domains'])} → {u.get('target', '')}"
+    elif "forward" in u:   # FRITZ!Box
+        what = u["forward"] + (f" ({u['description']})" if u.get("description") else "")
+    else:   # Cloudflare Tunnel, Traefik
+        what = (u.get("what", "") + (f" → {u['service']}" if u.get("service") else "")
+                + (f" (router {u['router']})" if u.get("router") else ""))
+    return {"what": what, "why": u.get("reason") or u.get("why") or ""}
+
+
+def source_detail(s, key: str, now: float) -> dict | None:
+    """Was hinter einer Zeile der Matrix steht: jede erreichbare Stelle mit Begründung, jede nicht zugeordnete."""
+    row = next((r for r in source_rows(s, now) if r["key"] == key), None)
+    if row is None:
+        return None
+    state = next(st for src, st in _states(s) if src.key == key)
+    exposed, via = state.get("exposed") or {}, state.get("via") or {}
+    ids = [int(k) for k in exposed]
+    names = dict(s.execute(select(System.id, System.name).where(System.id.in_(ids))).all()) if ids else {}
+    items = [{"system_id": int(sid), "system_name": names.get(int(sid), f"#{sid}"), "name": n,
+              "via": (via.get(sid) or {}).get(n) or []}
+             for sid, ns in exposed.items() for n in ns]
+    items.sort(key=lambda i: (i["system_name"].lower(), i["name"]))
+    return {**row, "items": items, "unmatched_items": [_unmatched_line(u) for u in state.get("unmatched") or []]}

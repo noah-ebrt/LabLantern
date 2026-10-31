@@ -78,6 +78,12 @@ def test_router_forwards_are_read_and_matched(ctx, monkeypatch):
                           "reason": "device is not monitored by vulnwatch"}]
 
 
+def test_tr064_port_is_added_when_missing():
+    assert fritzbox.tr064_url("http://192.168.178.1/") == "http://192.168.178.1:49000"
+    assert fritzbox.tr064_url("https://fritz.box") == "https://fritz.box:49443"
+    assert fritzbox.tr064_url("http://fritz.box:49000") == "http://fritz.box:49000"
+
+
 def test_router_failure_keeps_the_last_mapping(ctx, monkeypatch):
     sid = make_system(ctx)
     with ctx.session_factory() as s:

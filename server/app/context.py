@@ -23,6 +23,8 @@ class Context:
     worker_token: str = ""
     # erzeugt den Claude-Client zu einem Schlüssel; in Tests ersetzbar (Standard: anthropic.Anthropic)
     claude_factory: Optional[Callable[[str], object]] = None
+    # erzeugt den OpenAI-Client zu (Adresse, Schlüssel); in Tests ersetzbar (Standard: openai.OpenAI)
+    openai_factory: Optional[Callable[[str, str], object]] = None
     # wird nach einer Zeitplan-Änderung aufgerufen (hängt den laufenden Planer um)
     on_schedule_change: Optional[Callable[[], None]] = None
     # (Titel, Text, HTML für Mail oder None) -> (ok, Fehler); in main.py an Apprise gebunden, in Tests ersetzbar

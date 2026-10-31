@@ -23,6 +23,7 @@ const fmt = (v, opts) => {
   }
 }
 export const fmtDateTime = (v) => fmt(v, {})
+export const fmtStamp = (v) => fmt(v, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 export const fmtDay = (v) => fmt(v, { day: '2-digit', month: 'short' })
 export const fmtDayOnly = (v) => fmt(v, { day: '2-digit', month: '2-digit', year: 'numeric' })
 export const fmtClock = (v) => fmt(v, { hour: '2-digit', minute: '2-digit' })
