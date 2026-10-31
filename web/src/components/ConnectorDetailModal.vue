@@ -111,6 +111,51 @@ const iso = (d) => d?.toISOString()
         <p class="subtext">Which guest belongs to which agent host is in the overview, under coverage.</p>
       </template>
 
+      <template v-else-if="kind === 'synology'">
+        <h3>System</h3>
+        <table class="data-table kv" data-test="dsm-system">
+          <tr><th>Model</th><td>{{ data.model || '?' }}</td></tr>
+          <tr><th>DSM</th><td class="mono">{{ data.version || '?' }}</td></tr>
+          <tr><th>Update</th><td v-if="data.update" :class="tone(false, data.update.available)">{{ data.update.available ? data.update.version || 'available' : 'none available' }}</td>
+            <td v-else class="subtext">{{ data.update_error || 'not readable' }}</td></tr>
+        </table>
+        <h3>Storage</h3>
+        <table v-if="(data.spaces || []).length || (data.disks || []).length" class="data-table">
+          <thead><tr><th>Name</th><th>State</th><th>Used</th></tr></thead>
+          <tbody>
+            <tr v-for="sp in data.spaces || []" :key="sp.kind + sp.name"><td>{{ sp.kind }} {{ sp.name }}</td><td :class="tone(['degraded', 'crashed'].includes(sp.status), sp.status && sp.status !== 'normal')">{{ sp.status || '?' }}</td>
+              <td>{{ sp.percent == null ? '–' : `${Math.round(sp.percent)} %` }}</td></tr>
+            <tr v-for="d in data.disks || []" :key="d.name"><td>{{ d.name }} <span class="subtext">{{ d.model }}</span></td>
+              <td :class="tone(d.status !== 'normal' && !!d.status, d.smart && d.smart !== 'normal')">{{ d.status || '?' }}{{ d.smart ? ` · S.M.A.R.T. ${d.smart}` : '' }}</td><td>–</td></tr>
+          </tbody>
+        </table>
+        <p v-else class="subtext">{{ data.storage_error || 'No storage reported.' }}</p>
+        <h3>Packages ({{ (data.packages || []).length }})</h3>
+        <table v-if="(data.packages || []).length" class="data-table">
+          <tbody><tr v-for="p in data.packages" :key="p.id"><td>{{ p.name }}</td><td class="mono">{{ p.version }}</td></tr></tbody>
+        </table>
+        <p v-else class="subtext">{{ data.packages_error || 'No packages.' }} Package versions feed the early warning.</p>
+      </template>
+
+      <template v-else-if="kind === 'opnsense'">
+        <h3>Firmware</h3>
+        <table class="data-table kv" data-test="opn-firmware">
+          <tr><th>Installed</th><td class="mono">{{ data.version || '?' }}</td></tr>
+          <tr><th>Last update check</th><td :class="tone(!!data.error, !data.checked)">{{ data.error || (data.checked ? data.last_check || 'yes' : 'never: run System → Firmware → Status → Check for updates') }}</td></tr>
+          <tr><th>Major upgrade</th><td :class="tone(false, data.major)">{{ data.major || 'none' }}</td></tr>
+          <tr v-if="(data.updates || []).length"><th>Reboot</th><td>{{ data.update_needs_reboot ? 'the pending update reboots the firewall' : 'not needed for the pending update' }}</td></tr>
+        </table>
+        <h3>Pending updates ({{ (data.updates || []).length }})</h3>
+        <table v-if="(data.updates || []).length" class="data-table">
+          <thead><tr><th>Package</th><th>Installed</th><th>New</th></tr></thead>
+          <tbody><tr v-for="u in data.updates" :key="u.package"><td>{{ u.package }}</td><td class="mono">{{ u.installed }}</td><td class="mono">{{ u.new }}</td></tr></tbody>
+        </table>
+        <h3>Plugins ({{ (data.plugins || []).length }} installed, {{ data.packages || 0 }} packages in total)</h3>
+        <table v-if="(data.plugins || []).length" class="data-table">
+          <tbody><tr v-for="p in data.plugins" :key="p.name"><td class="mono">{{ p.name }}</td><td class="mono">{{ p.version }}</td></tr></tbody>
+        </table>
+      </template>
+
       <template v-else>
         <h3>System</h3>
         <table class="data-table kv">

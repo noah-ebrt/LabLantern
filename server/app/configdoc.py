@@ -91,7 +91,8 @@ def build_config_router(ctx: Context, guards: Guards, routers: list[APIRouter]) 
 
     def read_appliances(s):
         return [{"system_id": int(sid), "kind": c["kind"], "name": s.get(System, int(sid)).name, "url": c["url"],
-                 "token": None} for sid, c in _configs(s).items()]
+                 **({"account": c["account"]} if "account" in c else {}), "token": None}
+                for sid, c in _configs(s).items()]
 
     # --- Schreiben, wo ein Abschnitt mehr als einen Endpunkt braucht ---
     def write_claude(found, value, current):

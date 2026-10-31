@@ -17,6 +17,14 @@ APPLIANCE_TEXT = {
     ("homeassistant", "disk"): "Free space: delete old backups and media, shrink the recorder history (purge_keep_days).",
     ("homeassistant", "battery"): "Replace or charge the battery before the device stops reporting.",
     ("homeassistant", "host"): "Restart Home Assistant normally and check Settings → System → Logs for the integration that failed.",
+    ("proxmox", "node"): "Update the node: Datacenter → the node → Updates → Refresh, then Upgrade. Migrate or shut down guests first if the kernel changes.",
+    ("synology", "host"): "Install the update: Control Panel → Update & Restore → DSM Update. It restarts the NAS.",
+    ("synology", "pool"): "Open Storage Manager, check the pool and its drives and follow its repair steps. Make sure the backup is current first.",
+    ("synology", "disk"): "Free space: empty the recycle bins, delete old snapshots (Snapshot Replication) or expand the volume.",
+    ("synology", "drive"): "Replace the drive: Storage Manager → the drive → Health Info. Back up first if the pool has no redundancy left.",
+    ("opnsense", "host"): "Install the update: System → Firmware → Updates. Read the changelog first; kernel updates reboot the firewall.",
+    ("opnsense", "packages"): "Install the pending updates: System → Firmware → Updates.",
+    ("opnsense", "major"): "Plan the major upgrade: System → Firmware → Status → Upgrade, after reading the release notes.",
 }
 
 
@@ -36,7 +44,7 @@ def recommend(f, sys) -> dict:
     inv = _inventory(sys)
     no_fix = not f.fixed_version
     urgent = "Actively exploited (CISA KEV): do this first. " if f.kev else ""
-    if f.source in ("truenas", "homeassistant"):
+    if f.source in ("truenas", "homeassistant", "proxmox", "synology", "opnsense") and f.cve_id != "VW-EOL":
         kind = f.target.split(":", 1)[0]
         return {"text": APPLIANCE_TEXT.get((f.source, kind), "Check the device."), "command": ""}
     if f.source == "npm":

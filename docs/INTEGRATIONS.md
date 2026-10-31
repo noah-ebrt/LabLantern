@@ -112,7 +112,7 @@ In Settings › Exposure › Traefik you can mark an entrypoint such as `lan` as
 still wins. Rules that cannot be checked (`HostRegexp`, ``HostSNI(`*`)``, no rule) are listed there too. Only the
 Docker provider on the same host is visible; routes from Traefik's file provider are missing.
 
-## Devices without agent: TrueNAS, Home Assistant and Proxmox VE
+## Devices without agent: TrueNAS, Home Assistant, Proxmox VE, Synology DSM and OPNsense
 
 Added under **Systems → Add host**, not in the settings: each device becomes a host of its own, with findings, a
 row in the coverage matrix and the actions **Test**, **Edit** and **Delete** in the host list. vulnwatch only reads,
@@ -211,9 +211,50 @@ adds the view of the guests and the PVE version.
 **Older PVE releases** list pending updates only for tokens with `Sys.Modify`, a write privilege. vulnwatch
 doesn't ask for it: the version check then shows N/A with that reason, end of life is still checked.
 
+### Synology DSM
+
+DSM has no API tokens and no read-only role, so vulnwatch logs in with an account and its password (one session per
+read, logged out afterwards; sent as a POST body, never in a URL). The guide under **Systems → Add host → Synology
+DSM** walks through it: a dedicated user `vulnwatch` in the **administrators** group, all applications and shared
+folders denied, no 2-factor authentication. Without admin rights vulnwatch reads only the version; the update check,
+packages and storage show N/A with the reason "not an administrator", never ok. HTTPS only (port 5001), certificate
+pinned as above.
+
+| What | From | Rating |
+| --- | --- | --- |
+| Newer DSM | `SYNO.Core.Upgrade.Server` check | same line high, new line medium |
+| Storage pool or volume degraded, crashed | `SYNO.Storage.CGI.Storage` load_info | high; "attention" or "warning" medium |
+| Volume full | same | 90 % medium, 95 % high |
+| Drive crashed or failing (status or S.M.A.R.T.) | same | high; "warning" medium |
+| Installed packages | `SYNO.Core.Package` list | no finding; watched by the AI early warning |
+
+endoflife.date doesn't list DSM, so there is no end-of-life finding. Unknown states of pools, volumes and drives are
+shown in the host's details but are no finding. The collector script `collectors/synology.sh` is the alternative
+for container images (with syft on the NAS); you can use both, they appear as two hosts. Built from the DSM Web API,
+not yet tested against a real NAS.
+
+### OPNsense
+
+Read with an API key and secret of a user with the privilege **System: Firmware** (System → Access → Users → API
+keys). The same key also reads the port forwards (see above) if the user has **Firewall: NAT: Destination NAT** too.
+HTTPS only, certificate pinned as above.
+
+| What | From | Rating |
+| --- | --- | --- |
+| Newer OPNsense | `upgrade_packages` of `/api/core/firmware/status` (the core package) | same line high, new line medium |
+| Other pending updates (base, kernel, packages) without a core update | same | one finding, medium |
+| Major upgrade available | `upgrade_major_version` | medium |
+| End of life of the release line | endoflife.date `opnsense` | as for other products |
+| Installed plugins | `/api/core/firmware/info` | no finding; watched by the AI early warning (`os-haproxy` as "haproxy") |
+
+OPNsense knows about updates only after it has checked (System → Firmware → Status → Check for updates, or a cron
+job). vulnwatch doesn't start a check, since that would be a write: until the firewall has checked, the version check
+shows N/A with that reason; end of life is still checked. Built from the OPNsense API docs, not yet tested against a
+real firewall.
+
 ## Other devices: collector scripts
 
-For devices where neither the agent nor an API connector fits (Unraid, Synology DSM, OpenWrt …), a cron script on the
+For devices where neither the agent nor an API connector fits (Unraid, UGREEN UGOS Pro, Synology DSM, OpenWrt …), a cron script on the
 device reports OS version, packages and containers to vulnwatch (`POST /api/collector/v1/report`, one token per
 device). vulnwatch only receives and never answers with a command. Only what the report provides is rated; the rest
 is n/a. Scripts, setup and limits: [`collectors/README.md`](../collectors/README.md). The traffic stays in your
@@ -330,5 +371,5 @@ vulnwatch has no telemetry and no update check of its own. These are the outboun
 | Your notification channels and offsite watchdog (optional) | per report, alert, ping | the report or alert text, the ping |
 
 Inside the LAN only: agents, collector scripts, Nginx Proxy Manager, FRITZ!Box, OPNsense, UniFi, TrueNAS, Home
-Assistant and Proxmox VE. Building the images and the
+Assistant, Proxmox VE and Synology DSM. Building the images and the
 agent fetches packages from Docker Hub, PyPI, npm and the Go module proxy, at build time only.

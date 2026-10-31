@@ -381,7 +381,21 @@ def appliance_products(s) -> list[dict]:
             if data.get("version"):
                 out.append({**base, "keyword": "proxmox", "product": "Proxmox VE", "version": data["version"],
                             "target": "host"})
-        else:
+        elif sys.host_type == "synology":
+            if data.get("version"):
+                out.append({**base, "keyword": "synology", "product": "Synology DSM", "version": data["version"],
+                            "target": "host"})
+            for p in data.get("packages") or []:   # Synology Photos, Container Manager, Hyper Backup, …
+                out.append({**base, "keyword": p["name"].lower(), "product": p["name"], "version": p["version"],
+                            "target": f"package:{p['id']}"})
+        elif sys.host_type == "opnsense":
+            if data.get("version"):
+                out.append({**base, "keyword": "opnsense", "product": "OPNsense", "version": data["version"],
+                            "target": "host"})
+            for p in data.get("plugins") or []:   # os-wireguard -> „wireguard“, os-haproxy -> „haproxy“
+                out.append({**base, "keyword": p["name"].removeprefix("os-").replace("-", " "), "product": p["name"],
+                            "version": p["version"], "target": f"plugin:{p['name']}"})
+        elif sys.host_type == "homeassistant":
             for u in data.get("updates") or []:   # Core, OS, Supervisor, Add-ons, Firmware
                 core = u["entity_id"] == "update.home_assistant_core_update"   # Meldungen sagen „Home Assistant“
                 out.append({**base, "keyword": "home assistant" if core else u["name"].lower(), "product": u["name"],

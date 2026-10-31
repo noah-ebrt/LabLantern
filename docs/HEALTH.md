@@ -43,7 +43,8 @@ paused, but you can add more checks to them (for example HTTP for the web UI).
 
 **Settings → Add host** opens the generator: a name, a host (IP or name) and one or more checks. **Test** runs a
 check once before you save it. The quick picks fill in common services (SSH, SMB, RDP, web UI, Home Assistant,
-Proxmox, DNS, certificate).
+Proxmox VE and Backup Server, TrueNAS, Synology DSM, UGREEN, QNAP, Unraid, OPNsense, pfSense, UniFi, OpenWrt,
+Pi-hole, AdGuard Home, DNS, certificate). The ports are the vendors' defaults; change them if yours differ.
 
 | Check | What it does | Typical use |
 | --- | --- | --- |

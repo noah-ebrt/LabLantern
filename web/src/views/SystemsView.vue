@@ -168,7 +168,9 @@ const HOST_KINDS = [
   { kind: 'truenas', title: 'TrueNAS', text: 'Read through the TrueNAS API: version, system update, apps, alerts. No agent on the NAS.' },
   { kind: 'homeassistant', title: 'Home Assistant', text: 'Read through the Home Assistant API: Core, OS, add-ons and firmware updates.' },
   { kind: 'proxmox', title: 'Proxmox VE', text: 'Read through the PVE API: version and updates per node, and which VMs and LXCs have no agent yet.' },
-  { kind: 'collector', title: 'Other device (collector script)', text: 'Unraid, Synology, OpenWrt …: a small cron script sends packages and containers. No agent, no commands.' },
+  { kind: 'synology', title: 'Synology DSM', text: 'Read through the DSM API: DSM update, storage pools, volumes and drives, packages. No script on the NAS.' },
+  { kind: 'opnsense', title: 'OPNsense', text: 'Read through the OPNsense API: firmware updates, major upgrades, end of life, plugins.' },
+  { kind: 'collector', title: 'Other device (collector script)', text: 'Unraid, UGREEN, Synology, OpenWrt …: a small cron script sends packages and containers. No agent, no commands.' },
 ]
 const addKind = ref(null)
 const connectorId = ref(null)   // Detailansicht eines Geräts ohne Agent

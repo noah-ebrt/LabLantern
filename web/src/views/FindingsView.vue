@@ -30,8 +30,8 @@ const onlyFixable = ref(route.query.fixable === 'true')
 // Aus „What to do“ auf der Übersicht: Funde eines Hosts (ohne eigenes Auswahlfeld, bleibt bis zum nächsten Filter)
 const systemId = ref(route.query.system_id || '')
 const SOURCES = [['', 'All sources'], ['scanner', 'Scanners (Grype/OSV)'], ['osv', 'OSV only'], ['both', 'Both scanners'],
-  ['products', 'Versions & EOL'], ['appliances', 'TrueNAS & Home Assistant'], ['npm', 'TLS certificates'], ['ai', 'AI early warning']]
-const SOURCE_LABELS = { grype: 'Grype', osv: 'OSV only', both: 'Grype + OSV', registry: 'Registry', eol: 'endoflife.date', npm: 'NPM certificate', ai: 'AI', truenas: 'TrueNAS', homeassistant: 'Home Assistant' }
+  ['products', 'Versions & EOL'], ['appliances', 'Devices via API'], ['npm', 'TLS certificates'], ['ai', 'AI early warning']]
+const SOURCE_LABELS = { grype: 'Grype', osv: 'OSV only', both: 'Grype + OSV', registry: 'Registry', eol: 'endoflife.date', npm: 'NPM certificate', ai: 'AI', truenas: 'TrueNAS', homeassistant: 'Home Assistant', proxmox: 'Proxmox VE', synology: 'Synology DSM', opnsense: 'OPNsense' }
 // Eigene Funde haben keine NVD-Seite: Registry/EOL/Frühwarnung verlinken nicht auf NVD
 const nvdLink = (f) => (f.cve_id.startsWith('CVE-') ? `https://nvd.nist.gov/vuln/detail/${f.cve_id}` : null)
 const query = ref(route.query.q || '')
