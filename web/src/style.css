@@ -102,6 +102,10 @@ code, .mono { font-family: var(--mono); font-size: 0.86em; }
 .data-table tbody tr:last-child td { border-bottom: none; }
 .data-table tbody tr { transition: background-color 0.15s; }
 .data-table tbody tr:hover { background: var(--surface-2); }
+/* Zeile öffnet Details (Übersicht, Systeme): ganze Zeile klickbar, mit Tastatur erreichbar, Name unterstrichen */
+tr.clickable { cursor: pointer; }
+tr.clickable:focus-visible { outline: 2px solid var(--text-2); outline-offset: -2px; }
+.row-link { text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
 .data-table th:first-child, .data-table td:first-child { padding-left: 0; }
 .data-table th:last-child, .data-table td:last-child { padding-right: 0; }
 .truncate { display: block; max-width: 32ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

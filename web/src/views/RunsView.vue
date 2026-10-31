@@ -115,6 +115,4 @@ useLive(['runs'], () => loadRuns(true))
 .c-kritisch { color: var(--crit); font-weight: 600; }
 .c-hoch { color: var(--high); font-weight: 600; }
 .c-mittel { color: var(--med); }
-tr.clickable { cursor: pointer; }
-tr.clickable:focus-visible { outline: 2px solid var(--text-2); outline-offset: -2px; }
 </style>
