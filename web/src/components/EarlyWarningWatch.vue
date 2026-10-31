@@ -44,10 +44,10 @@ const hint = (i) => [i.product, i.version, i.title_only ? 'matched in advisory t
 </template>
 
 <style scoped>
-h3 { margin-top: 1.2rem; }
+h3 { margin-top: 1.25rem; }
 .group { margin: 0.5rem 0; }
-.label { font-size: 0.8rem; color: var(--muted); }
-.chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.25rem 0 0; }
-.chip { font-size: 0.75rem; padding: 0.15rem 0.5rem; border: 1px solid var(--line); border-radius: var(--radius-pill); color: var(--text-2); }
-.ver { margin-left: 0.4rem; color: var(--muted); }
+.label { font-size: 0.8125rem; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0.25rem 0 0; }
+.chip { font-size: 0.75rem; padding: 0.125rem 0.5rem; border: 1px solid var(--line); border-radius: var(--radius-pill); color: var(--text-2); }
+.ver { margin-left: 0.5rem; color: var(--muted); }
 </style>

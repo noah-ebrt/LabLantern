@@ -102,11 +102,11 @@ const tipStyle = computed(() => {
 </template>
 
 <style scoped>
-.line-chart { display: flex; flex-direction: column; gap: 0.6rem; }
-.legend { display: flex; gap: 1rem; margin: 0; font-size: 0.78rem; color: var(--muted); }
-.legend i, .tip i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 0.4rem; }
+.line-chart { display: flex; flex-direction: column; gap: 0.5rem; }
+.legend { display: flex; gap: 1rem; margin: 0; font-size: 0.75rem; color: var(--muted); }
+.legend i, .tip i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 0.5rem; }
 .frame { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: 190px 20px; column-gap: 0.75rem; }
-.y-axis { display: flex; flex-direction: column; justify-content: space-between; font: 0.7rem var(--mono); color: var(--muted); text-align: right; margin: -0.45em 0; }
+.y-axis { display: flex; flex-direction: column; justify-content: space-between; font: 0.6875rem var(--mono); color: var(--muted); text-align: right; margin: -0.45em 0; }
 .plot { position: relative; }
 svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .grid { stroke: var(--line); stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
@@ -117,14 +117,14 @@ polyline { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; strok
 .hits { position: absolute; inset: 0; display: flex; }
 .hit { flex: 1; outline: none; }
 .hit:focus-visible { background: color-mix(in srgb, var(--text) 5%, transparent); }
-.x-axis { grid-column: 2; position: relative; font: 0.68rem var(--mono); color: var(--muted); }
+.x-axis { grid-column: 2; position: relative; font: 0.6875rem var(--mono); color: var(--muted); }
 .x-axis span { position: absolute; top: 6px; transform: translateX(-50%); white-space: nowrap; }
 .x-axis span.first { transform: none; }
 .x-axis span.last { transform: translateX(-100%); }
 .tip {
   position: absolute; top: 8px; z-index: 5; pointer-events: none;
-  display: flex; flex-direction: column; gap: 0.2rem; white-space: nowrap; font-size: 0.78rem; color: var(--text-2);
-  background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: 8px; padding: 0.5rem 0.65rem;
+  display: flex; flex-direction: column; gap: 0.25rem; white-space: nowrap; font-size: 0.75rem; color: var(--text-2);
+  background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 0.5rem 0.75rem;
   box-shadow: 0 12px 28px -8px rgb(0 0 0 / 0.6);
 }
 .tip strong { color: var(--text); font-weight: 500; }

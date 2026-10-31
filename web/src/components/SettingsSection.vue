@@ -18,9 +18,9 @@ defineProps({
 </template>
 
 <style scoped>
-.settings-section { display: flex; flex-direction: column; gap: 0.6rem; }
+.settings-section { display: flex; flex-direction: column; gap: 0.5rem; }
 .section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem 1rem; flex-wrap: wrap; }
-h3 { margin: 0; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-2); }
-.count { margin-left: 0.5rem; font: 0.72rem var(--mono); color: var(--muted); letter-spacing: 0; }
-.section-aside { font-size: 0.78rem; color: var(--muted); }
+h3 { margin: 0; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-2); }
+.count { margin-left: 0.5rem; font: 0.6875rem var(--mono); color: var(--muted); letter-spacing: 0; }
+.section-aside { font-size: 0.75rem; color: var(--muted); }
 </style>

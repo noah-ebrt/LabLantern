@@ -22,7 +22,7 @@ const title = (s) => `${(STATE[s.state] || STATE.unknown).label}${s.uptime != nu
 </template>
 
 <style scoped>
-.uptime-bar { display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; }
+.uptime-bar { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
 .bars { display: flex; gap: 2px; height: 26px; align-items: stretch; }
 .compact .bars { height: 18px; gap: 1px; }
 .cell { flex: 1; min-width: 2px; border-radius: 2px; background: var(--surface-3); }
@@ -31,5 +31,5 @@ const title = (s) => `${(STATE[s.state] || STATE.unknown).label}${s.uptime != nu
 .cell.down { background: var(--danger); }
 .cell.unknown, .cell.paused { background: var(--surface-3); }
 .cell:hover { filter: brightness(1.25); }
-.axis { display: flex; justify-content: space-between; font: 0.68rem var(--mono); color: var(--muted); }
+.axis { display: flex; justify-content: space-between; font: 0.6875rem var(--mono); color: var(--muted); }
 </style>

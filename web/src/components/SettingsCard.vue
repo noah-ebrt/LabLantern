@@ -36,17 +36,17 @@ defineProps({
 
 <style scoped>
 .settings-card { display: flex; flex-direction: column; gap: 1rem; margin-bottom: 0; scroll-margin-top: 5rem; }
-.head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem 1rem; flex-wrap: wrap; }
+.head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem 1rem; flex-wrap: wrap; }
 .head-text { flex: 1; min-width: min(100%, 240px); }
-.title-row { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
+.title-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .title-icon { color: var(--muted); flex: none; }
 .title-row h2 { margin: 0; font-size: 1rem; }
-.subtitle { margin: 0.2rem 0 0; font-size: 0.84rem; max-width: 75ch; }
+.subtitle { margin: 0.25rem 0 0; font-size: 0.8125rem; max-width: 75ch; }
 .badge-link { text-decoration: none; }
 .badge-link:hover { text-decoration: underline; text-underline-offset: 2px; }
 /* Erklärung zur Karte: schlichter Text unter dem Kopf, nie ein eigener Kasten */
-.intro { margin: -0.4rem 0 0; max-width: 75ch; font-size: 0.82rem; line-height: 1.55; color: var(--muted); }
-.intro :deep(code) { font-size: 0.78rem; color: var(--text-2); }
+.intro { margin: -0.5rem 0 0; max-width: 75ch; font-size: 0.8125rem; line-height: 1.55; color: var(--muted); }
+.intro :deep(code) { font-size: 0.75rem; color: var(--text-2); }
 .settings-card :deep(.subtext) { max-width: 75ch; }
 .head-actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
 </style>

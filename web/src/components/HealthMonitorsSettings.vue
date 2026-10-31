@@ -114,9 +114,9 @@ const fritzStatus = computed(() => (props.options.fritz ? { tone: 'ok', text: 'C
 </template>
 
 <style scoped>
-.text { margin: 0; max-width: 78ch; font-size: 0.86rem; line-height: 1.55; color: var(--muted); }
+.text { margin: 0; max-width: 78ch; font-size: 0.875rem; line-height: 1.55; color: var(--muted); }
 .text b { color: var(--text-2); font-weight: 500; }
 .cmd-block { border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--ground); overflow: hidden; }
-.cmd-bar-top { display: flex; justify-content: space-between; align-items: center; padding: 0.35rem 0.5rem 0.35rem 0.8rem; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 0.75rem; }
-.cmd-text { margin: 0; padding: 0.75rem 0.85rem; overflow: auto; font: 0.76rem/1.55 var(--mono); color: var(--text-2); white-space: pre; }
+.cmd-bar-top { display: flex; justify-content: space-between; align-items: center; padding: 0.25rem 0.5rem 0.25rem 0.75rem; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 0.75rem; }
+.cmd-text { margin: 0; padding: 0.75rem; overflow: auto; font: 0.75rem/1.55 var(--mono); color: var(--text-2); white-space: pre; }
 </style>

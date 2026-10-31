@@ -104,7 +104,7 @@ const status = computed(() => (!info.value ? null : info.value.trust.outdated ? 
 </template>
 
 <style scoped>
-.add { flex-direction: row; align-items: flex-end; gap: 0.6rem; flex-wrap: wrap; }
+.add { flex-direction: row; align-items: flex-end; gap: 0.5rem; flex-wrap: wrap; }
 .add-name { flex: 1; min-width: 220px; }
 .notice { justify-content: space-between; margin: 0; }
 </style>

@@ -18,8 +18,8 @@ defineProps({
 <style scoped>
 .settings-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--ground); }
 .settings-empty {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 0.7rem; padding: 1rem 1.1rem;
-  border: 1px dashed var(--line-strong); border-radius: var(--radius-sm); color: var(--muted); font-size: 0.86rem;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 0.75rem; padding: 1rem;
+  border: 1px dashed var(--line-strong); border-radius: var(--radius-sm); color: var(--muted); font-size: 0.875rem;
 }
 .settings-empty p { margin: 0; }
 </style>

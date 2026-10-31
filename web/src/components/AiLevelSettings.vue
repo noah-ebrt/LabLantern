@@ -173,24 +173,24 @@ async function save() {
 </template>
 
 <style scoped>
-.levels { display: grid; gap: 0.6rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+.levels { display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
 /* Globale Buttons zentrieren ihren Inhalt; die Stufen-Karten lesen sich links ausgerichtet */
-.level { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 0.35rem; text-align: left;
-         padding: 0.75rem 0.85rem; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text-2); }
+.level { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 0.25rem; text-align: left;
+         padding: 0.75rem; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text-2); }
 .level:hover:not(:disabled) { background: var(--surface-3); }
 .level.active, .level.active:hover:not(:disabled) { border-color: var(--text-2); background: var(--surface); color: var(--text); box-shadow: inset 0 0 0 1px var(--text-2); }
 .level-head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; }
 .level-head strong { color: var(--text); }
 .level-cost { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text); }
-.level-cost small { font-weight: 400; color: var(--text-2); margin-left: 0.15rem; }
-.level-text { font-size: 0.8rem; line-height: 1.4; font-weight: 400; }
+.level-cost small { font-weight: 400; color: var(--text-2); margin-left: 0.125rem; }
+.level-text { font-size: 0.8125rem; line-height: 1.4; font-weight: 400; }
 .intervals { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); max-width: 48rem; }
 .table-wrap { overflow-x: auto; margin: 0; padding: 0; }
-.cost-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
-.cost-table th, .cost-table td { padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--line); text-align: left; }
+.cost-table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
+.cost-table th, .cost-table td { padding: 0.5rem; border-bottom: 1px solid var(--line); text-align: left; }
 .cost-table th { color: var(--text-2); font-weight: 500; }
 .cost-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .cost-table .model { color: var(--text-2); overflow-wrap: anywhere; }
-.feeds { margin: 0; padding-left: 1.1rem; font-size: 0.84rem; overflow-wrap: anywhere; }
-.assumptions { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.2rem; }
+.feeds { margin: 0; padding-left: 1rem; font-size: 0.8125rem; overflow-wrap: anywhere; }
+.assumptions { margin: 0; padding-left: 1rem; display: flex; flex-direction: column; gap: 0.25rem; }
 </style>

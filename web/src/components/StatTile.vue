@@ -18,15 +18,15 @@ defineProps({
 
 <style scoped>
 .stat-tile {
-  display: flex; flex-direction: column; gap: 0.3rem; padding: 0.9rem 1rem; min-width: 0;
+  display: flex; flex-direction: column; gap: 0.25rem; padding: 1rem; min-width: 0;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
 }
-.stat-label { display: flex; align-items: center; gap: 0.45rem; font-size: 0.78rem; color: var(--muted); }
+.stat-label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: var(--muted); }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line-strong); }
 .ok .dot { background: var(--ok); }
 .warning .dot { background: var(--warn); }
 .danger .dot { background: var(--danger); }
-.stat-value { font-size: 1.6rem; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text); line-height: 1.1; }
+.stat-value { font-size: 1.5rem; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text); line-height: 1.1; }
 .danger .stat-value { color: var(--danger); }
-.stat-hint { font-size: 0.78rem; color: var(--muted); }
+.stat-hint { font-size: 0.75rem; color: var(--muted); }
 </style>

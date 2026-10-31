@@ -118,13 +118,13 @@ useLive(['runs'], load, 3000)
 </template>
 
 <style scoped>
-.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.1rem; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 .grid .card { margin: 0; }
 .wide { grid-column: 1 / -1; }
 .header-row select { width: auto; }
-.grid .card-header { flex-wrap: wrap; row-gap: 0.3rem; }
+.grid .card-header { flex-wrap: wrap; row-gap: 0.25rem; }
 .grid .panel-title { white-space: nowrap; }
-.now { font: 0.9rem var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.now { font: 0.875rem var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
 .now b { font-weight: 600; color: var(--text); }
 .now b.crit { color: var(--crit); }
 .now b.high { color: var(--high); }

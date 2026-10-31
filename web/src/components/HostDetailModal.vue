@@ -243,7 +243,7 @@ useLive(['commands'], loadCommands)
 .cmd-entry { margin: 10px 0; }
 .cmd-entry .badge { margin: 0 6px; }
 .cmd-bar .badge { align-self: center; }
-.chk { display: inline-flex; flex-direction: row; align-items: center; margin-left: 0.25rem; gap: 0.35rem; font-size: 0.85rem; color: var(--muted); }
+.chk { display: inline-flex; flex-direction: row; align-items: center; margin-left: 0.25rem; gap: 0.25rem; font-size: 0.8125rem; color: var(--muted); }
 .chk input, td input[type=checkbox] { width: auto; margin: 0; }
 .net, .name, .ver .badge { white-space: nowrap; }
 .img code { white-space: nowrap; }
@@ -251,7 +251,7 @@ useLive(['commands'], loadCommands)
 @media (max-width: 640px) {
   .containers thead { display: none; }
   .containers tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name st" "img img" "ver net";
-                   gap: 0.3rem 0.75rem; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid var(--line); }
+                   gap: 0.25rem 0.75rem; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid var(--line); }
   .containers tbody tr:last-child { border-bottom: none; }
   .containers td { display: block; padding: 0; border: none; }
   .containers td:nth-child(1) { grid-area: name; white-space: normal; }
@@ -259,8 +259,8 @@ useLive(['commands'], loadCommands)
   .containers td:nth-child(3) { grid-area: st; }
   .containers td:nth-child(4) { grid-area: ver; }
   .containers td:nth-child(5) { grid-area: net; justify-self: end; }
-  .containers td:nth-child(5):not(:empty)::before { content: 'Internet'; margin-right: 0.4rem; font-size: 0.78rem; color: var(--muted); }
+  .containers td:nth-child(5):not(:empty)::before { content: 'Internet'; margin-right: 0.5rem; font-size: 0.75rem; color: var(--muted); }
   .img code { white-space: normal; word-break: break-all; }
 }
-.via { margin-left: 0.35rem; font-size: 0.72rem; color: var(--muted); }
+.via { margin-left: 0.25rem; font-size: 0.6875rem; color: var(--muted); }
 </style>

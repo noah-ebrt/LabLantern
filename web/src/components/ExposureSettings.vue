@@ -383,10 +383,10 @@ useLive(['settings', 'findings'], load, 3000)
 </template>
 
 <style scoped>
-.more-line { display: block; font-size: 0.78rem; color: var(--muted); padding: 0.15rem 0; overflow-wrap: anywhere; }
+.more-line { display: block; font-size: 0.75rem; color: var(--muted); padding: 0.125rem 0; overflow-wrap: anywhere; }
 .more-line .mono { color: var(--text-2); }
 /* Restlaufzeit: Zahl in der Ampelfarbe statt einer Pille je Zeile */
-.days { font: 0.78rem var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.days { font: 0.75rem var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .days.ok { color: var(--ok); }
 .days.warning { color: var(--med); }
 .days.danger { color: var(--crit); font-weight: 600; }

@@ -181,9 +181,9 @@ useLive(['settings'], load)
 </template>
 
 <style scoped>
-.controls { display: flex; align-items: flex-end; justify-content: space-between; gap: 0.8rem 1.2rem; flex-wrap: wrap; }
-.interval { flex-direction: row; align-items: center; gap: 0.6rem; }
+.controls { display: flex; align-items: flex-end; justify-content: space-between; gap: 0.75rem 1.25rem; flex-wrap: wrap; }
+.interval { flex-direction: row; align-items: center; gap: 0.5rem; }
 .interval select { width: auto; }
-.entry-line { font-size: 0.8rem; color: var(--muted); overflow-wrap: anywhere; }
-.entry-line .mono { font-size: 0.76rem; color: var(--text-2); }
+.entry-line { font-size: 0.8125rem; color: var(--muted); overflow-wrap: anywhere; }
+.entry-line .mono { font-size: 0.75rem; color: var(--text-2); }
 </style>

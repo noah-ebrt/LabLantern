@@ -83,17 +83,17 @@ defineExpose({ refresh })
 </template>
 
 <style scoped>
-.progress { display: grid; gap: 0.55rem; color: var(--text-2); }
+.progress { display: grid; gap: 0.5rem; color: var(--text-2); }
 .head { display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap; }
 .head strong { color: var(--text); }
 .step-name { flex: 1; }
 .elapsed { color: var(--text); }
-.now { margin: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+.now { margin: 0; display: flex; flex-direction: column; gap: 0.125rem; }
 .now .subtext { display: block; }
-.bar { height: 6px; background: var(--ground); border-radius: 999px; overflow: hidden; }
-.fill { height: 100%; background: var(--invert); border-radius: 999px; transition: width 0.6s var(--ease); }
-.steps { list-style: none; margin: 0; padding: 0; display: flex; gap: 0.4rem 1rem; flex-wrap: wrap; font-size: 0.72rem; color: var(--muted); }
-.steps li { display: inline-flex; align-items: center; gap: 0.35rem; }
+.bar { height: 6px; background: var(--ground); border-radius: var(--radius-pill); overflow: hidden; }
+.fill { height: 100%; background: var(--invert); border-radius: var(--radius-pill); transition: width 0.6s var(--ease); }
+.steps { list-style: none; margin: 0; padding: 0; display: flex; gap: 0.5rem 1rem; flex-wrap: wrap; font-size: 0.6875rem; color: var(--muted); }
+.steps li { display: inline-flex; align-items: center; gap: 0.25rem; }
 .steps li::before { content: ''; width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--line-strong); }
 .steps li.done { color: var(--text-2); }
 .steps li.done::before { background: var(--ok); border-color: var(--ok); }

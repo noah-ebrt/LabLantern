@@ -120,8 +120,8 @@ onMounted(load)
 .new-token { display: flex; flex-direction: row; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .new-token input { flex: 1; min-width: 200px; }
 .new-token button { flex: none; }
-.esp summary { cursor: pointer; font-size: 0.84rem; color: var(--text-2); margin-bottom: 0.6rem; }
+.esp summary { cursor: pointer; font-size: 0.8125rem; color: var(--text-2); margin-bottom: 0.5rem; }
 .cmd-block { border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--ground); overflow: hidden; }
-.cmd-bar-top { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.35rem 0.5rem 0.35rem 0.8rem; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 0.75rem; }
-.cmd-text { margin: 0; padding: 0.75rem 0.85rem; overflow: auto; font: 0.76rem/1.55 var(--mono); color: var(--text-2); white-space: pre; }
+.cmd-bar-top { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.25rem 0.5rem 0.25rem 0.75rem; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 0.75rem; }
+.cmd-text { margin: 0; padding: 0.75rem; overflow: auto; font: 0.75rem/1.55 var(--mono); color: var(--text-2); white-space: pre; }
 </style>

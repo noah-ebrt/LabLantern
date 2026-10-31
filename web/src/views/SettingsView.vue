@@ -102,16 +102,16 @@ function go(it) {
 .settings-page :deep(.page-header) { align-items: center; }
 /* Abstände wie auf der Übersicht */
 .settings-page :deep(.tabpanel) { gap: 1rem; }
-.summary { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem 0.5rem; padding: 0.7rem 1.1rem; margin: 0; font-size: 0.85rem; }
-.sum-item { color: var(--muted); text-decoration: none; border-radius: 6px; padding: 0.1rem 0.15rem; }
+.summary { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem 0.5rem; padding: 0.75rem 1rem; margin: 0; font-size: 0.8125rem; }
+.sum-item { color: var(--muted); text-decoration: none; border-radius: 6px; padding: 0.125rem; }
 .sum-item strong { color: var(--text); font-weight: 500; }
 .sum-item strong.text-warn { color: var(--warn); }
 .sum-item strong.text-danger { color: var(--crit); }
 .sum-item:hover strong { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line-strong); }
 .sum-item:focus-visible { outline: 2px solid var(--text-2); outline-offset: 2px; }
-.sep { width: 1px; height: 14px; background: var(--line-strong); margin: 0 0.3rem; }
+.sep { width: 1px; height: 14px; background: var(--line-strong); margin: 0 0.25rem; }
 @media (max-width: 640px) {
   .sep { display: none; }
-  .summary { gap: 0.35rem 1rem; }
+  .summary { gap: 0.25rem 1rem; }
 }
 </style>

@@ -165,19 +165,19 @@ async function includeAgain() {
 </template>
 
 <style scoped>
-.exclude { display: grid; gap: 0.5rem; max-width: 26rem; margin: 0.4rem 0 0.8rem; }
+.exclude { display: grid; gap: 0.5rem; max-width: 26rem; margin: 0.5rem 0 0.75rem; }
 .exclude .actions { display: flex; gap: 0.5rem; }
-h3 { margin-top: 1.2rem; }
-.label { color: var(--muted); margin-right: 0.4rem; }
-.detail-table th { text-transform: none; letter-spacing: 0; font-size: 0.85rem; color: var(--text); white-space: nowrap; vertical-align: top; }
-.problem { margin: 0.5rem 0 0.8rem; }
+h3 { margin-top: 1.25rem; }
+.label { color: var(--muted); margin-right: 0.5rem; }
+.detail-table th { text-transform: none; letter-spacing: 0; font-size: 0.8125rem; color: var(--text); white-space: nowrap; vertical-align: top; }
+.problem { margin: 0.5rem 0 0.75rem; }
 .detail-table td { vertical-align: top; }
-.fix-cmd { display: flex; align-items: center; gap: 0.35rem; max-width: 100%; margin-top: 0.45rem; padding: 0.3rem 0.35rem 0.3rem 0.6rem; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--ground); }
-.fix-cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-size: 0.76rem; color: var(--text); }
+.fix-cmd { display: flex; align-items: center; gap: 0.25rem; max-width: 100%; margin-top: 0.5rem; padding: 0.25rem 0.25rem 0.25rem 0.5rem; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--ground); }
+.fix-cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-size: 0.75rem; color: var(--text); }
 .fix-cmd .btn-sm { flex: none; }
 /* Schmal: Prüfung und Status in einer Zeile, die Begründung darunter über die volle Breite */
 @media (max-width: 640px) {
-  .detail-table tr { display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 0.75rem; align-items: center; padding: 0.7rem 0; border-bottom: 1px solid var(--line); }
+  .detail-table tr { display: grid; grid-template-columns: auto 1fr; gap: 0.5rem 0.75rem; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid var(--line); }
   .detail-table tbody tr:last-child { border-bottom: none; }
   .detail-table th, .detail-table td { display: block; padding: 0; border: none; }
   .detail-table td:last-child { grid-column: 1 / -1; }

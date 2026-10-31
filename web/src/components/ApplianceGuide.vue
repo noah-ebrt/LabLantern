@@ -178,12 +178,12 @@ async function save() {
 </template>
 
 <style scoped>
-.guide { display: flex; flex-direction: column; gap: 1.1rem; }
-h3 { font-size: 0.85rem; margin: 0 0 0.4rem; }
-.reads, .prep { margin: 0; padding-left: 1.2rem; font-size: 0.85rem; line-height: 1.55; color: var(--text-2); }
+.guide { display: flex; flex-direction: column; gap: 1rem; }
+h3 { font-size: 0.8125rem; margin: 0 0 0.5rem; }
+.reads, .prep { margin: 0; padding-left: 1.25rem; font-size: 0.8125rem; line-height: 1.55; color: var(--text-2); }
 .prep li + li, .reads li + li { margin-top: 0.25rem; }
-.api summary { cursor: pointer; font-size: 0.82rem; color: var(--text-2); }
-.api table { margin-top: 0.5rem; border-collapse: collapse; font-size: 0.78rem; }
-.api th { text-align: left; font-weight: 500; color: var(--muted); padding: 0.2rem 1rem 0.2rem 0; vertical-align: top; white-space: nowrap; }
-.api td { padding: 0.2rem 0; overflow-wrap: anywhere; }
+.api summary { cursor: pointer; font-size: 0.8125rem; color: var(--text-2); }
+.api table { margin-top: 0.5rem; border-collapse: collapse; font-size: 0.75rem; }
+.api th { text-align: left; font-weight: 500; color: var(--muted); padding: 0.25rem 1rem 0.25rem 0; vertical-align: top; white-space: nowrap; }
+.api td { padding: 0.25rem 0; overflow-wrap: anywhere; }
 </style>

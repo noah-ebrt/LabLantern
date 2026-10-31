@@ -234,9 +234,9 @@ onMounted(() => load(true))
 
 <style scoped>
 .task-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); }
-.task-row { display: flex; flex-direction: column; gap: 0.35rem; }
-.task-row label { display: flex; flex-direction: column; gap: 0.35rem; }
-.task-error { margin: 0; font-size: 0.82rem; }
+.task-row { display: flex; flex-direction: column; gap: 0.25rem; }
+.task-row label { display: flex; flex-direction: column; gap: 0.25rem; }
+.task-error { margin: 0; font-size: 0.8125rem; }
 .provider-tabs { align-self: flex-start; }
 .provider-tabs .dot { background: var(--ok); }
 .provider-tabs .dot.off { background: var(--line-strong); }

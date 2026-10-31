@@ -83,8 +83,8 @@ const changed = computed(() => Object.entries(results.value || {}).filter(([, v]
 </template>
 
 <style scoped>
-.json { width: 100%; resize: vertical; font-family: var(--mono); font-size: 0.78rem; line-height: 1.5; tab-size: 2; }
+.json { width: 100%; resize: vertical; font-family: var(--mono); font-size: 0.75rem; line-height: 1.5; tab-size: 2; }
 .actions.start { justify-content: flex-start; }
-.results { list-style: none; margin: 0.5rem 0 0; padding: 0; font-size: 0.8rem; }
-.results li { display: flex; gap: 0.6rem; padding: 0.15rem 0; overflow-wrap: anywhere; }
+.results { list-style: none; margin: 0.5rem 0 0; padding: 0; font-size: 0.8125rem; }
+.results li { display: flex; gap: 0.5rem; padding: 0.125rem 0; overflow-wrap: anywhere; }
 </style>

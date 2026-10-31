@@ -65,7 +65,7 @@ defineEmits(['update:modelValue', 'change'])
   display: inline-flex;
   align-items: center;
   position: relative;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface-3);
   border: 1px solid var(--line-strong);
   transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),

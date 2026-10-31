@@ -8,7 +8,10 @@ Dark, monochrome admin dashboard (structure after the owner's SaaS reference: gr
 - Text `#ececef`, secondary `#b4b7bf`, muted `#8a8e97` (≥4.5:1 on surfaces).
 - Severity: critical `#f2555a`, high `#f08c3c`, medium `#e1b443`, info `#8b9099`; ok `#45bf83`. Never decorative.
 - Primary action is inverted (near-white fill, dark text); everything else is neutral outline.
-- Radius 12px cards, 8px controls, 999px pills. Elevation by 1px line only; shadows only on floating layers (modal, tooltip, drawer).
+- Radius `--radius` 12px cards and dialogs, `--radius-sm` 8px controls and icon tiles, `--radius-pill` pills. Elevation by 1px line only; shadows only on floating layers (modal, tooltip, dropdown, mobile drawer), never on cards or the active nav item.
+- Spacing: 4px grid, written as 0.25rem steps (0.25 · 0.5 · 0.75 · 1 · 1.25 · 1.5 · 2rem); 0.125rem only for hairline gaps between stacked text. `--card-pad` (1.25rem) is the card padding and the table bleed (`.table-wrap`) derives from it. Rhythm: 1rem between cards, 1.5rem from page header to content and between settings tab sections.
+- Controls share `--control-h` (36px): buttons, inputs, selects; `.btn-sm` 30px.
+- Type scale (no values in between): 0.6875rem uppercase micro labels and counts · 0.75rem meta, badges, hints · 0.8125rem secondary text and small controls · 0.875rem body and tables · 1rem card titles · 1.125rem dialog titles · 1.5rem page title. Display numerals (KPI, pairing code) may go larger.
 - Type: system UI sans; mono only for data (CVE IDs, versions, scores, KPI numbers). Tabular numerals everywhere.
 
 ## Components

@@ -98,17 +98,17 @@ const uptimeHint = computed(() => [`all hosts ${fmtPct(allUptime.value)}`,
 </template>
 
 <style scoped>
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.9rem; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1rem; }
 .monitors { display: flex; flex-direction: column; margin-bottom: 0; }
 .card-header { flex-wrap: wrap; }
-.empty-state { display: flex; flex-direction: column; align-items: flex-start; gap: 0.7rem; padding: 1rem; border: 1px dashed var(--line-strong); border-radius: var(--radius-sm); color: var(--muted); font-size: 0.88rem; }
+.empty-state { display: flex; flex-direction: column; align-items: flex-start; gap: 0.75rem; padding: 1rem; border: 1px dashed var(--line-strong); border-radius: var(--radius-sm); color: var(--muted); font-size: 0.875rem; }
 .empty-state p { margin: 0; }
 .rows { list-style: none; margin: 0; padding: 0; }
 .row { border-top: 1px solid var(--line); }
 .row:first-child { border-top: 0; }
 .row-head {
   display: grid; grid-template-columns: minmax(180px, 1.4fr) minmax(110px, auto) auto minmax(140px, 1fr) 16px;
-  align-items: center; gap: 0.5rem 1.1rem; width: 100%; padding: 0.75rem 0.25rem; min-height: 0;
+  align-items: center; gap: 0.5rem 1rem; width: 100%; padding: 0.75rem 0.25rem; min-height: 0;
   background: transparent; border: 0; border-radius: 0; text-align: left; font-weight: 400;
 }
 .row-head:hover:not(:disabled) { background: color-mix(in srgb, var(--text) 3%, transparent); border-color: transparent; }
@@ -118,21 +118,21 @@ const uptimeHint = computed(() => [`all hosts ${fmtPct(allUptime.value)}`,
 .row.down .pulse { box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 60%, transparent); animation: ping 1.6s infinite; }
 @keyframes ping { 70% { box-shadow: 0 0 0 7px transparent; } }
 .name { font-weight: 600; color: var(--text); }
-.host { flex-basis: 100%; padding-left: 1.05rem; font: 0.76rem var(--mono); color: var(--muted); }
-.tag { font-size: 0.68rem; padding: 0.05rem 0.4rem; border-radius: var(--radius-pill); border: 1px solid var(--line-strong); color: var(--text-2); }
+.host { flex-basis: 100%; padding-left: 1rem; font: 0.75rem var(--mono); color: var(--muted); }
+.tag { font-size: 0.6875rem; padding: 0.125rem 0.5rem; border-radius: var(--radius-pill); border: 1px solid var(--line-strong); color: var(--text-2); }
 .tag.crit { color: var(--high); border-color: color-mix(in srgb, var(--high) 35%, transparent); }
 .state { display: flex; flex-direction: column; align-items: flex-start; gap: 0.25rem; }
-.warn { display: inline-flex; gap: 0.3rem; align-items: center; font-size: 0.74rem; color: var(--warn); max-width: 22ch; }
-.nums { display: flex; gap: 1rem; font-variant-numeric: tabular-nums; font-size: 0.84rem; color: var(--text); }
+.warn { display: inline-flex; gap: 0.25rem; align-items: center; font-size: 0.75rem; color: var(--warn); max-width: 22ch; }
+.nums { display: flex; gap: 1rem; font-variant-numeric: tabular-nums; font-size: 0.8125rem; color: var(--text); }
 .nums span { display: flex; flex-direction: column; min-width: 3.6rem; }
-.nums small { font-size: 0.68rem; color: var(--muted); }
+.nums small { font-size: 0.6875rem; color: var(--muted); }
 .chev { color: var(--muted); transition: transform 0.2s var(--ease); transform: rotate(90deg); }
 .open .chev { transform: rotate(-90deg); }
-.row.open { padding-bottom: 0.6rem; }
-.incidents { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.85rem; }
+.row.open { padding-bottom: 0.5rem; }
+.incidents { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.8125rem; }
 .incidents li { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: baseline; }
-.when { font: 0.76rem var(--mono); color: var(--muted); min-width: 11.5rem; }
-.sub { color: var(--muted); font-size: 0.8rem; }
+.when { font: 0.75rem var(--mono); color: var(--muted); min-width: 11.5rem; }
+.sub { color: var(--muted); font-size: 0.8125rem; }
 @media (max-width: 900px) {
   .row-head { grid-template-columns: minmax(0, 1fr) auto 16px; }
   .nums, .bar { grid-column: 1 / -1; }

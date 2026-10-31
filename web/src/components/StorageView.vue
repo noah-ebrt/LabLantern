@@ -57,16 +57,16 @@ const barTone = (p) => (p >= 95 ? 'bad' : p >= 90 ? 'warn' : 'ok')
 
 <style scoped>
 .storage { display: flex; flex-wrap: wrap; gap: 0.75rem 1.75rem; padding: 0.25rem 0 1rem; }
-.pool { display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; }
-.pool-head { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; font-size: 0.78rem; }
+.pool { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
+.pool-head { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; font-size: 0.75rem; }
 .pool-name { font-weight: 500; }
-.chip { font-size: 0.68rem; padding: 0.05rem 0.4rem; border: 1px solid var(--line-strong); border-radius: 999px; color: var(--text-2); }
-.usage { display: inline-flex; align-items: center; gap: 0.4rem; }
-.bar { width: 4.5rem; height: 0.3rem; border-radius: 999px; background: var(--line-strong); overflow: hidden; }
+.chip { font-size: 0.6875rem; padding: 0.125rem 0.5rem; border: 1px solid var(--line-strong); border-radius: var(--radius-pill); color: var(--text-2); }
+.usage { display: inline-flex; align-items: center; gap: 0.5rem; }
+.bar { width: 4.5rem; height: 0.3rem; border-radius: var(--radius-pill); background: var(--line-strong); overflow: hidden; }
 .fill { display: block; height: 100%; border-radius: inherit; background: var(--ok); }
 .fill.warn { background: var(--med); }
 .fill.bad { background: var(--crit); }
-.disks { display: flex; flex-wrap: wrap; gap: 0.3rem; list-style: none; margin: 0; padding: 0; }
+.disks { display: flex; flex-wrap: wrap; gap: 0.25rem; list-style: none; margin: 0; padding: 0; }
 .disk { position: relative; display: flex; color: var(--ok); border-radius: 4px; outline-offset: 2px; cursor: default; }
 .disk.warn { color: var(--med); }
 .disk.bad { color: var(--crit); }
@@ -82,7 +82,7 @@ const barTone = (p) => (p >= 95 ? 'bad' : p >= 90 ? 'warn' : 'ok')
   box-shadow: 0 0 0 2px var(--surface); }
 /* Unter dem Symbol und an seiner linken Kante: zentriert ragte es bei Laufwerken am linken Rand aus dem Dialog */
 .tip { display: none; position: absolute; z-index: 20; top: calc(100% + 6px); left: -0.25rem;
-  flex-direction: column; gap: 0.1rem; min-width: 11rem; max-width: 16rem; padding: 0.45rem 0.6rem; border-radius: 8px;
+  flex-direction: column; gap: 0.125rem; min-width: 11rem; max-width: 16rem; padding: 0.5rem; border-radius: var(--radius-sm);
   background: var(--surface-2); border: 1px solid var(--line-strong); color: var(--text-2); font-size: 0.75rem;
   line-height: 1.35; text-align: left; overflow-wrap: anywhere; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35); pointer-events: none; }
 .tip strong { color: var(--text); }

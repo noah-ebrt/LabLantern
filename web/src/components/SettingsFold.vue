@@ -24,8 +24,8 @@ defineProps({
 <style scoped>
 .settings-fold { min-width: 0; }
 summary {
-  display: flex; align-items: baseline; gap: 0.45rem; width: fit-content; max-width: 100%; cursor: pointer; list-style: none;
-  font-size: 0.82rem; color: var(--text-2); border-radius: 6px;
+  display: flex; align-items: baseline; gap: 0.5rem; width: fit-content; max-width: 100%; cursor: pointer; list-style: none;
+  font-size: 0.8125rem; color: var(--text-2); border-radius: 6px;
 }
 summary::-webkit-details-marker { display: none; }
 summary:hover .fold-title { color: var(--text); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line-strong); }
@@ -33,7 +33,7 @@ summary:focus-visible { outline: 2px solid var(--text-2); outline-offset: 3px; }
 .chev { align-self: center; flex: none; color: var(--muted); transition: transform 0.2s var(--ease); }
 .settings-fold[open] > summary .chev { transform: rotate(90deg); }
 .fold-title { font-weight: 500; }
-.fold-hint { color: var(--muted); font-size: 0.78rem; }
-.fold-body { display: flex; flex-direction: column; gap: 0.75rem; padding: 0.75rem 0 0.15rem 1.3rem; }
+.fold-hint { color: var(--muted); font-size: 0.75rem; }
+.fold-body { display: flex; flex-direction: column; gap: 0.75rem; padding: 0.75rem 0 0.125rem 1.25rem; }
 @media (prefers-reduced-motion: reduce) { .chev { transition: none; } }
 </style>

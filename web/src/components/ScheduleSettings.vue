@@ -94,7 +94,7 @@ onMounted(load)
 </template>
 
 <style scoped>
-.time-input { width: 5.5rem; min-height: 30px; padding-top: 0.2rem; padding-bottom: 0.2rem; font-size: 0.82rem; text-align: center; }
-.interval { width: auto; min-height: 30px; padding-top: 0.2rem; padding-bottom: 0.2rem; font-size: 0.82rem; }
+.time-input { width: 5.5rem; min-height: 30px; padding-top: 0.25rem; padding-bottom: 0.25rem; font-size: 0.8125rem; text-align: center; }
+.interval { width: auto; min-height: 30px; padding-top: 0.25rem; padding-bottom: 0.25rem; font-size: 0.8125rem; }
 .tz-select { max-width: 13rem; }
 </style>

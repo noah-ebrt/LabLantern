@@ -81,14 +81,14 @@ function onKey(e) {
 }
 .tablist.more { mask-image: linear-gradient(90deg, #000 calc(100% - 3rem), transparent); }
 .tab {
-  min-height: 40px; padding: 0.45rem 0.85rem; margin-bottom: -1px; border: 0; border-bottom: 2px solid transparent;
+  min-height: 40px; padding: 0.5rem 0.75rem; margin-bottom: -1px; border: 0; border-bottom: 2px solid transparent;
   border-radius: 0; background: transparent; color: var(--muted); white-space: nowrap; transition: color 0.15s, border-color 0.15s;
 }
 .tab:hover:not(:disabled) { background: transparent; border-color: transparent; border-bottom-color: var(--line-strong); color: var(--text-2); }
 .tab.active, .tab.active:hover:not(:disabled) { color: var(--text); border-bottom-color: var(--text); }
 .tab:active:not(:disabled) { transform: none; }
 .tab:focus-visible { outline: 2px solid var(--text-2); outline-offset: -2px; border-radius: 6px 6px 0 0; }
-.count { font: 0.72rem var(--mono); color: var(--muted); padding: 0 0.4rem; border-radius: var(--radius-pill); background: var(--surface-2); }
+.count { font: 0.6875rem var(--mono); color: var(--muted); padding: 0 0.5rem; border-radius: var(--radius-pill); background: var(--surface-2); }
 .count.danger { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); }
 .count.warning { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
 .tabpanel { display: flex; flex-direction: column; gap: 1.5rem; min-width: 0; }

@@ -111,7 +111,7 @@ useLive(['runs'], () => loadRuns(true))
 
 <style scoped>
 
-.counts { font-size: 0.82rem; }
+.counts { font-size: 0.8125rem; }
 .c-kritisch { color: var(--crit); font-weight: 600; }
 .c-hoch { color: var(--high); font-weight: 600; }
 .c-mittel { color: var(--med); }

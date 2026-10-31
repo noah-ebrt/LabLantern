@@ -217,32 +217,32 @@ curl -fsS "{{ beatUrl(t) }}?state=down"</pre>
 
 <style scoped>
 .monitor-form { display: flex; flex-direction: column; gap: 1rem; }
-h2 { margin: 0; font-size: 1.15rem; }
-h3 { margin: 0.4rem 0 0; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-2); }
-.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.9rem; }
+h2 { margin: 0; font-size: 1.125rem; }
+h3 { margin: 0.5rem 0 0; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-2); }
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
 .flags { display: flex; gap: 0.75rem 1.75rem; flex-wrap: wrap; }
-.toggle-row { display: inline-flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; color: var(--text-2); }
-.hint { font-size: 0.78rem; color: var(--muted); }
-.hint code { font-size: 0.76rem; }
-.advanced summary { cursor: pointer; font-size: 0.82rem; color: var(--text-2); }
+.toggle-row { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.8125rem; color: var(--text-2); }
+.hint { font-size: 0.75rem; color: var(--muted); }
+.hint code { font-size: 0.75rem; }
+.advanced summary { cursor: pointer; font-size: 0.8125rem; color: var(--text-2); }
 .advanced[open] { display: flex; flex-direction: column; gap: 0.75rem; }
 .checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.75rem; }
-.check { display: flex; flex-direction: column; gap: 0.8rem; padding: 0.9rem 1rem; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--ground); }
+.check { display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--ground); }
 .check header { display: flex; justify-content: space-between; gap: 0.75rem; align-items: flex-start; }
-.check header > div:first-child { display: flex; flex-direction: column; gap: 0.15rem; }
-.check-actions { display: flex; gap: 0.4rem; }
-.fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.7rem; }
+.check header > div:first-child { display: flex; flex-direction: column; gap: 0.125rem; }
+.check-actions { display: flex; gap: 0.5rem; }
+.fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.75rem; }
 .fields .wide { grid-column: 1 / -1; }
-.fields .hint { display: flex; gap: 0.6rem; flex-wrap: wrap; }
-.test { display: flex; gap: 0.4rem; align-items: center; margin: 0; font-size: 0.82rem; }
+.fields .hint { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.test { display: flex; gap: 0.5rem; align-items: center; margin: 0; font-size: 0.8125rem; }
 .test.ok { color: var(--ok); }
 .test.warning { color: var(--warn); }
 .test.error { color: var(--danger); }
-.add { display: flex; flex-direction: column; gap: 0.7rem; }
-.presets { display: flex; gap: 0.4rem; flex-wrap: wrap; }
-.chip { min-height: 28px; padding: 0.15rem 0.6rem; font-size: 0.78rem; border-radius: var(--radius-pill); gap: 0.3rem; }
+.add { display: flex; flex-direction: column; gap: 0.75rem; }
+.presets { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.chip { min-height: 28px; padding: 0.125rem 0.5rem; font-size: 0.75rem; border-radius: var(--radius-pill); gap: 0.25rem; }
 .add-kind { max-width: 420px; }
-.modal-actions { display: flex; justify-content: flex-end; gap: 0.6rem; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
 .cmd-block { border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--ground); overflow: hidden; }
-.cmd-text { margin: 0; padding: 0.75rem 0.85rem; overflow: auto; font: 0.76rem/1.55 var(--mono); color: var(--text-2); white-space: pre; }
+.cmd-text { margin: 0; padding: 0.75rem; overflow: auto; font: 0.75rem/1.55 var(--mono); color: var(--text-2); white-space: pre; }
 </style>

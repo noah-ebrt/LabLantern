@@ -113,8 +113,8 @@ onMounted(() => Promise.all(Object.keys(ROUTERS).map((k) => load(k).catch(() => 
 </template>
 
 <style scoped>
-.more summary { cursor: pointer; font-size: 0.8rem; color: var(--text-2); width: fit-content; }
-.more[open] summary { margin-bottom: 0.4rem; }
-.more-line { display: block; font-size: 0.78rem; color: var(--muted); padding: 0.15rem 0; overflow-wrap: anywhere; }
+.more summary { cursor: pointer; font-size: 0.8125rem; color: var(--text-2); width: fit-content; }
+.more[open] summary { margin-bottom: 0.5rem; }
+.more-line { display: block; font-size: 0.75rem; color: var(--muted); padding: 0.125rem 0; overflow-wrap: anywhere; }
 .more-line .mono { color: var(--text-2); }
 </style>

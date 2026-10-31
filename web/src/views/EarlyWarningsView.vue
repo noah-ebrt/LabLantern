@@ -341,61 +341,61 @@ useLive(['findings', 'settings'], load, 3000)
 </template>
 
 <style scoped>
-.facts { display: flex; flex-wrap: wrap; gap: 0.5rem 1.75rem; padding: 0.85rem 1.15rem; margin-bottom: 1.1rem; font-size: 0.88rem; color: var(--muted); }
+.facts { display: flex; flex-wrap: wrap; gap: 0.5rem 1.75rem; padding: 0.75rem 1.25rem; margin-bottom: 1rem; font-size: 0.875rem; color: var(--muted); }
 .facts strong { color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
 .text-danger { color: var(--crit); }
 
-.coverage { padding: 0.8rem 1.05rem; margin-bottom: 1.1rem; display: flex; flex-direction: column; gap: 0.6rem; }
-.coverage-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.8rem; flex-wrap: wrap; }
-.coverage-head > div { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; flex: 1 1 260px; }
-.coverage-list { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.86rem; overflow-wrap: anywhere; }
-.notice { display: flex; gap: 0.7rem; align-items: flex-start; padding: 0.8rem 1.05rem; margin-bottom: 1.1rem; color: var(--crit); }
-.notice div { display: flex; flex-direction: column; gap: 0.15rem; }
+.coverage { padding: 0.75rem 1rem; margin-bottom: 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.coverage-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; flex-wrap: wrap; }
+.coverage-head > div { display: flex; flex-direction: column; gap: 0.125rem; min-width: 0; flex: 1 1 260px; }
+.coverage-list { margin: 0; padding-left: 1rem; display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.875rem; overflow-wrap: anywhere; }
+.notice { display: flex; gap: 0.75rem; align-items: flex-start; padding: 0.75rem 1rem; margin-bottom: 1rem; color: var(--crit); }
+.notice div { display: flex; flex-direction: column; gap: 0.125rem; }
 .notice strong { color: var(--text); font-weight: 500; }
 
 .config { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 1rem 1.25rem; }
-.config label { display: flex; flex-direction: column; gap: 0.35rem; }
-.config textarea { width: 100%; resize: vertical; font-family: var(--mono); font-size: 0.8rem; line-height: 1.55; }
-.config-actions { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.config label { display: flex; flex-direction: column; gap: 0.25rem; }
+.config textarea { width: 100%; resize: vertical; font-family: var(--mono); font-size: 0.8125rem; line-height: 1.55; }
+.config-actions { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .config-actions .message { margin: 0; }
 
-.list-card { padding-bottom: 0.4rem; }
-.toolbar { display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+.list-card { padding-bottom: 0.5rem; }
+.toolbar { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
 .seg-btn.betroffen .dot { background: var(--crit); }
 .seg-btn.unklar .dot { background: var(--med); }
 .seg-btn.nicht_betroffen .dot { background: var(--ok); }
 
 .ew-list { list-style: none; margin: 0; padding: 0; transition: opacity 0.2s; }
 .ew-list.stale { opacity: 0.6; }
-.ew { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr) auto; gap: 0.35rem 1.1rem; padding: 1rem 0; border-top: 1px solid var(--line); }
+.ew { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr) auto; gap: 0.25rem 1rem; padding: 1rem 0; border-top: 1px solid var(--line); }
 .ew:first-child { border-top: 0; }
-.ew-status { display: flex; flex-direction: column; align-items: flex-start; gap: 0.35rem; padding-top: 0.1rem; }
+.ew-status { display: flex; flex-direction: column; align-items: flex-start; gap: 0.25rem; padding-top: 0.125rem; }
 .ew-status .badge { white-space: nowrap; }
 .ew-status .badge + .badge { margin-left: 0; }   /* globaler Abstand gilt für Pillen nebeneinander, hier stehen sie untereinander */
-.ew-main { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
+.ew-main { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
 .ew-title { color: var(--text); font-weight: 500; line-height: 1.4; text-decoration: none; text-wrap: balance; }
 .ew-title:hover { text-decoration: underline; text-underline-offset: 3px; }
-.ew-title :deep(svg) { margin-left: 0.3rem; vertical-align: -1px; color: var(--muted); }
-.ew-detail { margin: 0; font-size: 0.86rem; color: var(--text-2); line-height: 1.5; max-width: 75ch; }
-.ew-summary { margin: 0; font-size: 0.88rem; color: var(--text); line-height: 1.5; max-width: 75ch; }
-.ew-steps { list-style: none; margin: 0.15rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; max-width: 90ch; }
-.ew-steps li { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.85rem; color: var(--text-2); }
+.ew-title :deep(svg) { margin-left: 0.25rem; vertical-align: -1px; color: var(--muted); }
+.ew-detail { margin: 0; font-size: 0.875rem; color: var(--text-2); line-height: 1.5; max-width: 75ch; }
+.ew-summary { margin: 0; font-size: 0.875rem; color: var(--text); line-height: 1.5; max-width: 75ch; }
+.ew-steps { list-style: none; margin: 0.125rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; max-width: 90ch; }
+.ew-steps li { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.8125rem; color: var(--text-2); }
 .ew-step-text strong { color: var(--text); font-weight: 500; margin-right: 0.25rem; }
-.ew-cmd { display: flex; align-items: center; gap: 0.35rem; min-width: 0; padding: 0.3rem 0.35rem 0.3rem 0.6rem; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); }
-.ew-cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-size: 0.76rem; color: var(--text); }
-.ew-mitigations { display: flex; flex-direction: column; gap: 0.15rem; max-width: 80ch; padding-left: 0.7rem; border-left: 2px solid var(--line-strong); }
-.ew-mitigations p { margin: 0; font-size: 0.85rem; color: var(--text-2); line-height: 1.5; }
+.ew-cmd { display: flex; align-items: center; gap: 0.25rem; min-width: 0; padding: 0.25rem 0.25rem 0.25rem 0.5rem; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); }
+.ew-cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-size: 0.75rem; color: var(--text); }
+.ew-mitigations { display: flex; flex-direction: column; gap: 0.125rem; max-width: 80ch; padding-left: 0.75rem; border-left: 2px solid var(--line-strong); }
+.ew-mitigations p { margin: 0; font-size: 0.8125rem; color: var(--text-2); line-height: 1.5; }
 .research-config { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; }
-.research-config .check { display: inline-flex; align-items: center; gap: 0.45rem; font-size: 0.9rem; }
+.research-config .check { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; }
 .research-config .subtext { flex-basis: 100%; }
-.ew-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.9rem; font-size: 0.78rem; color: var(--muted); }
+.ew-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 1rem; font-size: 0.75rem; color: var(--muted); }
 .ew-meta time { font-variant-numeric: tabular-nums; }
-.ew-product { display: inline-flex; align-items: center; gap: 0.4rem; max-width: 100%; padding: 0.1rem 0.5rem; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); }
-.ew-product .mono { font-size: 0.74rem; color: var(--text-2); max-width: 28ch; }
-.ew-cves { display: flex; flex-wrap: wrap; gap: 0.25rem 0.75rem; font-size: 0.76rem; }
+.ew-product { display: inline-flex; align-items: center; gap: 0.5rem; max-width: 100%; padding: 0.125rem 0.5rem; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); }
+.ew-product .mono { font-size: 0.75rem; color: var(--text-2); max-width: 28ch; }
+.ew-cves { display: flex; flex-wrap: wrap; gap: 0.25rem 0.75rem; font-size: 0.75rem; }
 .ew-cves a { color: var(--text-2); text-decoration: none; }
 .ew-cves a:hover { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
-.ew-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 0.4rem; }
+.ew-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; }
 .ew-actions .btn-sm { white-space: nowrap; text-decoration: none; }
 /* Navigation bleibt ein Link, sieht aber aus wie die Schaltflächen daneben */
 .ew-actions a.btn-sm {

@@ -58,17 +58,17 @@ function onFocusOut(e) {
 <style scoped>
 .finder { position: relative; width: min(100%, 300px); }
 .finder-icon { position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
-.finder input { width: 100%; min-height: 36px; padding-left: 2.1rem; font-size: 0.86rem; border-radius: var(--radius-pill); }
+.finder input { width: 100%; min-height: 36px; padding-left: 2rem; font-size: 0.875rem; border-radius: var(--radius-pill); }
 .hits, .no-hit {
   position: absolute; z-index: 20; top: calc(100% + 6px); left: 0; right: 0; margin: 0;
   background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
   box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.6);
 }
-.hits { list-style: none; padding: 0.3rem; max-height: 22rem; overflow-y: auto; }
-.hits li { display: flex; justify-content: space-between; align-items: baseline; gap: 0.75rem; padding: 0.45rem 0.6rem; border-radius: 6px; cursor: pointer; }
+.hits { list-style: none; padding: 0.25rem; max-height: 22rem; overflow-y: auto; }
+.hits li { display: flex; justify-content: space-between; align-items: baseline; gap: 0.75rem; padding: 0.5rem; border-radius: 6px; cursor: pointer; }
 .hits li.active { background: var(--surface-3); }
-.hit-label { color: var(--text); font-size: 0.86rem; }
+.hit-label { color: var(--text); font-size: 0.875rem; }
 .hit-where { color: var(--muted); font-size: 0.75rem; white-space: nowrap; }
-.no-hit { padding: 0.6rem 0.75rem; font-size: 0.82rem; color: var(--muted); }
+.no-hit { padding: 0.5rem 0.75rem; font-size: 0.8125rem; color: var(--muted); }
 @media (max-width: 640px) { .finder { width: 100%; } }
 </style>

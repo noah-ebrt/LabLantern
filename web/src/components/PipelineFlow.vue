@@ -479,10 +479,10 @@ const failing = computed(() => props.data.coverage.flatMap((s) => Object.entries
 .node-wrap { position: absolute; left: 0; top: 0; }
 .note {
   position: absolute; bottom: calc(100% + 4px); left: 2px; right: 0;
-  font: 0.68rem var(--mono); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font: 0.6875rem var(--mono); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .node {
-  position: relative; display: flex; align-items: center; gap: 0.6rem; height: 58px; padding: 0 0.7rem 0 0.55rem;
+  position: relative; display: flex; align-items: center; gap: 0.5rem; height: 58px; padding: 0 0.75rem 0 0.5rem;
   background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: 10px;
   cursor: grab; color: var(--text); transition: border-color 0.15s, background-color 0.15s;
 }
@@ -494,12 +494,12 @@ const failing = computed(() => props.data.coverage.flatMap((s) => Object.entries
 .node.bad { border-color: color-mix(in srgb, var(--danger) 45%, var(--line-strong)); }
 
 .glyph {
-  flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 8px;
+  flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: var(--radius-sm);
   background: var(--surface); border: 1px solid var(--line); color: var(--text-2);
 }
-.text { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 0.1rem; }
-.title { font-size: 0.86rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sub { font-size: 0.72rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.text { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 0.125rem; }
+.title { font-size: 0.875rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sub { font-size: 0.6875rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .dot { position: absolute; top: 7px; right: 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
 .node.ok .dot { background: var(--ok); }
@@ -514,13 +514,13 @@ const failing = computed(() => props.data.coverage.flatMap((s) => Object.entries
 
 .node-action {
   position: absolute; bottom: -11px; right: 10px; display: inline-flex; align-items: center; gap: 0.25rem;
-  min-height: 0; padding: 0.12rem 0.5rem; border-radius: 999px; font-size: 0.68rem; font-weight: 600;
+  min-height: 0; padding: 0.125rem 0.5rem; border-radius: var(--radius-pill); font-size: 0.6875rem; font-weight: 600;
   color: var(--ground); background: var(--text); border: 1px solid var(--text); cursor: pointer;
 }
 .node-action:disabled { opacity: 0.6; cursor: default; }
 
-.legend-line { gap: 0.35rem 1rem; }
-.legend-line span { display: inline-flex; align-items: center; gap: 0.4rem; }
+.legend-line { gap: 0.25rem 1rem; }
+.legend-line span { display: inline-flex; align-items: center; gap: 0.5rem; }
 .lg { display: inline-block; width: 18px; border-top: 2px solid var(--line-strong); }
 .lg.ok { border-color: var(--ok); }
 .lg.wait { border-top-style: dashed; border-color: var(--warn); }
@@ -530,27 +530,27 @@ const failing = computed(() => props.data.coverage.flatMap((s) => Object.entries
 .vflow { display: flex; flex-direction: column; gap: 1rem; }
 .vhosts { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
 .vhost {
-  width: 100%; min-height: 44px; display: flex; align-items: center; gap: 0.55rem; padding: 0.5rem 0.65rem; text-align: left;
+  width: 100%; min-height: 44px; display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; text-align: left;
   color: var(--text); background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
 }
 .vhost-text { display: flex; flex-direction: column; min-width: 0; }
 .vsteps { list-style: none; margin: 0; padding: 0; position: relative; }
 .vsteps::before { content: ''; position: absolute; left: 3px; top: 1.2rem; bottom: 1.2rem; width: 1px; background: var(--line-strong); }
-.vstep { position: relative; display: grid; grid-template-columns: 7px minmax(0, 1fr); column-gap: 0.85rem; padding: 0.3rem 0; }
-.vstep > .vdot { margin-top: 1.35rem; position: relative; z-index: 1; box-shadow: 0 0 0 3px var(--surface); }
-.vstep.side .vstep-body { margin-left: 0.9rem; border-style: dashed; }
+.vstep { position: relative; display: grid; grid-template-columns: 7px minmax(0, 1fr); column-gap: 0.75rem; padding: 0.25rem 0; }
+.vstep > .vdot { margin-top: 1.25rem; position: relative; z-index: 1; box-shadow: 0 0 0 3px var(--surface); }
+.vstep.side .vstep-body { margin-left: 1rem; border-style: dashed; }
 .vstep-body {
-  width: 100%; min-height: 52px; display: flex; align-items: center; gap: 0.65rem; padding: 0.6rem 0.7rem; text-align: left;
+  width: 100%; min-height: 52px; display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.75rem; text-align: left;
   color: var(--text); background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
 }
 .vstep.active .vstep-body { border-color: color-mix(in srgb, var(--ok) 55%, var(--line-strong)); }
 .vstep.wait .vstep-body { border-color: color-mix(in srgb, var(--warn) 45%, var(--line-strong)); }
 .vstep.bad .vstep-body { border-color: color-mix(in srgb, var(--danger) 45%, var(--line-strong)); }
-.vstep-body .text { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; flex: 1; }
+.vstep-body .text { display: flex; flex-direction: column; gap: 0.125rem; min-width: 0; flex: 1; }
 .vstep-body .sub { white-space: normal; }
-.vnote { font-family: var(--mono); font-size: 0.68rem; color: var(--muted); }
+.vnote { font-family: var(--mono); font-size: 0.6875rem; color: var(--muted); }
 .vchev { color: var(--muted); flex: none; }
-.vaction { grid-column: 2; justify-self: start; margin-top: 0.4rem; }
+.vaction { grid-column: 2; justify-self: start; margin-top: 0.5rem; }
 .vdot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--muted); }
 .ok > .vdot, .vhost.ok .vdot { background: var(--ok); }
 .warn > .vdot, .wait > .vdot, .vhost.warn .vdot, .vhost.wait .vdot { background: var(--warn); }
@@ -565,13 +565,13 @@ const failing = computed(() => props.data.coverage.flatMap((s) => Object.entries
 .ld.warn { background: var(--warn); }
 .ld.bad { background: var(--danger); }
 
-.explain { color: var(--text-2); font-size: 0.9rem; margin: 0 0 0.9rem; }
-dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0.4rem 1rem; margin: 0 0 1rem; font-size: 0.88rem; }
+.explain { color: var(--text-2); font-size: 0.875rem; margin: 0 0 1rem; }
+dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0.5rem 1rem; margin: 0 0 1rem; font-size: 0.875rem; }
 dt { color: var(--muted); }
 dd { margin: 0; word-break: break-word; }
-.fails { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow: auto; font-size: 0.85rem; }
-.fails li { padding: 0.45rem 0; border-top: 1px solid var(--line); }
-.fails .subtext { display: block; margin-top: 0.15rem; word-break: break-word; }
+.fails { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow: auto; font-size: 0.8125rem; }
+.fails li { padding: 0.5rem 0; border-top: 1px solid var(--line); }
+.fails .subtext { display: block; margin-top: 0.125rem; word-break: break-word; }
 
 @media (prefers-reduced-motion: reduce) {
   .edge.active, .node.active .dot, .ld.active, .active > .vdot, .vhost.active .vdot { animation: none; }

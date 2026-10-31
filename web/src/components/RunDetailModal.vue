@@ -77,7 +77,7 @@ useLive(['runs'], load, 500)
 
 <style scoped>
 .facts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; margin: 0 0 1rem; }
-.facts-grid > div { padding: 0.65rem 0.8rem; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--ground); }
-.facts-grid dt { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.facts-grid > div { padding: 0.75rem; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--ground); }
+.facts-grid dt { font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 .facts-grid dd { margin: 0.25rem 0 0; color: var(--text-2); word-break: break-word; }
 </style>

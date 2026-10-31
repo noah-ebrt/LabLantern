@@ -32,6 +32,6 @@ defineProps({
 </template>
 
 <style scoped>
-.secret-field { display: flex; flex-direction: column; gap: 0.35rem; }
-.secret-state { display: inline-flex; align-items: center; gap: 0.35rem; }
+.secret-field { display: flex; flex-direction: column; gap: 0.25rem; }
+.secret-state { display: inline-flex; align-items: center; gap: 0.25rem; }
 </style>

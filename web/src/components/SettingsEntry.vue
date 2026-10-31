@@ -32,23 +32,23 @@ defineProps({
 
 <style scoped>
 .settings-entry {
-  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 0.35rem 0.85rem;
-  padding: 0.8rem 0.95rem; border-top: 1px solid var(--line);
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 0.25rem 0.75rem;
+  padding: 0.75rem 1rem; border-top: 1px solid var(--line);
 }
 .settings-entry:first-child { border-top: 0; }
-.settings-entry.dense { padding: 0.45rem 0.95rem; }
-.settings-entry.dense .name.mono { font-size: 0.8rem; color: var(--text-2); }
+.settings-entry.dense { padding: 0.5rem 1rem; }
+.settings-entry.dense .name.mono { font-size: 0.8125rem; color: var(--text-2); }
 .entry-icon {
   display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; align-self: start;
-  border-radius: 8px; background: var(--surface-2); border: 1px solid var(--line); color: var(--text-2);
+  border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--line); color: var(--text-2);
 }
 .settings-entry:not(:has(.entry-icon)) { grid-template-columns: minmax(0, 1fr) auto; }
-.entry-main { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
-.entry-title { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
+.entry-main { display: flex; flex-direction: column; gap: 0.125rem; min-width: 0; }
+.entry-title { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .name { color: var(--text); font-weight: 500; overflow-wrap: anywhere; }
-.name.mono { font-family: var(--mono); font-size: 0.86rem; font-weight: 400; }
-.entry-meta { font-size: 0.8rem; color: var(--muted); overflow-wrap: anywhere; }
-.entry-actions { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; justify-content: flex-end; }
+.name.mono { font-family: var(--mono); font-size: 0.875rem; font-weight: 400; }
+.entry-meta { font-size: 0.8125rem; color: var(--muted); overflow-wrap: anywhere; }
+.entry-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; }
 .entry-body { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 0.5rem; }
 .settings-entry:has(.entry-icon) .entry-body { grid-column: 2 / -1; }
 @media (max-width: 640px) {

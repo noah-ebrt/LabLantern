@@ -308,39 +308,39 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.snooze fieldset { border: 0; padding: 0; margin: 0 0 0.9rem; }
-.snooze legend { font-size: 0.85rem; margin-bottom: 0.35rem; }
-.snooze .radio { display: flex; gap: 0.5rem; align-items: baseline; font-size: 0.88rem; margin-bottom: 0.3rem; }
+.snooze fieldset { border: 0; padding: 0; margin: 0 0 1rem; }
+.snooze legend { font-size: 0.8125rem; margin-bottom: 0.25rem; }
+.snooze .radio { display: flex; gap: 0.5rem; align-items: baseline; font-size: 0.875rem; margin-bottom: 0.25rem; }
 .snooze .radio input { width: auto; }
-.toolbar { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin-bottom: 1.1rem; }
+.toolbar { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem; }
 .toolbar select { width: auto; }
-.chk { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.85rem; color: var(--muted); white-space: nowrap; }
+.chk { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8125rem; color: var(--muted); white-space: nowrap; }
 .chk input { width: auto; margin: 0; }
 .badge-kev.exposed { color: var(--high); }
 .filter-search {
-  flex: 1; min-width: 220px; display: flex; flex-direction: row; align-items: center; gap: 0.55rem;
-  padding: 0 0.85rem; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: var(--muted);
+  flex: 1; min-width: 220px; display: flex; flex-direction: row; align-items: center; gap: 0.5rem;
+  padding: 0 0.75rem; border: 1px solid var(--line-strong); border-radius: var(--radius-pill); background: var(--surface); color: var(--muted);
   transition: all 0.15s;
 }
 .filter-search:focus-within { border-color: var(--text-2); background: var(--surface-2); box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.05); }
-.filter-search input { flex: 1; border: none; background: none; padding: 0; min-height: 36px; color: var(--text); font-size: 0.85rem; }
+.filter-search input { flex: 1; border: none; background: none; padding: 0; min-height: 36px; color: var(--text); font-size: 0.8125rem; }
 .filter-search input:focus-visible { outline: none; }
-.cve { display: inline-flex; align-items: center; gap: 0.3rem; font: 500 0.82rem var(--mono); color: var(--text); text-decoration: none; white-space: nowrap; }
+.cve { display: inline-flex; align-items: center; gap: 0.25rem; font: 500 0.8125rem var(--mono); color: var(--text); text-decoration: none; white-space: nowrap; }
 .cve svg { color: var(--muted); }
 .cve:hover { text-decoration: underline; }
-.num { text-align: right; font-family: var(--mono); font-size: 0.82rem; white-space: nowrap; }
+.num { text-align: right; font-family: var(--mono); font-size: 0.8125rem; white-space: nowrap; }
 .row-action { text-align: right; white-space: nowrap; }
-.row-action .btn-sm + .btn-sm { margin-left: 0.35rem; }
+.row-action .btn-sm + .btn-sm { margin-left: 0.25rem; }
 tr.expanded td { border-bottom-color: transparent; }
 .action-row td { padding-top: 0; background: var(--surface-2); }
-.action-text { margin: 0.5rem 0 0.4rem; font-size: 0.86rem; color: var(--text-2); max-width: 100ch; line-height: 1.5; white-space: normal; }
-.action-cmd { display: flex; align-items: center; gap: 0.35rem; max-width: 80ch; margin-bottom: 0.3rem; padding: 0.3rem 0.35rem 0.3rem 0.6rem;
+.action-text { margin: 0.5rem 0 0.5rem; font-size: 0.875rem; color: var(--text-2); max-width: 100ch; line-height: 1.5; white-space: normal; }
+.action-cmd { display: flex; align-items: center; gap: 0.25rem; max-width: 80ch; margin-bottom: 0.25rem; padding: 0.25rem 0.25rem 0.25rem 0.5rem;
   border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); }
-.action-cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-size: 0.76rem; color: var(--text); }
+.action-cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-size: 0.75rem; color: var(--text); }
 .comp { max-width: 32ch; }
 .fix { max-width: 18ch; }
 td .truncate { max-width: 28ch; }
 .stale { opacity: 0.55; transition: opacity 0.2s; }
-.pager { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding-top: 0.9rem; margin-top: 0.4rem; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.82rem; }
+.pager { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding-top: 1rem; margin-top: 0.5rem; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.8125rem; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 </style>

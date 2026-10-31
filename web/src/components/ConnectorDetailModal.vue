@@ -180,7 +180,7 @@ const iso = (d) => d?.toISOString()
 </template>
 
 <style scoped>
-h3 { margin-top: 1.2rem; }
+h3 { margin-top: 1.25rem; }
 .kv th { text-align: left; font-weight: 500; color: var(--muted); width: 14rem; }
 .text-warning { color: var(--med); }
 .sort { font-size: 0.75rem; font-weight: 400; margin-left: 0.5rem; }

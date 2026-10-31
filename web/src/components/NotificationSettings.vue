@@ -336,10 +336,10 @@ const schemeLabel = (s) => SCHEMES[s] || s
 </template>
 
 <style scoped>
-.gets { width: auto; min-height: 30px; padding-top: 0.2rem; padding-bottom: 0.2rem; font-size: 0.82rem; }
+.gets { width: auto; min-height: 30px; padding-top: 0.25rem; padding-bottom: 0.25rem; font-size: 0.8125rem; }
 /* Add Channel Form Panel */
 .add-channel-panel {
-  padding: 1.1rem 1.15rem;
+  padding: 1rem 1.25rem;
   background: var(--ground);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -361,7 +361,7 @@ const schemeLabel = (s) => SCHEMES[s] || s
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 1.1rem;
+  margin-bottom: 1rem;
 }
 
 .panel-heading h3 {
@@ -370,8 +370,8 @@ const schemeLabel = (s) => SCHEMES[s] || s
 }
 
 .panel-heading .subtitle {
-  margin: 0.2rem 0 0;
-  font-size: 0.84rem;
+  margin: 0.25rem 0 0;
+  font-size: 0.8125rem;
 }
 
 .close-btn {
@@ -393,7 +393,7 @@ const schemeLabel = (s) => SCHEMES[s] || s
   border-color: var(--line-strong);
 }
 
-.channel-type { margin-bottom: 1.1rem; }
+.channel-type { margin-bottom: 1rem; }
 
 .channel-form {
   display: flex;
