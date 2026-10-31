@@ -23,17 +23,17 @@ describe('Synology und OPNsense', () => {
   it('Synology: Update, Speicher und Pakete, ohne Admin den Grund statt „keins“', async () => {
     let text = await open({ ...base, host_type: 'synology', inventory: { connector: {
       version: '7.2.2-72806 Update 3', model: 'DS920+', update: { available: true, version: '7.2.2-72806 Update 4' },
-      spaces: [{ kind: 'Volume', name: '/volume1', status: 'normal', percent: 96.2 }],
-      disks: [{ name: 'Drive 2', model: 'WD40EFRX', status: 'crashed', smart: 'failing' }],
+      storage: { error: '', pools: [{ name: '/volume1', kind: 'Volume', layout: 'BTRFS', status: 'normal', state: 'ok', percent: 96.2, size: 4e12, disks: [] }],
+        disks: [{ name: 'Drive 2', model: 'WD40EFRX', size: 4e12, type: 'hdd', status: 'crashed', state: 'bad', temp: 41, pool: '' }] },
       packages: [{ id: 'ContainerManager', name: 'Container Manager', version: '24.0.2-1535' }] } } })
     expect(text).toContain('DS920+')
     expect(text).toContain('7.2.2-72806 Update 4')
     expect(text).toContain('96 %')
-    expect(text).toContain('S.M.A.R.T. failing')
+    expect(text).toContain('failing (crashed)')
     expect(text).toContain('Container Manager')
     text = await open({ ...base, host_type: 'synology', inventory: { connector: {
       version: '7.2.2', update: null, update_error: 'not readable: the DSM account is not an administrator',
-      spaces: null, storage_error: 'not readable: the DSM account is not an administrator', packages: null } } })
+      storage: { pools: [], disks: [], error: 'storage not readable: the DSM account is not an administrator' }, packages: null } } })
     expect(text).toContain('not an administrator')
     expect(text).not.toContain('none available')
   })

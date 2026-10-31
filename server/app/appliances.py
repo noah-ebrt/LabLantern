@@ -265,8 +265,7 @@ def _interval_days(schedule) -> float:
     return 1
 
 
-def _pools(client: TrueNasClient) -> list[dict] | None:
-    pools = _optional(client, "pool.query")
+def _pools(client: TrueNasClient, pools) -> list[dict] | None:
     if not isinstance(pools, list):
         return None
     scrubs = {t.get("pool_name"): t for t in _optional(client, "pool.scrub.query") or []
@@ -390,7 +389,9 @@ def fetch_truenas(url: str, fingerprint: str, key: str) -> dict:
                      "upgrade_available": a.get("update_available"),
                      "image_updates_available": a.get("container_images_update_available")}
                     for a in (client.call("chart.release.query") or []) if isinstance(a, dict)]
-        pools, tasks, hardening = _pools(client), _tasks(client), _hardening(client)
+        raw_pools = _optional(client, "pool.query")
+        pools, tasks, hardening = _pools(client, raw_pools), _tasks(client), _hardening(client)
+        storage = _truenas_storage(client, raw_pools)
     finally:
         client.close()
     return {
@@ -405,8 +406,56 @@ def fetch_truenas(url: str, fingerprint: str, key: str) -> dict:
                   "upgrade": bool(a.get("upgrade_available")), "image_updates": bool(a.get("image_updates_available")),
                   "images": [str(i)[:300] for i in ((a.get("active_workloads") or {}).get("images") or [])][:20]}
                  for a in apps[:MAX_ITEMS] if isinstance(a, dict)],
-        "pools": pools, "tasks": tasks, "hardening": hardening,
+        "pools": pools, "tasks": tasks, "hardening": hardening, "storage": storage,
     }
+
+
+def _members(topology: dict) -> tuple[list[tuple[str, dict, str]], str]:
+    """([(Laufwerk, vdev-Eintrag, Rolle)], Aufbau der Datenvdevs wie „RAIDZ1“ oder „2× MIRROR“)."""
+    members, layouts = [], []
+    for role, vdevs in (topology or {}).items():
+        for v in vdevs or []:
+            if not isinstance(v, dict):
+                continue
+            leaves = [v] if v.get("type") == "DISK" else [c for c in v.get("children") or [] if isinstance(c, dict)]
+            if role == "data":
+                layouts.append("STRIPE" if v.get("type") == "DISK" else str(v.get("type") or "?"))
+            members += [(str(c.get("disk") or c.get("device") or c.get("name") or "?"), c, role) for c in leaves]
+    from .storage import layout_of
+    return members, layout_of(layouts)
+
+
+def _truenas_storage(client: TrueNasClient, raw_pools) -> dict:
+    from .storage import disk, pool, storage
+
+    if not isinstance(raw_pools, list):
+        return storage(None, None, "pools not readable with this API key")
+    boot = _optional(client, "boot.get_state")
+    temps = _optional(client, "disk.temperatures") or {}
+    pools, member_of = [], {}
+    for p, kind in [(p, "ZFS pool") for p in raw_pools[:50] if isinstance(p, dict)] + \
+                   ([(boot, "Boot pool")] if isinstance(boot, dict) else []):
+        members, layout = _members(p.get("topology") or {})
+        for name, leaf, role in members:
+            stats = leaf.get("stats") or {}
+            errors = sum(int(stats.get(k) or 0) for k in ("read_errors", "write_errors", "checksum_errors"))
+            member_of[name] = (str(p.get("name") or ""), str(leaf.get("status") or ""), errors, role)
+        size = p.get("size") or 0
+        pools.append(pool(p.get("name"), kind, p.get("status"), (p.get("allocated") or 0) * 100 / size if size else None,
+                          size or None, layout, [m[0] for m in members]))
+    disks = []
+    for d in (_optional(client, "disk.query") or [])[:MAX_ITEMS]:
+        if not isinstance(d, dict) or not d.get("name"):
+            continue
+        name = str(d["name"])
+        pool_name, status, errors, role = member_of.get(name, ("", "", 0, ""))
+        disks.append(disk(name, d.get("model"), d.get("serial"), d.get("size"),
+                          "nvme" if name.startswith("nvme") else d.get("type"),
+                          "warning" if errors and status.upper() == "ONLINE" else status,
+                          temp=temps.get(name) if isinstance(temps, dict) else None, pool_name=pool_name,
+                          detail=", ".join(x for x in (f"{role} vdev" if role not in ("", "data") else "",
+                                                       f"{errors} read/write/checksum errors" if errors else "") if x)))
+    return storage(pools, disks)
 
 
 TASK_LABELS = {"snapshot": "Snapshot task", "replication": "Replication", "cloudsync": "Cloud sync",
@@ -522,6 +571,9 @@ def truenas_findings(data: dict, now: float | None = None) -> list[dict]:
         out += _pool_findings(data["pools"], now)
     if data.get("tasks") is not None:
         out += _task_findings(data["tasks"], now)
+    if data.get("storage"):
+        from .storage import drive_findings
+        out += drive_findings(data["storage"], "Storage → Disks: check S.M.A.R.T., replace the drive if errors grow")
     return out + _hardening_findings(data.get("hardening") or {})
 
 

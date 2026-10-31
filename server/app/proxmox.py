@@ -13,7 +13,7 @@ from sqlalchemy import select
 
 from .appliances import MAX_ITEMS, MAX_MESSAGE, TIMEOUT, ApplianceError, _check_pin, _split, _unverified
 from .models import System
-from .rules import classify_update
+from .rules import classify_disk, classify_update
 
 APT_FORBIDDEN = ("pending updates not readable: this Proxmox VE version needs Sys.Modify for /apt/update, "
                  "vulnwatch asks only for PVEAuditor (read-only)")
@@ -83,11 +83,71 @@ def _guest_ips(client: PveClient, g: dict) -> list[str]:
     return [ip for ip in dict.fromkeys(ips) if _usable(ip)][:20]
 
 
+def _owner(member: str, disks: list[dict]) -> dict | None:
+    """Laufwerk zu einem Gerät im ZFS-Pool: „sda3“, „nvme0n1p2“ oder ein by-id-Name wie „ata-WDC_…-part3“."""
+    base = member.split("/")[-1]
+    for d in disks:
+        dev = str(d.get("devpath") or "").removeprefix("/dev/")
+        by_id = str(d.get("by_id_link") or "").split("/")[-1]
+        if dev and (base == dev or (base.startswith(dev) and base[len(dev):].lstrip("p").isdigit())):
+            return d
+        if by_id and (base == by_id or base.startswith(by_id + "-part")):
+            return d
+    return None
+
+
+def _node_storage(client: PveClient, node: str, prefix: str) -> tuple[list[dict], list[dict], str]:
+    """(Pools, Laufwerke, Fehler) eines Knotens: Laufwerke mit S.M.A.R.T.-Zustand, ZFS-Pools mit ihren Laufwerken."""
+    from .storage import disk, layout_of, pool
+
+    try:
+        raw = [d for d in (client.get(f"/nodes/{quote(node)}/disks/list") or [])[:MAX_ITEMS] if isinstance(d, dict)]
+    except ApplianceError as e:
+        return [], [], f"{node}: drives not readable ({e})"
+    member_of, pools = {}, []
+    try:
+        zpools = client.get(f"/nodes/{quote(node)}/disks/zfs") or []
+    except ApplianceError:
+        zpools = []
+    for z in zpools[:50]:
+        name = str(z.get("name") or "?")
+        try:
+            tree = client.get(f"/nodes/{quote(node)}/disks/zfs/{quote(name)}") or {}
+        except ApplianceError:
+            tree = {}
+        names, layouts = [], []
+        for vdev in tree.get("children") or []:
+            leaves = vdev.get("children") or [vdev]
+            layouts.append(str(vdev.get("name") or "").split("-")[0].upper() if vdev.get("children") else "STRIPE")
+            for leaf in leaves:
+                if (d := _owner(str(leaf.get("name") or ""), raw)) is not None:
+                    member_of[d["devpath"]] = (prefix + name, str(leaf.get("state") or ""))
+                    names.append(prefix + str(d["devpath"]).removeprefix("/dev/"))
+        layout = layout_of(layouts)
+        size, alloc = z.get("size"), z.get("alloc")
+        pools.append(pool(prefix + name, "ZFS pool", z.get("health"),
+                          alloc * 100 / size if isinstance(size, (int, float)) and size and isinstance(alloc, (int, float)) else None,
+                          size, layout, names))
+    disks = []
+    for d in raw:
+        dev = str(d.get("devpath") or "?")
+        pool_name, member_state = member_of.get(dev, ("", ""))
+        health = str(d.get("health") or "")
+        wear = d.get("wearout")
+        disks.append(disk(prefix + dev.removeprefix("/dev/"), d.get("model"), d.get("serial"), d.get("size"), d.get("type"),
+                          member_state, "" if health.upper() == "UNKNOWN" else health, pool_name=pool_name,
+                          detail=", ".join(x for x in (f"used by {d['used']}" if d.get("used") and not pool_name else "",
+                                                       f"wearout {wear} %" if isinstance(wear, (int, float)) else "") if x)))
+    return pools, disks, ""
+
+
 def fetch_proxmox(url: str, fingerprint: str, token: str) -> dict:
     client = PveClient(url, fingerprint, token)
     version = (client.get("/version") or {}).get("version", "")
     nodes = []
-    for n in (client.get("/nodes") or [])[:MAX_ITEMS]:
+    raw_nodes = (client.get("/nodes") or [])[:MAX_ITEMS]
+    pools, disks, errors = [], [], []
+    for n in raw_nodes:
         name = str(n.get("node") or "")
         if not name:
             continue
@@ -102,6 +162,9 @@ def fetch_proxmox(url: str, fingerprint: str, token: str) -> dict:
                                    for u in (client.get(f"/nodes/{quote(name)}/apt/update") or [])[:MAX_ITEMS]]
             except _Forbidden:
                 node["error"] = APT_FORBIDDEN
+            p, d, err = _node_storage(client, name, f"{name}/" if len(raw_nodes) > 1 else "")
+            pools, disks = pools + p, disks + d
+            errors += [err] if err else []
         nodes.append(node)
     guests = []
     for g in (client.get("/cluster/resources?type=vm") or [])[:MAX_ITEMS]:
@@ -114,7 +177,8 @@ def fetch_proxmox(url: str, fingerprint: str, token: str) -> dict:
         guest["subject"] = f"pve-guest:{guest['node']}/{guest['vmid']}"
         guest["ips"] = [] if guest["template"] else _guest_ips(client, guest)
         guests.append(guest)
-    return {"version": version, "nodes": nodes, "guests": guests}
+    from .storage import storage
+    return {"version": version, "nodes": nodes, "guests": guests, "storage": storage(pools, disks, "; ".join(errors))}
 
 
 def proxmox_findings(data: dict) -> list[dict]:
@@ -127,7 +191,18 @@ def proxmox_findings(data: dict) -> list[dict]:
                         "severity": classify_update(pm["installed"], pm["new"]),
                         "installed_version": pm["installed"], "fixed_version": pm["new"],
                         "title": f"Proxmox VE {pm['new']} is available on {n['node']} (installed {pm['installed']})"})
-    return out
+    from .storage import drive_findings
+    st = data.get("storage") or {}
+    for p in st.get("pools") or []:
+        if p["state"] in ("bad", "warn"):
+            out.append({"target": f"pool:{p['name']}", "cve_id": "VW-POOL", "component": f"ZFS pool {p['name']}",
+                        "severity": "hoch" if p["state"] == "bad" else "mittel", "installed_version": p["status"],
+                        "fixed_version": "zpool status -v on the node", "title": f"ZFS pool {p['name']} is {p['status']}"})
+        if p["percent"] is not None and (sev := classify_disk(p["percent"])):
+            out.append({"target": f"disk:{p['name']}", "cve_id": "VW-DISK", "component": f"ZFS pool {p['name']}",
+                        "severity": sev, "installed_version": f"{p['percent']:.0f} %", "fixed_version": "free space",
+                        "title": f"ZFS pool {p['name']} is {p['percent']:.0f} % full"})
+    return out + drive_findings(st, "node → Disks: check S.M.A.R.T. values and replace the drive")
 
 
 def versions_check(data: dict, open_updates: int) -> tuple[str, str]:

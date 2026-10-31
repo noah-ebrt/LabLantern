@@ -142,6 +142,42 @@ def _storage(data: dict) -> tuple[list[dict], list[dict]]:
     return spaces, disks
 
 
+def _dsm_storage(data: dict | None, error: str) -> dict:
+    """Gemeinsame Speicherform (storage.py): Speicherpools mit ihren Laufwerken, Volumes mit Füllstand."""
+    from .storage import disk, pool, storage
+
+    if data is None:
+        return storage(None, None, f"storage {error}")
+    raw_disks = [d for d in (data.get("disks") or [])[:MAX_ITEMS] if isinstance(d, dict)]
+    label = {str(d.get("id") or ""): str(d.get("longName") or d.get("name") or d.get("id") or "?") for d in raw_disks}
+    pools, used_by = [], {}
+    for p in (data.get("storagePools") or [])[:MAX_ITEMS]:
+        if not isinstance(p, dict):
+            continue
+        size = p.get("size") if isinstance(p.get("size"), dict) else {}
+        total, used = _number(size.get("total")), _number(size.get("used"))
+        members = [str(x) for x in p.get("disks") or [] if isinstance(x, (str, int))]
+        for m in members:
+            used_by[m] = str(p.get("id") or "")
+        pools.append(pool(p.get("id"), "Storage pool", p.get("status"), used / total * 100 if total and used is not None else None,
+                          total, str(p.get("device_type") or p.get("raidType") or "").replace("_", " ").upper(),
+                          [label.get(m, m) for m in members]))
+    for v in (data.get("volumes") or [])[:MAX_ITEMS]:
+        if not isinstance(v, dict):
+            continue
+        size = v.get("size") if isinstance(v.get("size"), dict) else {}
+        total, used = _number(size.get("total")), _number(size.get("used"))
+        pools.append(pool(v.get("vol_path") or v.get("id"), "Volume", v.get("status"),
+                          used / total * 100 if total and used is not None else None, total,
+                          str(v.get("fs_type") or "").upper()))
+    disks = [disk(label[str(d.get("id") or "")], d.get("model"), d.get("serial"), d.get("size_total"),
+                  "nvme" if "nvme" in str(d.get("diskType") or d.get("id") or "").lower() else "ssd" if d.get("isSsd") else "hdd",
+                  d.get("status"), d.get("smart_status"), d.get("temp"),
+                  pool_name=used_by.get(str(d.get("id") or ""), str(d.get("used_by") or "")))
+             for d in raw_disks]
+    return storage(pools, disks)
+
+
 def fetch_synology(url: str, fingerprint: str, account: str, password: str) -> dict:
     client = DsmClient(url, fingerprint, account, password)
     try:
@@ -165,7 +201,7 @@ def fetch_synology(url: str, fingerprint: str, account: str, password: str) -> d
     update = None if upd is None else _update(upd)
     return {"version": version, "model": model, "update": update, "update_error": update_error,
             "packages": packages, "packages_error": packages_error, "spaces": spaces, "disks": disks,
-            "storage_error": storage_error, "reboot_required": False}
+            "storage_error": storage_error, "storage": _dsm_storage(storage, storage_error), "reboot_required": False}
 
 
 def synology_findings(data: dict) -> list[dict]:

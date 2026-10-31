@@ -15,10 +15,12 @@ from tests.test_appliances import make_cert
 
 PASSWORD = "correct horse battery staple"
 UPDATE = {"update": {"available": True, "version": "DSM 7.2.2-72806 Update 4", "reboot": "now"}}
-STORAGE = {"storagePools": [{"id": "reuse_1", "status": "degraded"}],
+STORAGE = {"storagePools": [{"id": "reuse_1", "status": "degraded", "device_type": "shr_with_1_disk_protect",
+                            "disks": ["sata1", "sata2"], "size": {"total": "2000", "used": "1000"}}],
            "volumes": [{"id": "volume_1", "vol_path": "/volume1", "status": "normal",
                         "size": {"total": "1000", "used": "960"}}],
-           "disks": [{"id": "sata1", "longName": "Drive 1", "model": "WD40EFRX ", "status": "normal", "smart_status": "normal"},
+           "disks": [{"id": "sata1", "longName": "Drive 1", "model": "WD40EFRX ", "status": "normal", "smart_status": "normal",
+                      "temp": 31, "size_total": "4000787030016"},
                      {"id": "sata2", "longName": "Drive 2", "model": "WD40EFRX", "status": "crashed", "smart_status": "failing"}]}
 PACKAGES = {"packages": [{"id": "ContainerManager", "name": "Container Manager", "version": "24.0.2-1535"},
                          {"id": "SynologyPhotos", "name": "Synology Photos", "version": "1.7.1-10015"}]}
@@ -105,6 +107,12 @@ def test_admin_reads_update_storage_and_packages(admin, dsm):
     assert row["checks"]["versionen"]["status"] == "fund"
     assert products["Synology DSM"]["version"] == "7.2.2-72806 Update 3"
     assert products["Container Manager"]["keyword"] == "container manager"
+    _, client, h = admin
+    st = next(x for x in client.get("/api/systems", headers=h).json() if x["id"] == sid)["connector"]["storage"]
+    pool = next(p for p in st["pool_list"] if p["kind"] == "Storage pool")
+    assert (pool["layout"], pool["disks"], pool["state"]) == ("SHR WITH 1 DISK PROTECT", ["Drive 1", "Drive 2"], "bad")
+    drives = {d["name"]: d for d in st["disks"]}
+    assert (drives["Drive 1"]["temp"], drives["Drive 1"]["pool"], drives["Drive 2"]["state"]) == (31, "reuse_1", "bad")
 
 
 def test_non_admin_reads_version_only_and_is_na(admin, dsm):

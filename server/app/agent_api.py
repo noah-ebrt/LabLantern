@@ -303,7 +303,9 @@ def build_agent_router(ctx: Context, guards: Guards) -> APIRouter:
         }
         if r.status == "connector":
             data = json.loads(r.inventory_json or "{}").get("connector") or {}
-            out["connector"] = {"kind": r.host_type, "version": data.get("version", "")}
+            from .storage import summary
+            out["connector"] = {"kind": r.host_type, "version": data.get("version", ""),
+                                "storage": summary(data.get("storage"))}
         if detail:
             try:
                 out["inventory"] = json.loads(r.inventory_json)

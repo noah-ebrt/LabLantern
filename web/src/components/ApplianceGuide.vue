@@ -55,7 +55,8 @@ const GUIDES = {
   truenas: {
     title: 'TrueNAS',
     reads: ['Installed version and the system update check (patch → high, new release line → medium)',
-      'Apps with a newer version or image', 'Open alerts (CRITICAL → high, ERROR and WARNING → medium)', 'Pending reboot after an update'],
+      'Apps with a newer version or image', 'Open alerts (CRITICAL → high, ERROR and WARNING → medium)', 'Pending reboot after an update',
+      'Pools with layout and fill level, every drive with model, size and temperature: a faulted drive → high, read/write/checksum errors → medium'],
     steps: [
       'Credentials → Users → Add: a user named <code>vulnwatch</code> with the role <strong>Read-only Administrator</strong>.',
       'Create an API key for that user (TrueNAS 24.10 and newer: Credentials → Users → the user → API keys). Older versions issue keys with full admin rights; update first if you can.',
@@ -73,6 +74,7 @@ const GUIDES = {
     title: 'Proxmox VE',
     reads: ['Proxmox VE version per node and a newer pve-manager (same line → high, new line → medium); end of life from endoflife.date',
       'Pending package updates per node (the agent on the node rates them; install it for package CVEs)',
+      'Drives per node with S.M.A.R.T. health and ZFS pools with their drives: a failed drive or degraded pool → high, a pool 90 % full → medium',
       'Every VM and LXC with name, state and tags: each one is matched to an agent host by name, else by IP. Guests without an agent are gaps in the coverage; stopped ones can be excluded with a reason. Templates do not count.'],
     steps: [
       'Datacenter → Permissions → Users → Add: <code>vulnwatch@pve</code> (realm Proxmox VE authentication server), no password needed.',
