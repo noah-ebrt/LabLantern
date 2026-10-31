@@ -13,6 +13,20 @@ and never shown again. Each card says whether it is required or optional.
 
 **Scan now** on the overview starts a full run. **Scan latest data** in the pipeline starts a short run.
 
+**Report frequency** (same card): daily, weekly on a chosen weekday, or only on change (new, resolved, reopened or
+re-rated findings, or a failed check). Reports can also be paused until a date, e.g. for a holiday; the overview shows
+the pause. Alerts and errors are sent the same day whatever is set here: a critical finding never waits a week.
+
+## Snooze findings and exclude from coverage
+
+- **Snooze a finding** (Findings → Snooze): until a date, at most 180 days, with a reason, for this occurrence or for
+  the CVE in this component everywhere. A snoozed finding doesn't raise the alarm level but is still counted and
+  listed in the report. The snooze ends by itself on its date, when the CVE lands on the CISA KEV list, when the
+  rating goes up, or when a fix appears where there was none. A snooze on an image survives its tag updates.
+- **Exclude from coverage** (a host's coverage dialog, or a Proxmox guest in the overview): until a date, at most
+  180 days, with a reason, e.g. a stopped test VM. It then counts neither as checked nor as a gap and is shown as
+  excluded with the reason; on the date it counts again.
+
 ## Notification channels (required for alerts)
 
 One channel per Apprise URL. Mail has a form with presets (Gmail, iCloud, Outlook, GMX, WEB.DE, Posteo, custom
