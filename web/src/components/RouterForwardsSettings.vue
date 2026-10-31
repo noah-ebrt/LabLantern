@@ -61,6 +61,14 @@ const save = (kind) => act(kind, async () => {
   await api.put(`/api/settings/router/${kind}`, { url: f.url, key: f.key, site: f.site, secret: f.secret || null })
   await test(kind)
 })
+const trust = (kind) => {
+  if (!confirm(`Trust the new certificate of ${ROUTERS[kind].label}? Compare its fingerprint on the device first if you did not change it yourself.`)) return
+  act(kind, async () => {
+    const f = forms[kind]
+    await api.put(`/api/settings/router/${kind}`, { url: f.url, key: f.key, site: f.site, secret: null, trust_certificate: true })
+    await test(kind)
+  })
+}
 const remove = (kind) => {
   if (!confirm(`Remove the ${ROUTERS[kind].label} connection? Containers marked by hand stay marked.`)) return
   act(kind, () => api.del(`/api/settings/router/${kind}`))
@@ -79,6 +87,7 @@ onMounted(() => Promise.all(Object.keys(ROUTERS).map((k) => load(k).catch(() => 
         </template>
         <template #actions>
           <button type="button" class="btn-sm" :disabled="busy" @click="act(kind, () => test(kind))"><Icon name="refresh" :size="14" />Test</button>
+          <button v-if="data[kind].state?.error?.includes('certificate changed')" type="button" class="btn-sm" :disabled="busy" @click="trust(kind)">Trust new certificate</button>
           <button type="button" class="btn-sm btn-delete" :disabled="busy" @click="remove(kind)"><Icon name="trash" :size="14" />Remove</button>
         </template>
         <details v-if="data[kind].state?.unmatched?.length" class="more" :data-test="`router-${kind}-unmatched`">
