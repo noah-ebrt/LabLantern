@@ -6,8 +6,9 @@ import { fmtDateTime, timeAgo } from '../time.js'
 import EarlyWarningWatch from './EarlyWarningWatch.vue'
 import HostCoverage from './HostCoverage.vue'
 import Modal from './Modal.vue'
+import StorageView from './StorageView.vue'
 
-// Was ein Connector zuletzt gelesen hat (TrueNAS, Home Assistant), auch das, was keinen Fund ergibt
+// Was ein Connector zuletzt gelesen hat (TrueNAS, Home Assistant, Proxmox, Synology, OPNsense), auch das, was keinen Fund ergibt
 const props = defineProps({ systemId: { type: Number, required: true } })
 const emit = defineEmits(['close'])
 
@@ -58,6 +59,11 @@ const iso = (d) => d?.toISOString()
       <p class="subtitle">{{ APPLIANCE_KINDS[kind] }} {{ data.version || '' }} · read via API
         <template v-if="system.last_seen"> · last read {{ timeAgo(system.last_seen) }}</template></p>
       <p v-if="readError" class="message error">Last read failed: {{ readError }}</p>
+
+      <template v-if="data.storage">
+        <h3>Storage</h3>
+        <StorageView :storage="data.storage" />
+      </template>
       <p class="subtext">Problems also appear as <RouterLink :to="{ path: '/funde', query: { source: 'appliances', q: system.name } }" @click="emit('close')">findings</RouterLink>.
         Read every 6 hours; Test in the host list reads now.</p>
 
@@ -119,17 +125,6 @@ const iso = (d) => d?.toISOString()
           <tr><th>Update</th><td v-if="data.update" :class="tone(false, data.update.available)">{{ data.update.available ? data.update.version || 'available' : 'none available' }}</td>
             <td v-else class="subtext">{{ data.update_error || 'not readable' }}</td></tr>
         </table>
-        <h3>Storage</h3>
-        <table v-if="(data.spaces || []).length || (data.disks || []).length" class="data-table">
-          <thead><tr><th>Name</th><th>State</th><th>Used</th></tr></thead>
-          <tbody>
-            <tr v-for="sp in data.spaces || []" :key="sp.kind + sp.name"><td>{{ sp.kind }} {{ sp.name }}</td><td :class="tone(['degraded', 'crashed'].includes(sp.status), sp.status && sp.status !== 'normal')">{{ sp.status || '?' }}</td>
-              <td>{{ sp.percent == null ? '–' : `${Math.round(sp.percent)} %` }}</td></tr>
-            <tr v-for="d in data.disks || []" :key="d.name"><td>{{ d.name }} <span class="subtext">{{ d.model }}</span></td>
-              <td :class="tone(d.status !== 'normal' && !!d.status, d.smart && d.smart !== 'normal')">{{ d.status || '?' }}{{ d.smart ? ` · S.M.A.R.T. ${d.smart}` : '' }}</td><td>–</td></tr>
-          </tbody>
-        </table>
-        <p v-else class="subtext">{{ data.storage_error || 'No storage reported.' }}</p>
         <h3>Packages ({{ (data.packages || []).length }})</h3>
         <table v-if="(data.packages || []).length" class="data-table">
           <tbody><tr v-for="p in data.packages" :key="p.id"><td>{{ p.name }}</td><td class="mono">{{ p.version }}</td></tr></tbody>

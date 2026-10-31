@@ -2,13 +2,15 @@
 import { computed, onMounted, ref } from 'vue'
 import { api } from '../api.js'
 import { useLive } from '../live.js'
-import { CHECKS, POSTURE, RUN_TRIGGER, checkClass, fmtNum as fmt, hostState, hostVersion, label, runLabel } from '../labels.js'
+import { APPLIANCE_KINDS, CHECKS, POSTURE, RUN_TRIGGER, checkClass, fmtNum as fmt, hostState, hostVersion, label, runLabel } from '../labels.js'
 import { useScanTrigger } from '../runSteps.js'
 import { ago, fmtClock, fmtDateTime, fmtDay, fmtWeekdayTime } from '../time.js'
 import Icon from '../components/Icon.vue'
 import RunProgress from '../components/RunProgress.vue'
 import PipelineFlow from '../components/PipelineFlow.vue'
 import ConnectorDetailModal from '../components/ConnectorDetailModal.vue'
+import StorageView from '../components/StorageView.vue'
+import { countsText } from '../storage.js'
 import ExposureSourceModal from '../components/ExposureSourceModal.vue'
 import GuestCoverage from '../components/GuestCoverage.vue'
 import HostDetailModal from '../components/HostDetailModal.vue'
@@ -16,6 +18,8 @@ import HostDetailModal from '../components/HostDetailModal.vue'
 const data = ref(null)
 const runs = ref([])
 const systems = ref([])
+// NAS mit Pools oder Laufwerken (TrueNAS, Synology, Proxmox): Laufwerkssymbole in der Speicher-Karte
+const nas = computed(() => systems.value.filter((s) => s.connector?.storage?.disks?.length || s.connector?.storage?.pools))
 const error = ref('')
 const progress = ref(null)
 const hover = ref(null)
@@ -270,6 +274,22 @@ useLive(['systems', 'runs', 'findings', 'settings'], loadData, 1000)
       </div>
     </section>
 
+    <section v-if="nas.length" class="card storage-card" data-test="storage-card">
+      <div class="card-header">
+        <h2 class="panel-title">Storage</h2>
+        <span class="subtext">{{ nas.reduce((n, s) => n + s.connector.storage.disks.length, 0) }} drives in {{ nas.length }} system{{ nas.length === 1 ? '' : 's' }}</span>
+      </div>
+      <ul class="nas-list">
+        <li v-for="s in nas" :key="s.id">
+          <button type="button" class="nas-name" :title="`Details for ${s.name}`" @click="detail = { status: 'connector', system_id: s.id }">
+            <span class="strong">{{ s.name }}</span>
+            <span class="subtext">{{ APPLIANCE_KINDS[s.connector.kind] }} · {{ countsText(s.connector.storage) }}</span>
+          </button>
+          <StorageView :storage="s.connector.storage" compact />
+        </li>
+      </ul>
+    </section>
+
     <PipelineFlow :data="data" :systems="systems" :triggering="triggering" @trigger="triggerScan('latest')" @changed="loadData" />
 
 
@@ -378,6 +398,14 @@ useLive(['systems', 'runs', 'findings', 'settings'], loadData, 1000)
 </template>
 
 <style scoped>
+.storage-card .nas-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.storage-card .nas-list li { display: grid; grid-template-columns: minmax(10rem, 14rem) 1fr; gap: 0.5rem 1.25rem; align-items: center;
+  padding: 0.7rem 0; border-top: 1px solid var(--line); }
+.storage-card .nas-list li:first-child { border-top: 0; }
+.storage-card .nas-name { all: unset; display: flex; flex-direction: column; gap: 0.1rem; cursor: pointer; border-radius: 6px; }
+.storage-card .nas-name:hover .strong { text-decoration: underline; }
+.storage-card .nas-name:focus-visible { outline: 2px solid var(--info); outline-offset: 3px; }
+@media (max-width: 640px) { .storage-card .nas-list li { grid-template-columns: 1fr; } }
 .posture { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; padding: 0.75rem 1.1rem; }
 .posture-meta { color: var(--muted); display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; font-size: 0.85rem; }
 .posture-meta strong { color: var(--text); font-weight: 500; }
