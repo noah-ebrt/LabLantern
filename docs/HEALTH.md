@@ -10,7 +10,7 @@ Open **Health** in the sidebar. The page has two tabs:
   (24 h, 7, 30 or 90 days).
 - **Settings:** the monitored hosts, the check generator, router checks and the API tokens.
 
-## Agent hosts are watched automatically
+## Everything under Systems is watched automatically
 
 Every approved agent gets a monitor on its own, with two checks:
 
@@ -27,8 +27,17 @@ A host's state combines what vulnwatch sees from outside with what the agent rep
 | failing | silent | down |
 | failing | ok | degraded: likely a network or firewall problem |
 
-Revoking an agent removes its monitor. Agent hosts can't be deleted from Health, only paused, but you can add more
-checks to them (for example HTTP for the web UI).
+Devices without an agent that you connected under **Settings → Integrations** (TrueNAS, Home Assistant and every
+other connector type with a URL) are watched the same way: a ping plus an HTTP(S) check on the address vulnwatch
+reads them from. For a pinned, self-signed certificate the HTTP check doesn't verify the certificate; the connector
+itself already checks its fingerprint.
+
+If you already monitor such a device by hand under the same address and the same name (system name or device type,
+e.g. "TrueNAS"), that monitor is taken over: its API key, history and checks stay, and the default checks are added.
+A monitor for a service on that host with a different name (AdGuard Home on the Pi) stays separate.
+
+Revoking an agent or removing a connector removes its monitor. Hosts from Systems can't be deleted from Health, only
+paused, but you can add more checks to them (for example HTTP for the web UI).
 
 ## Adding other hosts
 

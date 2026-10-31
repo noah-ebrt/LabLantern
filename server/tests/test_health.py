@@ -1,4 +1,5 @@
 import http.server
+import json
 import socket
 import struct
 import threading
@@ -191,6 +192,46 @@ def test_agents_are_monitored_automatically(hw):
     engine.last_sync = 0
     run(env, engine)
     assert client.get("/api/health/overview").json()["monitors"] == []
+
+
+def test_connector_devices_are_monitored_and_matching_monitors_adopted(hw):
+    env, client, h, engine, probes, sent = hw
+    ctx = env.app.state.ctx
+    create(client, h, name="TrueNAS", host="192.0.2.20", checks=[{"kind": "tcp", "params": {"port": 445}}])
+    create(client, h, name="AdGuard Home", host="192.0.2.56", checks=[{"kind": "dns"}])
+    with ctx.session_factory() as s:
+        nas = System(name="truenas", host_type="truenas", ip="192.0.2.20", status="connector")
+        ha = System(name="homeassistant", host_type="homeassistant", ip="192.0.2.57", status="connector")
+        pi = System(name="raspberrypi", ip="192.0.2.56", status="active", last_contact=env.clock())
+        s.add_all([nas, ha, pi])
+        s.flush()
+        s.add(Setting(key="appliances.config", value=json.dumps({
+            str(nas.id): {"kind": "truenas", "url": "https://192.0.2.20", "fingerprint": "ab" * 32},
+            str(ha.id): {"kind": "homeassistant", "url": "http://192.0.2.57:8123", "fingerprint": ""}})))
+        s.commit()
+    engine.last_sync = 0
+    run(env, engine)
+    mons = {m["name"]: m for m in client.get("/api/health/overview").json()["monitors"]}
+    assert set(mons) == {"truenas", "homeassistant", "raspberrypi", "AdGuard Home"}
+
+    # TrueNAS-Monitor übernommen: Schlüssel und SMB-Prüfung bleiben, Ping und Web-Adresse kommen dazu
+    nas_m = mons["truenas"]
+    assert (nas_m["slug"], nas_m["source"], nas_m["auto"]) == ("truenas", "connector", True)
+    by_kind = {c["kind"]: c["params"] for c in nas_m["checks"]}
+    assert set(by_kind) == {"tcp", "ping", "http"}
+    assert by_kind["http"]["scheme"] == "https" and by_kind["http"]["verify_tls"] is False   # Fingerabdruck statt CA
+    ha_checks = {c["kind"]: c["params"] for c in mons["homeassistant"]["checks"]}
+    assert ha_checks["http"]["port"] == 8123 and ha_checks["http"]["verify_tls"] is True
+
+    # AdGuard läuft auf dem Pi, ist aber nicht der Pi: bleibt ein eigener Monitor
+    assert mons["AdGuard Home"]["auto"] is False and mons["raspberrypi"]["source"] == "agent"
+
+    with ctx.session_factory() as s:
+        s.delete(s.scalars(select(System).where(System.name == "homeassistant")).one())
+        s.commit()
+    engine.last_sync = 0
+    run(env, engine)
+    assert "homeassistant" not in {m["name"] for m in client.get("/api/health/overview").json()["monitors"]}
 
 
 def test_heartbeat_and_announced_shutdown(hw):

@@ -16,12 +16,13 @@ import logging
 import re
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
+from urllib.parse import urlsplit
 
 from sqlalchemy import delete, select
 
 from .context import Context
 from .fritzbox import tr064_url
-from .healthprobes import ACTIVE, FRITZ_KINDS, ProbeResult, ProbeSpec, run_probe
+from .healthprobes import ACTIVE, FRITZ_KINDS, ProbeResult, ProbeSpec, clean_params, run_probe
 from .models import HealthCheck, HealthEvent, HealthMonitor, HealthRollup, HealthSample, System, setting
 
 log = logging.getLogger("vulnwatch.health")
@@ -151,28 +152,90 @@ def aggregate(checks: list[tuple[str, str]]) -> tuple[str, str]:
     return state, warning
 
 
-# --- Agenten automatisch überwachen ---
+# --- Systeme automatisch überwachen ---
 
-def sync_agent_monitors(s, now: float) -> None:
-    """Jedes freigegebene Agenten-System bekommt einen Monitor (Agent + Ping auf seine IP). Widerruf entfernt ihn."""
-    systems = s.scalars(select(System).where(System.status == "active")).all()
+AUTO_STATUSES = ("active", "connector")   # Agenten und Geräte ohne Agent (TrueNAS, Home Assistant …)
+
+
+def default_checks(sys: System, connector: dict | None) -> list[tuple[str, dict]]:
+    """Grundprüfungen je System: Agent + Ping für Agenten; Ping + die Adresse, über die vulnwatch das Gerät
+    ausliest, für Connector-Systeme. Gilt für jede Connector-Art, auch künftige, solange sie eine URL hat."""
+    out: list[tuple[str, dict]] = []
+    if sys.status == "active":
+        out.append(("agent", {}))
+    if sys.ip:
+        out.append(("ping", {"target": ""}))
+    url = (connector or {}).get("url") or ""
+    if sys.status == "connector" and url:
+        u = urlsplit(url)
+        if u.scheme in ("http", "https") and u.hostname:
+            target = "" if u.hostname == sys.ip else u.hostname
+            out.append(("http", clean_params("http", {
+                "target": target, "scheme": u.scheme, "port": u.port or (443 if u.scheme == "https" else 80),
+                "path": u.path or "/", "expect": "2xx", "follow_redirects": True,
+                # vulnwatch prüft das Zertifikat solcher Geräte per Fingerabdruck (meist selbst signiert)
+                "verify_tls": not connector.get("fingerprint")})))
+    return out
+
+
+def _has(checks: list[HealthCheck], kind: str, params: dict) -> bool:
+    for c in checks:
+        p = params_of(c)
+        if c.kind == kind and p.get("port") == params.get("port") and (p.get("target") or "") == (params.get("target") or ""):
+            return True
+    return False
+
+
+def _norm(name: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", name.lower())
+
+
+def _adoptable(s, sys: System) -> HealthMonitor | None:
+    """Eigener Monitor, der offensichtlich dieses System meint: gleiche Adresse und gleicher Name (System- oder
+    Gerätename wie „TrueNAS“). Nur die Adresse genügt nicht: AdGuard auf dem Pi ist nicht der Pi."""
+    from .appliances import KINDS
+
+    if not sys.ip:
+        return None
+    names = {_norm(sys.name), _norm(sys.host_type), _norm(KINDS.get(sys.host_type, ""))} - {""}
+    for m in s.scalars(select(HealthMonitor).where(HealthMonitor.system_id.is_(None), HealthMonitor.host == sys.ip)
+                       .order_by(HealthMonitor.id)):
+        if _norm(m.name) in names:
+            return m
+    return None
+
+
+def sync_system_monitors(s, now: float) -> None:
+    """Jedes System aus „Systems“ (freigegebener Agent oder Connector-Gerät) bekommt einen Monitor mit
+    Grundprüfungen. Gibt es schon einen eigenen Monitor auf derselben Adresse, wird er übernommen statt verdoppelt.
+    Widerruf oder Entfernen des Systems entfernt den Monitor."""
+    from .appliances import CONFIG_KEY
+
+    connectors = setting(s, CONFIG_KEY) or {}
+    systems = s.scalars(select(System).where(System.status.in_(AUTO_STATUSES))).all()
     existing = {m.system_id: m for m in s.scalars(select(HealthMonitor).where(HealthMonitor.system_id.is_not(None)))}
     for sys in systems:
         m = existing.pop(sys.id, None)
         if m is None:
-            m = HealthMonitor(name=sys.name, slug=unique_slug(s, sys.name), host=sys.ip or "", system_id=sys.id,
-                              critical=True, created_at=now, state="unknown", state_since=now)
-            s.add(m)
+            m = _adoptable(s, sys)
+            if m is not None:   # eigener Monitor auf dieser Adresse: übernehmen, Verlauf und Schlüssel bleiben
+                m.system_id, m.name = sys.id, sys.name
+            else:
+                m = HealthMonitor(name=sys.name, slug=unique_slug(s, sys.name), host=sys.ip or "", system_id=sys.id,
+                                  critical=True, created_at=now, state="unknown", state_since=now)
+                s.add(m)
             s.flush()
-            s.add(HealthCheck(monitor_id=m.id, kind="agent", interval_s=30, retry_s=15))
-            if sys.ip:
-                s.add(HealthCheck(monitor_id=m.id, kind="ping", params='{"target": ""}', interval_s=30))
+            checks = s.scalars(select(HealthCheck).where(HealthCheck.monitor_id == m.id)).all()
+            for kind, params in default_checks(sys, connectors.get(str(sys.id))):
+                if not _has(checks, kind, params):
+                    s.add(HealthCheck(monitor_id=m.id, kind=kind, params=json.dumps(params),
+                                      **({"interval_s": 30, "retry_s": 15} if kind == "agent" else {})))
             continue
         if m.name != sys.name:
             m.name = sys.name
         if not m.host and sys.ip:
             m.host = sys.ip
-    for m in existing.values():   # widerrufen oder wieder ausstehend
+    for m in existing.values():   # widerrufen, wieder ausstehend oder Connector entfernt
         s.delete(m)
 
 
@@ -303,7 +366,7 @@ class HealthEngine:
             self.started = now
         with self.ctx.session_factory() as s:
             if now - self.last_sync >= 60:
-                sync_agent_monitors(s, now)
+                sync_system_monitors(s, now)
                 s.commit()
                 self.last_sync = now
             self._schedule(s, now)

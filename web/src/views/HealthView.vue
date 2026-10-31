@@ -46,7 +46,7 @@ const tabs = computed(() => [
 
 <template>
   <div class="health-page">
-    <PageHeader title="Health" subtitle="Uptime and response times of your hosts and services – agent hosts are watched automatically" />
+    <PageHeader title="Health" subtitle="Uptime and response times of your hosts and services – everything under Systems is watched automatically" />
     <p v-if="error" class="message error">{{ error }}</p>
     <PageTabs v-if="data" :tabs="tabs" label="Health sections">
       <template #status>

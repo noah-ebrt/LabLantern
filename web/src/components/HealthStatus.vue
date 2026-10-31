@@ -52,7 +52,7 @@ const avgUptime = computed(() => {
     </div>
 
     <div v-if="!data.monitors.length" class="empty-state">
-      <p>No hosts monitored yet. Agent hosts appear here on their own; other devices you add under Settings.</p>
+      <p>No hosts monitored yet. Agents and devices from Systems appear here on their own; others you add under Settings.</p>
       <button type="button" class="btn-sm" @click="emit('configure')"><Icon name="plus" :size="14" />Add a host</button>
     </div>
     <p v-else-if="!monitors.length" class="sub">Nothing matches this filter.</p>
@@ -63,7 +63,7 @@ const avgUptime = computed(() => {
           <span class="who">
             <i class="pulse" :style="{ background: stateOf(m.state).color }" aria-hidden="true" />
             <span class="name">{{ m.name }}</span>
-            <span v-if="m.auto" class="tag">Agent</span>
+            <span v-if="m.auto" class="tag">{{ m.source === 'connector' ? 'Connector' : 'Agent' }}</span>
             <span v-if="m.critical" class="tag crit">Critical</span>
             <span class="host">{{ m.host || '—' }}</span>
           </span>

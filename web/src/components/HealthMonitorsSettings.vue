@@ -55,14 +55,15 @@ const fritzStatus = computed(() => (props.options.fritz ? { tone: 'ok', text: 'C
       <button type="button" class="btn-sm" @click="editing = null"><Icon name="plus" :size="14" />Add host</button>
     </template>
     <template #intro>
-      Every approved agent is watched automatically: its live connection plus a ping to its address. If the agent goes silent
-      while the ping still answers, the host stays up with a warning. Add other devices (NAS, router, printers, phones) with their own checks.
+      Everything under Systems is watched automatically. Agents: their live connection plus a ping. Devices without an agent
+      (TrueNAS, Home Assistant and other connectors): a ping plus the address vulnwatch reads them from. If an agent goes silent
+      while the ping still answers, the host stays up with a warning. Add other devices (router, printers, phones) with their own checks.
     </template>
 
-    <SettingsSection title="Agent hosts" :count="agents.length" hint="added and removed with the agent">
-      <SettingsList :empty="!agents.length" empty-text="No approved agents yet. Agent hosts appear here as soon as they are approved under Systems.">
-        <SettingsEntry v-for="m in agents" :key="m.id" icon="shield" :title="m.name" :meta="meta(m)">
-          <template #badge><StateBadge :state="m.state" /><span v-if="m.critical" class="badge warning">Critical</span></template>
+    <SettingsSection title="From Systems" :count="agents.length" hint="added and removed with the agent or connector">
+      <SettingsList :empty="!agents.length" empty-text="Nothing under Systems yet. Approved agents and connected devices (TrueNAS, Home Assistant) appear here on their own.">
+        <SettingsEntry v-for="m in agents" :key="m.id" :icon="m.source === 'connector' ? 'package' : 'shield'" :title="m.name" :meta="meta(m)">
+          <template #badge><StateBadge :state="m.state" /><span class="badge neutral">{{ m.source === 'connector' ? 'Connector' : 'Agent' }}</span><span v-if="m.critical" class="badge warning">Critical</span></template>
           <template #actions>
             <button type="button" class="btn-sm" @click="editing = m"><Icon name="settings" :size="14" />Checks</button>
             <button type="button" class="btn-sm" @click="pause(m)">{{ m.paused ? 'Resume' : 'Pause' }}</button>

@@ -19,7 +19,7 @@ from .guards import Guards, client_ip
 from .health import (KIND_LABELS, HealthEngine, beat, check_label, effective_state, params_of, secret_name,
                      state_durations, unique_slug, uptime_of, worst_of)
 from .healthprobes import FRITZ_KINDS, HOST_RE, KINDS, PASSIVE, ProbeSpec, clean_params, run_probe
-from .models import HealthCheck, HealthEvent, HealthMonitor, HealthRollup, HealthSample, HealthToken, setting
+from .models import HealthCheck, HealthEvent, HealthMonitor, HealthRollup, HealthSample, HealthToken, System, setting
 
 MAX_CHECKS = 10
 RANGES = {"24h": (86400, 96), "7d": (7 * 86400, 84), "30d": (30 * 86400, 90), "90d": (90 * 86400, 90)}
@@ -88,7 +88,7 @@ def _primary_latency(checks: list[HealthCheck]) -> float | None:
     return None
 
 
-def public_view(m: HealthMonitor, checks: list[HealthCheck], now: float, engine_ok: bool) -> dict:
+def public_view(m: HealthMonitor, checks: list[HealthCheck], now: float, engine_ok: bool, source: str = "manual") -> dict:
     """Was Abnehmer der API sehen: Zustand, Alter, Latenz, keine Einstellungen."""
     out_checks = []
     for c in checks:
@@ -97,7 +97,7 @@ def public_view(m: HealthMonitor, checks: list[HealthCheck], now: float, engine_
                            "stale": stale or not engine_ok, "latency_ms": c.latency_ms, "error": c.error,
                            "age_s": None if c.last_checked is None else round(now - c.last_checked, 1)})
     return {"slug": m.slug, "name": m.name, "host": m.host, "state": monitor_state(m, engine_ok),
-            "critical": m.critical, "since": m.state_since, "warning": m.warning, "agent": m.system_id is not None,
+            "critical": m.critical, "since": m.state_since, "warning": m.warning, "source": source,
             "latency_ms": _primary_latency(checks), "checks": out_checks}
 
 
@@ -112,6 +112,13 @@ def summary_of(states: list[str]) -> dict:
 def build_health_router(ctx: Context, guards: Guards, engine: HealthEngine) -> APIRouter:
     router = APIRouter(prefix="/health")
     limiter = RateLimiter(ctx.clock, max_failures=20, window=900)
+
+    def sources(s) -> dict[int, str]:
+        """system_id -> "agent" oder "connector" (Gerät ohne Agent, z. B. TrueNAS)."""
+        return {sid: "agent" if st == "active" else "connector" for sid, st in s.execute(select(System.id, System.status))}
+
+    def source_of(m: HealthMonitor, src: dict[int, str]) -> str:
+        return src.get(m.system_id, "agent") if m.system_id is not None else "manual"
 
     def load(s):
         monitors = s.scalars(select(HealthMonitor).order_by(HealthMonitor.name)).all()
@@ -144,7 +151,8 @@ def build_health_router(ctx: Context, guards: Guards, engine: HealthEngine) -> A
         now = ctx.clock()
         engine_ok = engine.ok()
         monitors, checks = load(s)
-        views = [public_view(m, checks.get(m.id, []), now, engine_ok) for m in monitors]
+        src = sources(s)
+        views = [public_view(m, checks.get(m.id, []), now, engine_ok, source_of(m, src)) for m in monitors]
         return {"generated_at": now, "engine": {"ok": engine_ok, "last_tick": engine.last_tick or None},
                 "summary": summary_of([v["state"] for v in views]),
                 "critical_down": [v["slug"] for v in views if v["critical"] and v["state"] == "down"],
@@ -165,7 +173,8 @@ def build_health_router(ctx: Context, guards: Guards, engine: HealthEngine) -> A
             if m is None:
                 raise HTTPException(404, "Unknown monitor")
             checks = s.scalars(select(HealthCheck).where(HealthCheck.monitor_id == m.id).order_by(HealthCheck.id)).all()
-            return {"generated_at": now, "engine": {"ok": engine.ok()}, **public_view(m, list(checks), now, engine.ok())}
+            return {"generated_at": now, "engine": {"ok": engine.ok()},
+                    **public_view(m, list(checks), now, engine.ok(), source_of(m, sources(s)))}
 
     @router.get("/states")
     def states(_who=Depends(consumer)):
@@ -209,6 +218,7 @@ def build_health_router(ctx: Context, guards: Guards, engine: HealthEngine) -> A
         engine_ok = engine.ok()
         with ctx.session_factory() as s:
             monitors, checks = load(s)
+            src = sources(s)
             auth_ids = {c.id for cs in checks.values() for c in cs if c.kind == "http" and ctx.secrets.meta(secret_name(c.id))}
             out = []
             for m in monitors:
@@ -220,6 +230,7 @@ def build_health_router(ctx: Context, guards: Guards, engine: HealthEngine) -> A
                 out.append({
                     "id": m.id, "name": m.name, "slug": m.slug, "host": m.host, "critical": m.critical,
                     "paused": m.paused, "auto": m.system_id is not None, "system_id": m.system_id,
+                    "source": source_of(m, src),
                     "state": monitor_state(m, engine_ok), "since": m.state_since, "warning": m.warning,
                     "latency_ms": _primary_latency(cs),
                     "uptime": {"24h": uptime_of(day), "7d": uptime_of(week), "30d": uptime_of(month)},
@@ -302,7 +313,7 @@ def build_health_router(ctx: Context, guards: Guards, engine: HealthEngine) -> A
         return {"kinds": [{"kind": k, "label": KIND_LABELS[k],
                            "available": fritz if k in FRITZ_KINDS else k != "agent",
                            "reason": "Set up the FRITZ!Box connector under Settings → Integrations"
-                           if k in FRITZ_KINDS and not fritz else ("Added automatically for agent hosts" if k == "agent" else "")}
+                           if k in FRITZ_KINDS and not fritz else ("Added automatically on agent hosts" if k == "agent" else "")}
                           for k in KINDS],
                 "fritz": fritz}
 
@@ -401,7 +412,7 @@ def build_health_router(ctx: Context, guards: Guards, engine: HealthEngine) -> A
                 if s.scalars(select(HealthMonitor).where(HealthMonitor.slug == body.slug)).first():
                     raise HTTPException(409, "This API key is already used by another monitor")
                 m.slug = body.slug
-            if m.system_id is None:   # Agenten-Hosts tragen den Namen ihres Systems
+            if m.system_id is None:   # Hosts aus „Systems“ tragen den Namen ihres Systems
                 m.name = body.name.strip()
             m.host, m.critical, m.paused = body.host.strip(), body.critical, body.paused
             ops = _store_checks(s, m, items, tokens)
@@ -433,7 +444,7 @@ def build_health_router(ctx: Context, guards: Guards, engine: HealthEngine) -> A
             if m is None:
                 raise HTTPException(404, "Unknown monitor")
             if m.system_id is not None:
-                raise HTTPException(409, "Agent hosts are monitored automatically; pause it instead")
+                raise HTTPException(409, "Hosts from Systems are monitored automatically; pause it instead")
             ops = [(secret_name(c.id), None) for c in s.scalars(select(HealthCheck).where(HealthCheck.monitor_id == m.id))]
             s.delete(m)
             ctx.audit(s, found[0].username, "health.monitor.deleted", m.name)

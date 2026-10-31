@@ -91,7 +91,7 @@ const beatUrl = (t) => `${window.location.origin}/api/health/beat/${t}`
       <div class="grid-2">
         <label>Name
           <input v-model="form.name" required maxlength="80" :disabled="auto" placeholder="e.g. TrueNAS" />
-          <span v-if="auto" class="hint">Agent hosts carry the name of their system.</span>
+          <span v-if="auto" class="hint">Hosts from Systems carry the name of their system.</span>
         </label>
         <label>Host (IP or name)
           <input v-model="form.host" maxlength="253" placeholder="REDACTED" spellcheck="false" />
