@@ -4,7 +4,11 @@ import { api } from '../api.js'
 import { ASSUMED_NVD_SHARE, DEFAULT_RESEARCH_HOURS, LEVELS, SWITCHES, estimate, fmtUsd } from '../aicost.js'
 import Icon from './Icon.vue'
 import SettingsCard from './SettingsCard.vue'
+import SettingsEntry from './SettingsEntry.vue'
+import SettingsFold from './SettingsFold.vue'
+import SettingsList from './SettingsList.vue'
 import SettingsSection from './SettingsSection.vue'
+import ToggleSwitch from './ToggleSwitch.vue'
 
 const KEYS = ['level', 'pass_hours', 'research_hours', 'max_searches', ...SWITCHES.map((x) => x.id)]
 const cfg = reactive({ level: 'full', pass_hours: 2, research_hours: 20, max_searches: 15, kev: true, release_feeds: true, health_alerts: true, miss_check: true })
@@ -49,6 +53,7 @@ const valid = computed(() => Number.isInteger(cfg.pass_hours) && cfg.pass_hours 
   && Number.isInteger(cfg.max_searches) && cfg.max_searches >= 5 && cfg.max_searches <= 30)
 const dirty = computed(() => !!saved.value && KEYS.some((k) => cfg[k] !== saved.value[k]))
 const status = computed(() => ({ tone: 'neutral', text: LEVELS.find((l) => l.id === (saved.value?.level || 'full')).label }))
+const ICONS = { kev: 'shield', release_feeds: 'package', health_alerts: 'bell', miss_check: 'activity' }
 
 const assumptions = computed(() => {
   const b = basis.value
@@ -80,29 +85,45 @@ async function save() {
 </script>
 
 <template>
-  <SettingsCard icon="sparkles" title="AI level and cost" subtitle="How much of the early warning runs on AI, how often, and what it costs." :status="status">
+  <SettingsCard icon="sparkles" title="AI level and cost" subtitle="How much of the early warning runs on AI, how often, and what it costs" :status="status">
     <template #intro>
-      Fully agentic uses AI and web search for every step. The lower levels replace steps with structured public
-      data (NVD, CISA KEV), so you get fewer AI calls and lower cost but less news coverage.
+      Fully agentic uses AI and web search for every step. The lower levels use structured public data (NVD, CISA KEV) instead:
+      fewer AI calls and lower cost, but less news coverage.
     </template>
     <p v-if="loadError" class="message error" role="alert">{{ loadError }}
       <button type="button" class="btn-sm" @click="load"><Icon name="refresh" :size="14" />Retry</button>
     </p>
 
-    <SettingsSection title="Level">
-      <div class="levels" role="radiogroup" aria-label="AI level">
-        <button v-for="l in LEVELS" :key="l.id" type="button" role="radio" :aria-checked="cfg.level === l.id"
-                :class="['level', { active: cfg.level === l.id }]" :data-test="`level-${l.id}`" @click="pick(l.id)">
-          <span class="level-head">
-            <strong>{{ l.label }}</strong>
-            <span class="level-cost" :data-test="`cost-${l.id}`">{{ fmtUsd(perLevel[l.id]?.total) }}<small>/month</small></span>
-          </span>
-          <span class="level-text">{{ l.text }}</span>
-        </button>
-      </div>
+    <div id="set-ai-level" class="levels" role="radiogroup" aria-label="AI level">
+      <button v-for="l in LEVELS" :key="l.id" type="button" role="radio" :aria-checked="cfg.level === l.id"
+              :class="['level', { active: cfg.level === l.id }]" :data-test="`level-${l.id}`" @click="pick(l.id)">
+        <span class="level-head">
+          <strong>{{ l.label }}</strong>
+          <span class="level-cost" :data-test="`cost-${l.id}`">{{ fmtUsd(perLevel[l.id]?.total) }}<small>/month</small></span>
+        </span>
+        <span class="level-text">{{ l.text }}</span>
+      </button>
+    </div>
+
+    <SettingsSection id="set-ai-sources" title="Sources and safety nets">
+      <SettingsList label="Sources and safety nets">
+        <SettingsEntry v-for="x in SWITCHES" :key="x.id" :icon="ICONS[x.id]" :title="x.label" :meta="x.text">
+          <template #actions>
+            <ToggleSwitch v-model="cfg[x.id]" :name="`switch_${x.id}`" :label="x.label" :data-test="`switch-${x.id}`" />
+          </template>
+          <SettingsFold v-if="x.id === 'release_feeds' && cfg.release_feeds" data-test="release-feeds"
+                        :title="`${releaseFeeds.length} release feeds found in your inventory`">
+            <ul class="feeds">
+              <li v-for="f in releaseFeeds" :key="f.url"><a :href="f.url.replace(/\/releases\.atom$/, '/releases')" target="_blank" rel="noopener">{{ f.url.replace('https://github.com/', '').replace('/releases.atom', '') }}</a> <span class="subtext">{{ f.keywords.join(', ') }}</span></li>
+            </ul>
+            <span class="subtext">From the images’ <code>org.opencontainers.image.source</code> label, only when the repository name matches the product (a label inherited from a base image does not count).</span>
+          </SettingsFold>
+        </SettingsEntry>
+      </SettingsList>
     </SettingsSection>
 
-    <SettingsSection title="Intervals">
+    <SettingsFold id="set-ai-tune" title="Fine-tune intervals"
+                  :hint="`feeds every ${cfg.pass_hours} h${cfg.level === 'minimal' ? '' : ` · research every ${cfg.research_hours} h · ${cfg.max_searches} searches`}`">
       <div class="intervals">
         <label>
           <span class="field-label">Check feeds every (hours)</span>
@@ -119,26 +140,11 @@ async function save() {
                  :disabled="cfg.level === 'minimal'" />
         </label>
       </div>
-      <span class="subtext">Feed checks cost little (AI only reads new matched advisories); web research is the expensive part. Research runs at the first feed check after its interval. Each search costs $0.01 and adds pages the model has to read; fewer searches cover fewer of your products per run.</span>
-    </SettingsSection>
+      <span class="subtext">Feed checks cost little: AI only reads new matched advisories. Web research is the expensive part and runs at the first feed check after its interval.
+        Each search costs $0.01 plus the pages the model reads; fewer searches cover fewer of your products per run.</span>
+    </SettingsFold>
 
-    <SettingsSection title="Sources and safety nets">
-      <div class="switches">
-        <label v-for="x in SWITCHES" :key="x.id" class="switch-row">
-          <input v-model="cfg[x.id]" type="checkbox" :data-test="`switch-${x.id}`" />
-          <span><strong>{{ x.label }}</strong><span class="subtext">{{ x.text }}</span></span>
-        </label>
-      </div>
-      <details v-if="cfg.release_feeds" class="feeds" data-test="release-feeds">
-        <summary>{{ releaseFeeds.length }} release feeds found in your inventory</summary>
-        <ul>
-          <li v-for="f in releaseFeeds" :key="f.url"><a :href="f.url.replace(/\/releases\.atom$/, '/releases')" target="_blank" rel="noopener">{{ f.url.replace('https://github.com/', '').replace('/releases.atom', '') }}</a> <span class="subtext">{{ f.keywords.join(', ') }}</span></li>
-        </ul>
-        <span class="subtext">From the images’ <code>org.opencontainers.image.source</code> label, only when the repository name matches the product (a label inherited from a base image does not count).</span>
-      </details>
-    </SettingsSection>
-
-    <SettingsSection v-if="current" title="Estimate per month" :hint="`${fmtUsd(current.total)} total`">
+    <SettingsFold v-if="current" id="set-ai-cost" title="Cost estimate" :hint="`${fmtUsd(current.total)} per month`">
       <div class="table-wrap">
       <table class="cost-table" data-test="breakdown">
         <thead><tr><th>Task</th><th>Model</th><th class="num">Runs</th><th class="num">Each</th><th class="num">Month</th></tr></thead>
@@ -156,7 +162,7 @@ async function save() {
       <ul class="assumptions subtext">
         <li v-for="a in assumptions" :key="a">{{ a }}</li>
       </ul>
-    </SettingsSection>
+    </SettingsFold>
 
     <div class="actions">
       <button type="button" class="primary" data-test="save-level" :disabled="busy || !valid || !dirty" @click="save"><Icon name="check" :size="15" />Save</button>
@@ -167,30 +173,24 @@ async function save() {
 </template>
 
 <style scoped>
-.levels { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
-.level { display: flex; flex-direction: column; gap: 0.4rem; text-align: left; padding: 0.8rem 0.9rem; border: 1px solid var(--line-strong);
-         border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text-2); }
-.level:hover { background: var(--surface-3); }
-.level.active { border-color: var(--info); background: var(--surface); color: var(--text); box-shadow: 0 0 0 1px var(--info); }
+.levels { display: grid; gap: 0.6rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+/* Globale Buttons zentrieren ihren Inhalt; die Stufen-Karten lesen sich links ausgerichtet */
+.level { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 0.35rem; text-align: left;
+         padding: 0.75rem 0.85rem; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text-2); }
+.level:hover:not(:disabled) { background: var(--surface-3); }
+.level.active, .level.active:hover:not(:disabled) { border-color: var(--text-2); background: var(--surface); color: var(--text); box-shadow: inset 0 0 0 1px var(--text-2); }
 .level-head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; }
 .level-head strong { color: var(--text); }
 .level-cost { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text); }
 .level-cost small { font-weight: 400; color: var(--text-2); margin-left: 0.15rem; }
-.level-text { font-size: 0.82rem; line-height: 1.4; }
-.intervals { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
-.intervals label { display: flex; flex-direction: column; gap: 0.35rem; }
-.table-wrap { overflow-x: auto; }
-.cost-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+.level-text { font-size: 0.8rem; line-height: 1.4; font-weight: 400; }
+.intervals { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); max-width: 48rem; }
+.table-wrap { overflow-x: auto; margin: 0; padding: 0; }
+.cost-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
 .cost-table th, .cost-table td { padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--line); text-align: left; }
 .cost-table th { color: var(--text-2); font-weight: 500; }
 .cost-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .cost-table .model { color: var(--text-2); overflow-wrap: anywhere; }
-.switches { display: flex; flex-direction: column; gap: 0.6rem; }
-.switch-row { display: flex; gap: 0.6rem; align-items: flex-start; }
-.switch-row input { margin-top: 0.2rem; }
-.switch-row > span { display: flex; flex-direction: column; gap: 0.1rem; }
-.feeds { margin-top: 0.75rem; font-size: 0.86rem; }
-.feeds summary { cursor: pointer; color: var(--text-2); }
-.feeds ul { margin: 0.4rem 0; padding-left: 1.1rem; overflow-wrap: anywhere; }
-.assumptions { margin: 0.5rem 0 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.2rem; }
+.feeds { margin: 0; padding-left: 1.1rem; font-size: 0.84rem; overflow-wrap: anywhere; }
+.assumptions { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.2rem; }
 </style>

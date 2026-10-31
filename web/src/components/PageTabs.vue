@@ -1,5 +1,5 @@
 <script setup>
-import { computed, useId } from 'vue'
+import { computed, nextTick, onMounted, ref, useId, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Icon from './Icon.vue'
 
@@ -17,6 +17,13 @@ const router = useRouter()
 const uid = useId()
 
 const keys = computed(() => props.tabs.map((t) => t.key))
+// Schmale Bildschirme: die Reiterleiste scrollt; ein Verlauf am Rand zeigt, dass rechts noch Reiter kommen
+const list = ref(null)
+const more = ref(false)
+function measure() {
+  const el = list.value
+  if (el) more.value = el.scrollLeft + el.clientWidth < el.scrollWidth - 4
+}
 const active = computed(() => {
   const wanted = (props.query && route.query[props.query]) || props.modelValue
   return keys.value.includes(wanted) ? wanted : keys.value[0]
@@ -29,6 +36,14 @@ function select(key) {
     router.replace({ query })
   }
 }
+
+// Aktiver Reiter immer sichtbar, auch wenn er über einen Verweis gewählt wurde
+watch(active, async (key) => {
+  await nextTick()
+  document.getElementById(`${uid}-tab-${key}`)?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
+  measure()
+})
+onMounted(measure)
 
 // Pfeiltasten wie bei nativen Reitern: Fokus und Auswahl wandern gemeinsam
 function onKey(e) {
@@ -44,7 +59,7 @@ function onKey(e) {
 
 <template>
   <div class="page-tabs">
-    <div class="tablist" role="tablist" :aria-label="label" @keydown="onKey">
+    <div ref="list" :class="['tablist', { more }]" role="tablist" :aria-label="label" @keydown="onKey" @scroll.passive="measure">
       <button v-for="t in tabs" :id="`${uid}-tab-${t.key}`" :key="t.key" type="button" role="tab"
               :class="['tab', { active: t.key === active }]" :aria-selected="t.key === active"
               :aria-controls="`${uid}-panel`" :tabindex="t.key === active ? 0 : -1" @click="select(t.key)">
@@ -64,6 +79,7 @@ function onKey(e) {
 .tablist {
   display: flex; gap: 0.25rem; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none;
 }
+.tablist.more { mask-image: linear-gradient(90deg, #000 calc(100% - 3rem), transparent); }
 .tab {
   min-height: 40px; padding: 0.45rem 0.85rem; margin-bottom: -1px; border: 0; border-bottom: 2px solid transparent;
   border-radius: 0; background: transparent; color: var(--muted); white-space: nowrap; transition: color 0.15s, border-color 0.15s;

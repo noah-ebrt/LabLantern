@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { api } from '../api.js'
-import { fmtDateTime, timeAgo } from '../time.js'
+import { fmtStamp, timeAgo } from '../time.js'
 import Icon from './Icon.vue'
 import SettingsCard from './SettingsCard.vue'
 import SettingsEntry from './SettingsEntry.vue'
@@ -85,7 +85,7 @@ onMounted(load)
     <SettingsSection title="Tokens" :count="tokens.length">
       <SettingsList :empty="!tokens.length" empty-text="No device has access yet.">
         <SettingsEntry v-for="t in tokens" :key="t.id" icon="key" :title="t.name"
-                       :meta="`created ${fmtDateTime(t.created_at)} · last used ${t.last_used ? timeAgo(t.last_used) : 'never'}`">
+                       :meta="`created ${fmtStamp(t.created_at)} · last used ${t.last_used ? timeAgo(t.last_used) : 'never'}`">
           <template #actions><button type="button" class="btn-sm btn-delete" @click="revoke(t)"><Icon name="trash" :size="14" />Revoke</button></template>
         </SettingsEntry>
       </SettingsList>

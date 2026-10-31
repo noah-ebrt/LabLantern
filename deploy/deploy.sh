@@ -4,15 +4,22 @@
 #   („Versions could not be checked … untagged image“). Ein laufender Scan übersteht das, der Worker wiederholt 30 s.
 # - der Agent wird nur gebaut und signiert, wenn sich agent/ geändert hat; ein Fehler dort hält den Rest nicht auf.
 # - der Worker nur, wenn sich sein Code geändert hat, und nie während eines Laufs: Neuerstellen bricht den Lauf ab.
+#   Auch gebaut wird er erst dann: jeder Build bekommt neue Attestierungen und damit eine neue Image-ID, der Tag
+#   zöge dem laufenden Worker davon, und vulnwatch meldet „runs an image whose tag now points to a newer build“.
+# - die Einmal-Container des Agent-Builds werden nach Erfolg entfernt: sonst bleibt das 5,5 GB große Build-Image an
+#   einem gestoppten Container hängen, wird mitgescannt (grype braucht dafür ~30 GB RAM, der Kernel beendet es) und
+#   läuft nach dem nächsten Build ebenfalls auf einem „newer build“.
 set -eu
 cd "$(dirname "$0")"
 
-docker compose build server worker agent-build
+docker compose build server agent-build
 docker compose up -d --no-deps --force-recreate server announce
 
 agent_failed=0
-if docker compose up -d agent-sign; then
+# up -d wartet nur auf agent-key und agent-build; erst wait sagt, ob das Signieren selbst geklappt hat
+if docker compose up -d agent-sign && docker compose wait agent-sign | grep -q 'status code 0$'; then
     echo "Agent build done (the master picks up a new release within a minute)."
+    docker compose rm -f agent-key agent-build agent-sign >/dev/null
 else
     agent_failed=1
     echo "Agent build FAILED, hosts keep the current agent: docker compose logs agent-build agent-sign" >&2
@@ -36,6 +43,7 @@ if [ "$active" != "0" ]; then
     echo "Server and web UI are live. Run npm run deploy again once the run has finished." >&2
     exit 1
 fi
+docker compose build worker
 docker compose up -d --no-deps --force-recreate worker
 echo "$stamp" > .worker-deployed
 echo "Worker recreated."

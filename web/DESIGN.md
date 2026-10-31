@@ -20,9 +20,11 @@ Dark, monochrome admin dashboard (structure after the owner's SaaS reference: gr
 
 ### Settings language (`components/Settings*.vue`, `SecretField.vue`)
 
-Every settings card is built from the same four parts; new cards use them instead of their own markup.
+Every settings card is built from the same parts; new cards use them instead of their own markup.
 
-- `SettingsCard`: icon tile, title, card status (`status: { tone, text }` → pill), subtitle, `#actions` top right, `#intro` for the explanation as plain muted text (never a boxed callout).
+- Page: tabs by what the admin wants to do (Scanning · Alerts & reports · Exposure · AI early warning · System), an overview-style status strip whose items jump to their setting, problem counts on the tabs, and "Find a setting" (`settingsIndex.js`). Every findable setting has an id `set-…`; `?tab=…#set-…` in a link opens the tab, unfolds and scrolls to it (`reveal.js`). A new setting gets an index entry.
+- `SettingsCard`: small muted icon before the title (no icon tile), card status (`status: { tone, text, target? }` → pill), one-line subtitle, `#actions` top right, `#intro` for the explanation as plain muted text (never a boxed callout). Cards sit 1rem apart, like the overview panels.
+- `SettingsFold`: everything not needed at a glance is folded: connection forms ("Edit connection" / "Connect …"), fine-tuning, long lists, problem lists. The hint beside the title summarises the content so it rarely needs opening.
 - `SettingsSection`: small uppercase heading with optional count and a muted hint on the right.
 - `SettingsList` + `SettingsEntry`: every configured thing (channel, passkey, key, token, check, connection, certificate) is an entry in an inset list (`--ground`, 1px line, dividers): icon tile, name (`mono` when it is a value such as a URL, version or domain), meta lines, status pill (`#badge`), actions on the right, optional body (e.g. a field). An empty list shows a dashed placeholder with one sentence and at most one action.
 - `SecretField`: password input for anything stored in the secret store. Says "Stored encrypted · changed …" or "Not set"; `:state="false"` when an entry above already states it. Values are never shown again.

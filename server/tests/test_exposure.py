@@ -69,3 +69,19 @@ def test_ok_source_counts_as_checked(ctx):
     row = m["exposure_sources"][0]
     assert (row["status"], row["label"], row["unmatched"]) == ("ok", "FRITZ!Box", 1)
     assert m["total_checks"] == 1 and m["ok_checks"] == 1
+
+
+def test_source_detail_lists_exposed_and_unmatched(ctx):
+    sid = make_system(ctx)
+    with ctx.session_factory() as s:
+        put_setting(s, NPM_STATE, {"configured": True, "ok": True, "at": time.time(), "exposed": {str(sid): ["vw"]},
+                                   "via": {str(sid): {"vw": ["vw.example.org"]}},
+                                   "unmatched": [{"domains": ["a.example.org"], "target": "10.0.0.9:80",
+                                                  "reason": "no host with this address"}]})
+        s.commit()
+        d = exposure.source_detail(s, "npm", time.time())
+        assert exposure.source_detail(s, "fritzbox", time.time()) is None
+    assert (d["status"], d["exposed"], d["unmatched"]) == ("ok", 1, 1)
+    assert d["items"] == [{"system_id": sid, "system_name": d["items"][0]["system_name"], "name": "vw",
+                           "via": ["vw.example.org"]}]
+    assert d["unmatched_items"] == [{"what": "a.example.org → 10.0.0.9:80", "why": "no host with this address"}]

@@ -2,16 +2,16 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { api } from '../api.js'
 import { useLive } from '../live.js'
-import { fmtDateTime, timeAgo } from '../time.js'
+import { fmtStamp, timeAgo } from '../time.js'
 import Icon from './Icon.vue'
 import SecretField from './SecretField.vue'
 import SettingsCard from './SettingsCard.vue'
 import SettingsEntry from './SettingsEntry.vue'
 import SettingsList from './SettingsList.vue'
-import SettingsSection from './SettingsSection.vue'
+import SettingsFold from './SettingsFold.vue'
 
-// Produktstände (Registry, endoflife.date) und Internet-Erreichbarkeit aus Nginx Proxy Manager und der FRITZ!Box
-const versions = ref(null)
+// Internet-Erreichbarkeit aus Nginx Proxy Manager, FRITZ!Box, Cloudflare Tunnel und Traefik-Labels.
+// Jede Quelle ist eine Zeile; das Verbindungsformular liegt eingeklappt darunter.
 const npm = ref(null)
 const fritz = ref(null)
 const cf = ref(null)
@@ -24,29 +24,16 @@ const message = ref(null)
 const busy = ref(false)
 
 async function load() {
-  const [v, n, s, f, c] = await Promise.all([api.get('/api/versions'), api.get('/api/settings/npm'), api.get('/api/systems'),
+  const [n, s, f, c] = await Promise.all([api.get('/api/settings/npm'), api.get('/api/systems'),
     api.get('/api/settings/fritzbox'), api.get('/api/settings/cftunnel')])
   cf.value = c
   traefik.value = (await api.get('/api/settings/traefik').catch(() => null))?.state || null
   if (c.config && !cform.account_id) cform.account_id = c.config.account_id
-  versions.value = v
   npm.value = n
   fritz.value = f
   if (f.config && !fform.url) Object.assign(fform, { url: f.config.url, user: f.config.user })
   systems.value = s.filter((x) => x.status === 'active')
   if (n.config && !form.url) Object.assign(form, { url: n.config.url, email: n.config.email, system_id: n.config.system_id })
-}
-
-const totals = computed(() => {
-  const out = { current: 0, outdated: 0, 'newer-version': 0, unknown: 0, pending: 0, local: 0 }
-  for (const s of Object.values(versions.value?.systems || {})) for (const r of s.rows) out[r.status] = (out[r.status] || 0) + 1
-  return out
-})
-
-async function checkNow() {
-  await api.post('/api/versions/refresh')
-  message.value = { kind: 'ok', text: 'Version check started; results appear here and on each host in a minute or two.' }
-  setTimeout(load, 15000)
 }
 
 async function saveNpm() {
@@ -199,11 +186,25 @@ async function removeCf() {
 }
 
 const exposedCount = computed(() => Object.values(npm.value?.state?.exposed || {}).flat().length)
+
+// Zustand einer Quelle für Badge und Kartenstatus
+const sourceState = (cfg, st) => (!cfg ? { tone: 'neutral', text: 'Not connected' } : !st?.configured ? { tone: 'neutral', text: 'Not read yet' }
+  : st.ok ? { tone: 'ok', text: 'Connected' } : { tone: 'danger', text: 'Failing' })
+const lastRead = (st, text) => (!st?.configured ? 'Not read yet'
+  : st.ok ? `Last read ${timeAgo(new Date(st.at * 1000).toISOString())}: ${text()}` : `Last read failed: ${st.error}`)
+
 const status = computed(() => {
-  if (!versions.value?.at) return { tone: 'neutral', text: 'Not checked yet' }
-  const t = totals.value
-  return { tone: t.unknown ? 'danger' : t.outdated ? 'warning' : 'ok', text: `${t.outdated} outdated · ${t.unknown} not checkable` }
+  const states = [[npm.value?.config, npm.value?.state], [fritz.value?.config, fritz.value?.state], [cf.value?.config, cf.value?.state]]
+    .map(([c, s]) => sourceState(c, s))
+  const failing = states.filter((s) => s.tone === 'danger').length
+  const connected = states.filter((s) => s.text !== 'Not connected').length
+  if (failing) return { tone: 'danger', text: `${failing} failing`, target: ['set-npm', 'set-fritz', 'set-cf'][states.findIndex((s) => s.tone === 'danger')] }
+  if (!connected) return { tone: 'neutral', text: traefik.value?.configured ? 'Traefik only' : 'Not connected' }
+  return { tone: 'ok', text: `${connected} of 3 connected${traefik.value?.configured ? ' · Traefik' : ''}` }
 })
+
+const certs = computed(() => npm.value?.state?.certificates || [])
+const nextExpiry = computed(() => Math.min(...certs.value.map((c) => c.days_left ?? -1)))
 
 async function removeNpm() {
   if (!confirm('Remove the NPM connection? Containers marked by hand stay marked.')) return
@@ -212,7 +213,6 @@ async function removeNpm() {
   await load()
 }
 
-const showAllCerts = ref(false)
 const certTone = (d) => (d == null || d < 7 ? 'danger' : d < 20 ? 'warning' : 'ok')
 const certText = (d) => (d == null ? 'unreadable' : d < 0 ? `expired ${Math.abs(Math.round(d))} d ago` : `${Math.round(d)} d`)
 const sysName = (id) => systems.value.find((s) => s.id === Number(id))?.name || `#${id}`
@@ -221,190 +221,171 @@ useLive(['settings', 'findings'], load, 3000)
 </script>
 
 <template>
-  <SettingsCard icon="package" title="Versions &amp; exposure" subtitle="Image updates and end of life (replaces image-check), internet exposure from Nginx Proxy Manager and the FRITZ!Box" :status="status">
-    <SettingsSection title="Version check">
-      <SettingsList>
-        <SettingsEntry icon="refresh" title="Registry and end-of-life check" class="version-entry"
-                       :meta="[versions?.at ? `Last pass ${timeAgo(new Date(versions.at * 1000).toISOString())} · every 6 hours` : 'Not run yet · every 6 hours',
-                               versions?.at ? `${totals.current} current · ${totals.outdated} outdated · ${totals['newer-version']} newer version · ${totals.pending} queued (Docker Hub limit) · ${totals.local} built locally` : 'Registry digest per running image, newer versions, release lines from endoflife.date']">
-          <template #actions>
-            <button type="button" class="btn-sm" @click="checkNow"><Icon name="refresh" :size="14" />Check now</button>
-          </template>
-          <span class="subtext">Results become findings (filter <RouterLink :to="{ path: '/funde', query: { source: 'products' } }">Versions &amp; EOL</RouterLink>),
-            the Versions column on the overview and the version per container in each host. “Check now” runs the pass immediately:
-            NPM, every running image against its registry, release lines against endoflife.date.</span>
-          <p v-if="versions?.eol_error" class="message error">{{ versions.eol_error }}</p>
-        </SettingsEntry>
-      </SettingsList>
-    </SettingsSection>
-
-    <SettingsSection title="Nginx Proxy Manager">
-      <SettingsList :empty="!npm?.config" empty-text="Not connected. With a read-only NPM user vulnwatch learns which services are reachable from the internet and checks their TLS certificates.">
-        <SettingsEntry v-if="npm?.config" icon="link" :title="npm.config.url" mono
-                       :meta="[`User ${npm.config.email} · runs on ${npm.config.system_id ? sysName(npm.config.system_id) : 'no host chosen'}`,
-                               npm.state?.configured ? (npm.state.ok ? `Last read ${timeAgo(new Date(npm.state.at * 1000).toISOString())}: ${npm.state.hosts} proxy hosts, ${exposedCount} containers internet-exposed` : `Last read failed: ${npm.state.error}`) : 'Not read yet']">
-          <template #badge>
-            <span v-if="npm.state?.configured" :class="['badge', npm.state.ok ? 'ok' : 'danger']">{{ npm.state.ok ? 'Connected' : 'Failing' }}</span>
-          </template>
-          <template #actions>
-            <button type="button" class="btn-sm" :disabled="busy" @click="testNpm"><Icon name="refresh" :size="14" />Test</button>
-            <button type="button" class="btn-sm btn-delete" :disabled="busy" @click="removeNpm"><Icon name="trash" :size="14" />Remove</button>
-          </template>
+  <SettingsCard icon="link" title="Internet exposure" subtitle="Reads your proxy, router and tunnels to learn which containers the internet can reach" :status="status">
+    <SettingsList label="Exposure sources">
+      <SettingsEntry id="set-npm" icon="link" title="Nginx Proxy Manager"
+                     :meta="npm?.config ? [`${npm.config.url} · user ${npm.config.email} · runs on ${npm.config.system_id ? sysName(npm.config.system_id) : 'no host chosen'}`,
+                                           lastRead(npm.state, () => `${npm.state.hosts} proxy hosts, ${exposedCount} containers internet-exposed`)]
+                       : 'Reads the proxy hosts and the expiry dates of their TLS certificates'">
+        <template #badge><span :class="['badge', sourceState(npm?.config, npm?.state).tone]">{{ sourceState(npm?.config, npm?.state).text }}</span></template>
+        <template v-if="npm?.config" #actions>
+          <button type="button" class="btn-sm" :disabled="busy" @click="testNpm"><Icon name="refresh" :size="14" />Test</button>
+          <button type="button" class="btn-sm btn-delete" :disabled="busy" @click="removeNpm"><Icon name="trash" :size="14" />Remove</button>
+        </template>
+        <template v-if="npm?.config">
           <p v-if="npm.state?.cert_note" class="message error">{{ npm.state.cert_note }}</p>
-          <details v-if="npm.state?.unmatched?.length" class="more">
-            <summary>{{ npm.state.unmatched.length }} proxy targets without a clear container – mark them on the host</summary>
-            <span v-for="u in npm.state.unmatched" :key="u.target + u.domains[0]" class="more-line"><span class="mono">{{ u.domains.join(', ') }} → {{ u.target }}</span> · {{ u.reason }}</span>
-          </details>
+          <SettingsFold v-if="npm.state?.unmatched?.length" class="more" :title="`${npm.state.unmatched.length} proxy targets without a clear container – mark them on the host`">
+            <div>
+              <span v-for="u in npm.state.unmatched" :key="u.target + u.domains[0]" class="more-line"><span class="mono">{{ u.domains.join(', ') }} → {{ u.target }}</span> · {{ u.reason }}</span>
+            </div>
+          </SettingsFold>
           <p v-if="npm.state?.dns_failed?.length" class="message error" data-test="npm-dns-failed">
             Public DNS check failed for
             <span v-for="n in npm.state.dns_failed" :key="n"><span class="mono">{{ n }}</span>
               (<button type="button" class="link" :disabled="busy" @click="setMark([n], 'lan')">LAN only</button>) </span>
             – counted as internet-exposed.
           </p>
-          <details v-if="npm.state?.lan_only?.length" class="more" data-test="npm-lan-only">
-            <summary>{{ npm.state.lan_only.length }} proxy hosts only reachable in the LAN – not counted as internet-exposed</summary>
-            <span v-for="u in npm.state.lan_only" :key="u.target + u.domains[0]" class="more-line"><span class="mono">{{ u.domains.join(', ') }} → {{ u.target }}</span> · {{ u.reason }}
-              · <button type="button" class="link" :disabled="busy" @click="setMark(u.domains, 'public')">Count as public</button></span>
-          </details>
-          <details v-if="marked.length" class="more" data-test="npm-marked">
-            <summary>{{ marked.length }} names marked by hand</summary>
-            <span v-for="[n, m] in marked" :key="n" class="more-line"><span class="mono">{{ n }}</span> · {{ m === 'public' ? 'public' : 'LAN only' }}
-              · <button type="button" class="link" :disabled="busy" @click="setMark([n], null)">Undo</button></span>
-          </details>
-        </SettingsEntry>
-      </SettingsList>
+          <SettingsFold v-if="npm.state?.lan_only?.length" class="more" data-test="npm-lan-only" :title="`${npm.state.lan_only.length} proxy hosts only reachable in the LAN – not counted as internet-exposed`">
+            <div>
+              <span v-for="u in npm.state.lan_only" :key="u.target + u.domains[0]" class="more-line"><span class="mono">{{ u.domains.join(', ') }} → {{ u.target }}</span> · {{ u.reason }}
+                · <button type="button" class="link" :disabled="busy" @click="setMark(u.domains, 'public')">Count as public</button></span>
+            </div>
+          </SettingsFold>
+          <SettingsFold v-if="marked.length" class="more" data-test="npm-marked" :title="`${marked.length} names marked by hand`">
+            <div>
+              <span v-for="[n, m] in marked" :key="n" class="more-line"><span class="mono">{{ n }}</span> · {{ m === 'public' ? 'public' : 'LAN only' }}
+                · <button type="button" class="link" :disabled="busy" @click="setMark([n], null)">Undo</button></span>
+            </div>
+          </SettingsFold>
+        </template>
+        <SettingsFold id="set-npm-form" :title="npm?.config ? 'Edit connection' : 'Connect Nginx Proxy Manager'">
+          <form class="settings-form" @submit.prevent="saveNpm">
+            <div class="grid">
+              <label><span class="field-label">Admin URL (port 81)</span><input v-model="form.url" name="npm_url" placeholder="http://npm.lan:81" autocomplete="off" required /></label>
+              <label><span class="field-label">User e-mail</span><input v-model="form.email" name="npm_email" placeholder="vulnwatch@example.org" autocomplete="off" required /></label>
+              <SecretField v-model="form.password" name="npm_password" label="Password" :set="!!npm?.password?.set" :updated-at="npm?.password?.updated_at" />
+              <label>
+                <span class="field-label">Host running NPM</span>
+                <select v-model="form.system_id" name="npm_host">
+                  <option :value="null">Choose a host…</option>
+                  <option v-for="s in systems" :key="s.id" :value="s.id">{{ s.name }}</option>
+                </select>
+              </label>
+            </div>
+            <p class="subtext">A dedicated NPM user with item visibility “All items” and view-only rights is enough. vulnwatch never reads private keys, access lists or DNS credentials.</p>
+            <div class="actions">
+              <button class="primary" :disabled="busy || !form.url || !form.email"><Icon name="check" :size="15" />{{ busy ? 'Saving & testing…' : 'Save and test' }}</button>
+            </div>
+          </form>
+        </SettingsFold>
+      </SettingsEntry>
 
-      <form class="settings-form" @submit.prevent="saveNpm">
-        <div class="grid">
-          <label><span class="field-label">Admin URL (port 81)</span><input v-model="form.url" name="npm_url" placeholder="http://npm.lan:81" autocomplete="off" required /></label>
-          <label><span class="field-label">User e-mail</span><input v-model="form.email" name="npm_email" placeholder="vulnwatch@example.org" autocomplete="off" required /></label>
-          <SecretField v-model="form.password" name="npm_password" label="Password" :set="!!npm?.password?.set" :updated-at="npm?.password?.updated_at" />
-          <label>
-            <span class="field-label">Host running NPM</span>
-            <select v-model="form.system_id" name="npm_host">
-              <option :value="null">Choose a host…</option>
-              <option v-for="s in systems" :key="s.id" :value="s.id">{{ s.name }}</option>
-            </select>
-          </label>
-        </div>
-        <p class="subtext">A dedicated NPM user with item visibility “All items” and view-only rights is enough. vulnwatch reads proxy hosts and the expiry dates of their certificates, never private keys, access lists or DNS credentials.</p>
-        <div class="actions">
-          <button class="primary" :disabled="busy || !form.url || !form.email"><Icon name="check" :size="15" />{{ busy ? 'Saving & testing…' : 'Save and test' }}</button>
-        </div>
-      </form>
-    </SettingsSection>
-
-    <SettingsSection title="FRITZ!Box port forwards">
-      <SettingsList :empty="!fritz?.config" empty-text="Not connected. With a FRITZ!Box user vulnwatch reads the IPv4 port forwards and marks the containers and hosts behind them as internet-exposed, including services that bypass NPM.">
-        <SettingsEntry v-if="fritz?.config" icon="link" :title="fritz.config.url" mono
-                       :meta="[`User ${fritz.config.user}`,
-                               fritz.state?.configured ? (fritz.state.ok ? `Last read ${timeAgo(new Date(fritz.state.at * 1000).toISOString())}: ${fritzText(fritz.state)}` : `Last read failed: ${fritz.state.error}`) : 'Not read yet']">
-          <template #badge>
-            <span v-if="fritz.state?.configured" :class="['badge', fritz.state.ok ? 'ok' : 'danger']">{{ fritz.state.ok ? 'Connected' : 'Failing' }}</span>
-          </template>
-          <template #actions>
-            <button type="button" class="btn-sm" :disabled="busy" @click="testFritz"><Icon name="refresh" :size="14" />Test</button>
-            <button type="button" class="btn-sm btn-delete" :disabled="busy" @click="removeFritz"><Icon name="trash" :size="14" />Remove</button>
-          </template>
-          <details v-if="fritz.state?.unmatched?.length" class="more">
-            <summary>{{ fritz.state.unmatched.length }} port forwards without a clear container – mark them on the host</summary>
+      <SettingsEntry id="set-fritz" icon="link" title="FRITZ!Box port forwards"
+                     :meta="fritz?.config ? [`${fritz.config.url} · user ${fritz.config.user}`, lastRead(fritz.state, () => fritzText(fritz.state))]
+                       : 'Reads the IPv4 port forwards, including services that bypass NPM'">
+        <template #badge><span :class="['badge', sourceState(fritz?.config, fritz?.state).tone]">{{ sourceState(fritz?.config, fritz?.state).text }}</span></template>
+        <template v-if="fritz?.config" #actions>
+          <button type="button" class="btn-sm" :disabled="busy" @click="testFritz"><Icon name="refresh" :size="14" />Test</button>
+          <button type="button" class="btn-sm btn-delete" :disabled="busy" @click="removeFritz"><Icon name="trash" :size="14" />Remove</button>
+        </template>
+        <SettingsFold v-if="fritz?.state?.unmatched?.length" class="more" :title="`${fritz.state.unmatched.length} port forwards without a clear container – mark them on the host`">
+          <div>
             <span v-for="u in fritz.state.unmatched" :key="u.forward" class="more-line"><span class="mono">{{ u.forward }}</span>{{ u.description ? ` (${u.description})` : '' }} · {{ u.reason }}</span>
-          </details>
-        </SettingsEntry>
-      </SettingsList>
+          </div>
+        </SettingsFold>
+        <SettingsFold id="set-fritz-form" :title="fritz?.config ? 'Edit connection' : 'Connect a FRITZ!Box'">
+          <form class="settings-form" @submit.prevent="saveFritz">
+            <div class="grid">
+              <label><span class="field-label">TR-064 address (port 49000)</span><input v-model="fform.url" name="fritz_url" placeholder="http://192.168.178.1:49000" autocomplete="off" required /></label>
+              <label><span class="field-label">User</span><input v-model="fform.user" name="fritz_user" placeholder="vulnwatch" autocomplete="off" required /></label>
+              <SecretField v-model="fform.password" name="fritz_password" label="Password" :set="!!fritz?.password?.set" :updated-at="fritz?.password?.updated_at" />
+            </div>
+            <p class="subtext">The user needs the right “FRITZ!Box settings”, and “Allow access for applications” must be on (Home network › Network › Network settings).
+              vulnwatch only reads the forwards. IPv6 releases are not visible over TR-064; mark those by hand.</p>
+            <div class="actions">
+              <button class="primary" :disabled="busy || !fform.url || !fform.user"><Icon name="check" :size="15" />{{ busy ? 'Saving & testing…' : 'Save and test' }}</button>
+            </div>
+          </form>
+        </SettingsFold>
+      </SettingsEntry>
 
-      <form class="settings-form" @submit.prevent="saveFritz">
-        <div class="grid">
-          <label><span class="field-label">TR-064 URL</span><input v-model="fform.url" name="fritz_url" placeholder="http://192.168.178.1:49000" autocomplete="off" required /></label>
-          <label><span class="field-label">User</span><input v-model="fform.user" name="fritz_user" placeholder="vulnwatch" autocomplete="off" required /></label>
-          <SecretField v-model="fform.password" name="fritz_password" label="Password" :set="!!fritz?.password?.set" :updated-at="fritz?.password?.updated_at" />
-        </div>
-        <p class="subtext">Create a FRITZ!Box user with the right “FRITZ!Box settings” and enable “Allow access for applications” (Home network › Network › Network settings). vulnwatch only reads the port forward list and never changes it. IPv6 releases are not visible over TR-064; mark those by hand.</p>
-        <div class="actions">
-          <button class="primary" :disabled="busy || !fform.url || !fform.user"><Icon name="check" :size="15" />{{ busy ? 'Saving & testing…' : 'Save and test' }}</button>
-        </div>
-      </form>
-    </SettingsSection>
-
-    <SettingsSection title="Cloudflare Tunnel">
-      <SettingsList :empty="!cf?.config" empty-text="Not connected. With a read-only API token vulnwatch reads the public hostnames of your Cloudflare Tunnels and marks the containers and hosts behind them as internet-exposed.">
-        <SettingsEntry v-if="cf?.config" icon="link" :title="`Account ${cf.config.account_id}`" mono
-                       :meta="[cf.state?.configured ? (cf.state.ok ? `Last read ${timeAgo(new Date(cf.state.at * 1000).toISOString())}: ${cfText(cf.state)}` : `Last read failed: ${cf.state.error}`) : 'Not read yet']">
-          <template #badge>
-            <span v-if="cf.state?.configured" :class="['badge', cf.state.ok ? 'ok' : 'danger']">{{ cf.state.ok ? 'Connected' : 'Failing' }}</span>
-          </template>
-          <template #actions>
-            <button type="button" class="btn-sm" :disabled="busy" @click="testCf"><Icon name="refresh" :size="14" />Test</button>
-            <button type="button" class="btn-sm btn-delete" :disabled="busy" @click="removeCf"><Icon name="trash" :size="14" />Remove</button>
-          </template>
-          <details v-if="cf.state?.unmatched?.length" class="more" data-test="cf-unmatched">
-            <summary>{{ cf.state.unmatched.length }} tunnel routes without a clear container – mark them on the host</summary>
+      <SettingsEntry id="set-cf" icon="link" title="Cloudflare Tunnel"
+                     :meta="cf?.config ? [`Account ${cf.config.account_id}`, lastRead(cf.state, () => cfText(cf.state))]
+                       : 'Reads the public hostnames of your tunnels with a read-only API token'">
+        <template #badge><span :class="['badge', sourceState(cf?.config, cf?.state).tone]">{{ sourceState(cf?.config, cf?.state).text }}</span></template>
+        <template v-if="cf?.config" #actions>
+          <button type="button" class="btn-sm" :disabled="busy" @click="testCf"><Icon name="refresh" :size="14" />Test</button>
+          <button type="button" class="btn-sm btn-delete" :disabled="busy" @click="removeCf"><Icon name="trash" :size="14" />Remove</button>
+        </template>
+        <SettingsFold v-if="cf?.state?.unmatched?.length" class="more" data-test="cf-unmatched" :title="`${cf.state.unmatched.length} tunnel routes without a clear container – mark them on the host`">
+          <div>
             <span v-for="u in cf.state.unmatched" :key="u.what + (u.service || '')" class="more-line"><span class="mono">{{ u.what }}{{ u.service ? ` → ${u.service}` : '' }}</span> · {{ u.why }}</span>
-          </details>
-        </SettingsEntry>
-      </SettingsList>
+          </div>
+        </SettingsFold>
+        <SettingsFold id="set-cf-form" :title="cf?.config ? 'Edit connection' : 'Connect Cloudflare'">
+          <form class="settings-form" @submit.prevent="saveCf">
+            <div class="grid">
+              <label><span class="field-label">Account ID</span><input v-model="cform.account_id" name="cf_account" placeholder="32 hex characters" autocomplete="off" required /></label>
+              <SecretField v-model="cform.token" name="cf_token" label="API token" :set="!!cf?.token?.set" :updated-at="cf?.token?.updated_at" />
+            </div>
+            <p class="subtext">Create a token with only “Account · Cloudflare Tunnel · Read”. Tunnels managed with a local config.yml can't be read; mark their services by hand.</p>
+            <div class="actions">
+              <button class="primary" :disabled="busy || !cform.account_id"><Icon name="check" :size="15" />{{ busy ? 'Saving & testing…' : 'Save and test' }}</button>
+            </div>
+          </form>
+        </SettingsFold>
+      </SettingsEntry>
 
-      <form class="settings-form" @submit.prevent="saveCf">
-        <div class="grid">
-          <label><span class="field-label">Account ID</span><input v-model="cform.account_id" name="cf_account" placeholder="32 hex characters" autocomplete="off" required /></label>
-          <SecretField v-model="cform.token" name="cf_token" label="API token" :set="!!cf?.token?.set" :updated-at="cf?.token?.updated_at" />
-        </div>
-        <p class="subtext">Create an API token with only “Account · Cloudflare Tunnel · Read” for this account. vulnwatch reads the ingress rules of remotely managed tunnels and never changes them. Tunnels managed with a local config.yml are listed as not readable; mark their services by hand.</p>
-        <div class="actions">
-          <button class="primary" :disabled="busy || !cform.account_id"><Icon name="check" :size="15" />{{ busy ? 'Saving & testing…' : 'Save and test' }}</button>
-        </div>
-      </form>
-    </SettingsSection>
+      <SettingsEntry v-if="traefik?.configured" id="set-traefik" icon="link" title="Traefik (Docker labels)" data-test="traefik"
+                     :meta="`Read from the labels the agents report: ${traefik.routers} routers, ${Object.values(traefik.exposed || {}).flat().length} containers internet-exposed`">
+        <template #badge><span class="badge neutral">Automatic</span></template>
+        <span class="subtext">Only the Docker provider on the same host is visible, not routes from Traefik's file provider.</span>
+        <p v-if="traefik.dns_failed?.length" class="message error">Public DNS check failed for {{ traefik.dns_failed.join(', ') }} – counted as internet-exposed.</p>
+        <SettingsFold v-if="traefik.lan_only?.length" class="more" :title="`${traefik.lan_only.length} routers only reachable in the LAN – not counted as internet-exposed`">
+          <div>
+            <span v-for="u in traefik.lan_only" :key="u.what + u.router" class="more-line"><span class="mono">{{ u.domains.join(', ') }}</span> → {{ u.what }} · {{ u.reason }}
+              · <button type="button" class="link" :disabled="busy" @click="setMark(u.domains, 'public')">Count as public</button></span>
+          </div>
+        </SettingsFold>
+        <SettingsFold v-if="traefik.unmatched?.length" class="more" data-test="traefik-unmatched" :title="`${traefik.unmatched.length} routers that cannot be checked – mark them on the host`">
+          <div>
+            <span v-for="u in traefik.unmatched" :key="u.what + (u.router || '')" class="more-line"><span class="mono">{{ u.what }}{{ u.router ? ` (router ${u.router})` : '' }}</span> · {{ u.why }}</span>
+          </div>
+        </SettingsFold>
+        <SettingsFold v-if="traefik.entrypoints?.length" id="set-traefik-entrypoints" title="Entrypoints"
+                      hint="decide per entrypoint whether its routers count as public">
+          <div class="entrypoints" data-test="traefik-entrypoints">
+            <label v-for="e in traefik.entrypoints" :key="e"><span class="field-label mono">{{ e }}</span>
+              <select :name="`ep_${e}`" :value="npm?.overrides?.entrypoints?.[e] || ''" :disabled="busy" @change="setEntrypoint(e, $event.target.value)">
+                <option value="">decide by public DNS</option><option value="public">always public</option><option value="lan">LAN only</option>
+              </select>
+            </label>
+          </div>
+        </SettingsFold>
+      </SettingsEntry>
+    </SettingsList>
 
-    <SettingsSection v-if="traefik?.configured" title="Traefik (Docker labels)" data-test="traefik">
-      <p class="subtext">Read from the router labels the agents report: {{ traefik.routers }} routers, {{ Object.values(traefik.exposed || {}).flat().length }} containers internet-exposed. Only the Docker provider on the same host is visible; routes from Traefik's file provider are not.</p>
-      <p v-if="traefik.dns_failed?.length" class="message error">Public DNS check failed for {{ traefik.dns_failed.join(', ') }} – counted as internet-exposed.</p>
-      <details v-if="traefik.lan_only?.length" class="more">
-        <summary>{{ traefik.lan_only.length }} routers only reachable in the LAN – not counted as internet-exposed</summary>
-        <span v-for="u in traefik.lan_only" :key="u.what + u.router" class="more-line"><span class="mono">{{ u.domains.join(', ') }}</span> → {{ u.what }} · {{ u.reason }}
-          · <button type="button" class="link" :disabled="busy" @click="setMark(u.domains, 'public')">Count as public</button></span>
-      </details>
-      <div v-if="traefik.entrypoints?.length" class="entrypoints" data-test="traefik-entrypoints">
-        <label v-for="e in traefik.entrypoints" :key="e"><span class="field-label mono">{{ e }}</span>
-          <select :name="`ep_${e}`" :value="npm?.overrides?.entrypoints?.[e] || ''" :disabled="busy" @change="setEntrypoint(e, $event.target.value)">
-            <option value="">decide by public DNS</option><option value="public">always public</option><option value="lan">LAN only</option>
-          </select>
-        </label>
-      </div>
-      <details v-if="traefik.unmatched?.length" class="more" data-test="traefik-unmatched">
-        <summary>{{ traefik.unmatched.length }} routers that cannot be checked – mark them on the host</summary>
-        <span v-for="u in traefik.unmatched" :key="u.what + (u.router || '')" class="more-line"><span class="mono">{{ u.what }}{{ u.router ? ` (router ${u.router})` : '' }}</span> · {{ u.why }}</span>
-      </details>
-    </SettingsSection>
-
-    <SettingsSection v-if="npm?.state?.certificates?.length" title="TLS certificates in use" :count="npm.state.certificates.length"
-                     hint="NPM renews 30 days ahead · under 20 days medium · under 7 days or expired high">
+    <SettingsFold v-if="certs.length" id="set-certs" title="TLS certificates in use"
+                  :hint="`${certs.length} from NPM · next expires in ${certText(nextExpiry)}`">
+      <span class="subtext">NPM renews 30 days ahead. Under 20 days left counts as medium, under 7 days or expired as high.</span>
       <SettingsList>
-        <SettingsEntry v-for="c in npm.state.certificates.slice(0, showAllCerts ? undefined : 5)" :key="c.name" dense mono
-                       :title="c.domains.join(', ') || c.name">
-          <template #actions><span :class="['days', certTone(c.days_left)]" :title="c.expires_on ? `expires ${fmtDateTime(c.expires_on)}` : ''">{{ certText(c.days_left) }}</span></template>
+        <SettingsEntry v-for="c in certs" :key="c.name" dense mono :title="c.domains.join(', ') || c.name">
+          <template #actions><span :class="['days', certTone(c.days_left)]" :title="c.expires_on ? `expires ${fmtStamp(c.expires_on)}` : ''">{{ certText(c.days_left) }}</span></template>
         </SettingsEntry>
       </SettingsList>
-      <button v-if="npm.state.certificates.length > 5" type="button" class="link more-toggle" @click="showAllCerts = !showAllCerts">
-        {{ showAllCerts ? 'Show fewer' : `Show all ${npm.state.certificates.length}` }}
-      </button>
-    </SettingsSection>
+    </SettingsFold>
 
     <p v-if="message" class="message" :class="message.kind" role="status">{{ message.text }}</p>
   </SettingsCard>
 </template>
 
 <style scoped>
-.more summary { cursor: pointer; font-size: 0.8rem; color: var(--text-2); width: fit-content; }
-.more[open] summary { margin-bottom: 0.4rem; }
 .more-line { display: block; font-size: 0.78rem; color: var(--muted); padding: 0.15rem 0; overflow-wrap: anywhere; }
 .more-line .mono { color: var(--text-2); }
-.more-toggle { align-self: flex-start; }
 /* Restlaufzeit: Zahl in der Ampelfarbe statt einer Pille je Zeile */
 .days { font: 0.78rem var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .days.ok { color: var(--ok); }
 .days.warning { color: var(--med); }
 .days.danger { color: var(--crit); font-weight: 600; }
-.version-entry .subtext a { color: var(--text-2); }
-.entrypoints { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 0.5rem 0; }
+.entrypoints { display: flex; flex-wrap: wrap; gap: 0.75rem; }
 </style>

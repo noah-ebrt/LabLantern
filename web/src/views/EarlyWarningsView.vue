@@ -204,7 +204,7 @@ useLive(['findings', 'settings'], load, 3000)
     </span>
     <span>AI provider
       <strong v-if="data.ai_configured">configured</strong>
-      <RouterLink v-else to="/einstellungen?tab=integrations" class="text-danger">none set – matched advisories need review by hand</RouterLink>
+      <RouterLink v-else to="/einstellungen?tab=ai#set-ai-models" class="text-danger">none set – matched advisories need review by hand</RouterLink>
     </span>
   </section>
 

@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { api } from '../api.js'
-import { fmtDateTime } from '../time.js'
+import { fmtStamp } from '../time.js'
 import Icon from './Icon.vue'
 import SettingsCard from './SettingsCard.vue'
 import SettingsEntry from './SettingsEntry.vue'
@@ -60,15 +60,15 @@ async function copy() {
   }
 }
 
-const status = computed(() => (!state.value ? null : state.value.enabled ? { tone: 'ok', text: 'Enabled' } : { tone: 'neutral', text: 'Optional · off' }))
+const status = computed(() => (!state.value ? null : state.value.enabled ? { tone: 'ok', text: 'Enabled' } : { tone: 'neutral', text: 'Off' }))
 onMounted(load)
 </script>
 
 <template>
-  <SettingsCard icon="activity" title="Prometheus metrics" subtitle="Optional: findings, coverage, agents, runs and certificates as metrics for Grafana" :status="status">
+  <SettingsCard icon="activity" title="Prometheus metrics" subtitle="Findings, coverage, agents, runs and certificates as a /metrics endpoint for Prometheus and Grafana" :status="status">
     <template v-if="state">
-      <SettingsList :empty="!state.enabled" empty-text="Off. Creating a token turns on /metrics; Prometheus scrapes it with that token.">
-        <SettingsEntry icon="link" :title="endpoint" mono :meta="`Bearer token created ${fmtDateTime(state.created_at)} · only its hash is stored`">
+      <SettingsList :empty="!state.enabled" empty-text="Off. Creating a token turns /metrics on; Prometheus scrapes it with that token.">
+        <SettingsEntry icon="link" :title="endpoint" mono :meta="`Bearer token created ${fmtStamp(state.created_at)} · only its hash is stored`">
           <template #actions>
             <button type="button" class="btn-sm" :disabled="busy" @click="create"><Icon name="refresh" :size="14" />New token</button>
             <button type="button" class="btn-sm btn-delete" :disabled="busy" @click="disable"><Icon name="trash" :size="14" />Turn off</button>

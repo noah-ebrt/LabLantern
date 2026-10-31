@@ -1,11 +1,12 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { api } from '../api.js'
-import { fmtDateTime } from '../time.js'
+import { fmtStamp } from '../time.js'
 import Icon from './Icon.vue'
 import SecretField from './SecretField.vue'
 import SettingsCard from './SettingsCard.vue'
 import SettingsEntry from './SettingsEntry.vue'
+import SettingsFold from './SettingsFold.vue'
 import SettingsList from './SettingsList.vue'
 import SettingsSection from './SettingsSection.vue'
 
@@ -15,7 +16,7 @@ const PLACEHOLDER = { anthropic: 'sk-ant-api03-…', openai: 'sk-…', c1: '' }
 const TASKS = [
   { id: 'classify', label: 'Classify feed advisories', web: false },
   { id: 'research', label: 'Web research', web: true },
-  { id: 'verify', label: 'Check high hits with the vendor', web: true },
+  { id: 'verify', label: 'Vendor check of critical and high matches', web: true },
 ]
 const TASK_NAME = { classify: 'classify', research: 'web research', verify: 'verify' }
 
@@ -47,7 +48,11 @@ const active = computed(() => providers.value.find((p) => p.id === picked.value)
   || providers.value.find((p) => p.configured) || providers.value[0])
 const tabLabel = (p) => (p.kind === 'compat' ? 'Ollama / compatible' : p.label)
 const anyConfigured = computed(() => providers.value.some((p) => p.configured))
-const status = computed(() => (anyConfigured.value ? { tone: 'ok', text: 'Configured' } : { tone: 'neutral', text: 'Not configured' }))
+const status = computed(() => {
+  if (!anyConfigured.value) return { tone: 'neutral', text: 'Not configured', target: active.value && `set-ai-key-${active.value.id}` }
+  const broken = TASKS.filter((t) => state.value.tasks[t.id]?.error).length
+  return broken ? { tone: 'danger', text: `${broken} task${broken > 1 ? 's' : ''} without a model`, target: 'set-ai-models' } : { tone: 'ok', text: 'Configured' }
+})
 
 // Referenzen sind „<Anbieter>:<Modell>“; Modell-IDs enthalten selbst Doppelpunkte (Ollama), darum wird nie zerlegt
 const refOf = (p, m) => `${p.id}:${m.id}`
@@ -82,7 +87,7 @@ function autoText(task) {
 function lastUsed(p) {
   const l = p.last_used
   if (!l) return 'not used yet'
-  return `last used ${fmtDateTime(l.at)} with ${l.model} (${TASK_NAME[l.task] || l.task}) — ${l.ok ? 'ok' : `failed${l.error ? `: ${l.error}` : ''}`}`
+  return `last used ${fmtStamp(l.at)} with ${l.model} (${TASK_NAME[l.task] || l.task}) — ${l.ok ? 'ok' : `failed${l.error ? `: ${l.error}` : ''}`}`
 }
 
 async function act(pid, fn, okText) {
@@ -143,11 +148,10 @@ onMounted(() => load(true))
 </script>
 
 <template>
-  <SettingsCard icon="sparkles" title="AI providers" subtitle="Choose which vendor and model vulnwatch uses for each AI task." :status="status">
+  <SettingsCard icon="key" title="AI provider" subtitle="Which vendor and model the early warning uses to read security advisories" :status="status">
     <template #intro>
-      Used only to read security advisories for the early warning. There is no fallback: if the chosen provider fails,
-      the task reports the error and matched advisories wait for review by hand.
-      Use dedicated API keys with a strict spend limit.
+      There is no fallback: if the chosen provider fails, the task reports the error and matched advisories wait for review by hand.
+      Use a dedicated API key with a strict spend limit.
     </template>
 
     <p v-if="loadError" class="message error" role="alert" data-test="load-error">
@@ -155,8 +159,8 @@ onMounted(() => load(true))
       <button type="button" class="btn-sm" data-test="load-retry" @click="load(true)"><Icon name="refresh" :size="14" />Retry</button>
     </p>
 
-    <div v-if="providers.length" class="seg provider-tabs" role="tablist" aria-label="AI provider">
-      <button v-for="q in providers" :key="q.id" type="button" role="tab" :aria-selected="active?.id === q.id"
+    <div v-if="providers.length" class="seg provider-tabs" role="radiogroup" aria-label="AI provider">
+      <button v-for="q in providers" :key="q.id" type="button" role="radio" :aria-checked="active?.id === q.id"
               :class="['seg-btn', { active: active?.id === q.id }]" :data-test="`tab-${q.id}`" @click="picked = q.id">
         <span class="dot" :class="{ off: !q.configured }" :title="q.configured ? 'Configured' : 'Not configured'" />{{ tabLabel(q) }}
       </button>
@@ -166,7 +170,7 @@ onMounted(() => load(true))
       <SettingsList :empty="!p.configured" empty-text="Not configured.">
         <SettingsEntry icon="key"
                        :title="p.kind === 'compat' ? `${p.label} · ${p.display_url}` : `${p.label} API key`"
-                       :meta="[p.key.set ? `Stored encrypted · changed ${fmtDateTime(p.key.updated_at)} · never shown again` : 'No API key stored', lastUsed(p)]">
+                       :meta="[p.key.set ? `Stored encrypted · changed ${fmtStamp(p.key.updated_at)} · never shown again` : 'No API key stored', lastUsed(p)]">
           <template #actions>
             <button type="button" class="btn-sm" :data-test="`test-${p.id}`" :disabled="busy" @click="test(p.id)"><Icon name="refresh" :size="14" />Test</button>
             <button type="button" class="btn-sm" :data-test="`refresh-${p.id}`" :disabled="busy" title="Ask the provider for its current model list" @click="refresh(p.id)"><Icon name="refresh" :size="14" />Refresh list</button>
@@ -176,30 +180,34 @@ onMounted(() => load(true))
         </SettingsEntry>
       </SettingsList>
 
-      <form class="settings-form" :data-test="`form-${p.id}`" @submit.prevent="saveProvider(p.id)">
-        <template v-if="p.kind === 'compat'">
-          <label>
-            <span class="field-label">Name</span>
-            <input v-model="name" name="c1_name" type="text" autocomplete="off" spellcheck="false" :placeholder="p.configured ? p.label : 'Defaults to the host'" />
-          </label>
-          <label>
-            <span class="field-label">Base URL</span>
-            <input v-model="baseUrl" name="c1_base_url" type="url" autocomplete="off" spellcheck="false"
-                   :placeholder="p.configured ? 'Stored – type a new value to replace it' : 'http://192.168.1.10:11434/v1'" />
-          </label>
-        </template>
-        <SecretField v-model="keys[p.id]" :name="`${p.id}_key`"
-                     :label="p.kind === 'compat' ? 'API key (optional)' : (p.key.set ? 'Replace API key' : `${p.label} API key`)"
-                     :set="p.key.set" :updated-at="p.key.updated_at" :placeholder="PLACEHOLDER[p.id]"
-                     :required="p.kind !== 'compat'" :state="false" />
-        <div class="actions">
-          <button type="submit" class="primary" :disabled="busy || !canSave(p.id)"><Icon name="check" :size="15" />{{ p.configured ? 'Save changes' : 'Save' }}</button>
-        </div>
-        <p v-if="messages[p.id]" class="message" :class="messages[p.id].kind" role="status">{{ messages[p.id].text }}</p>
-      </form>
+      <SettingsFold :id="`set-ai-key-${p.id}`" :open="!p.configured"
+                    :title="!p.configured ? 'Set up' : p.kind === 'compat' ? 'Change endpoint or key' : 'Replace API key'">
+        <form class="settings-form" :data-test="`form-${p.id}`" @submit.prevent="saveProvider(p.id)">
+          <template v-if="p.kind === 'compat'">
+            <label>
+              <span class="field-label">Name</span>
+              <input v-model="name" name="c1_name" type="text" autocomplete="off" spellcheck="false" :placeholder="p.configured ? p.label : 'Defaults to the host'" />
+            </label>
+            <label>
+              <span class="field-label">Base URL</span>
+              <input v-model="baseUrl" name="c1_base_url" type="url" autocomplete="off" spellcheck="false"
+                     :placeholder="p.configured ? 'Stored – type a new value to replace it' : 'http://192.168.1.10:11434/v1'" />
+            </label>
+          </template>
+          <SecretField v-model="keys[p.id]" :name="`${p.id}_key`"
+                       :label="p.kind === 'compat' ? 'API key (optional)' : (p.key.set ? 'Replace API key' : `${p.label} API key`)"
+                       :set="p.key.set" :updated-at="p.key.updated_at" :placeholder="PLACEHOLDER[p.id]"
+                       :required="p.kind !== 'compat'" :state="false" />
+          <div class="actions">
+            <button type="submit" class="primary" :disabled="busy || !canSave(p.id)"><Icon name="check" :size="15" />{{ p.configured ? 'Save changes' : 'Save' }}</button>
+          </div>
+        </form>
+      </SettingsFold>
+      <p v-if="messages[p.id]" class="message" :class="messages[p.id].kind" role="status">{{ messages[p.id].text }}</p>
     </SettingsSection>
 
-    <SettingsSection v-if="anyConfigured" title="Models per task">
+    <SettingsFold v-if="anyConfigured" id="set-ai-models" title="Models per task" :open="TASKS.some((t) => state.tasks[t.id]?.error)"
+                  :hint="TASKS.every((t) => !choice[t.id]) ? 'all automatic' : `${TASKS.filter((t) => choice[t.id]).length} chosen by hand`">
       <div class="task-grid">
         <div v-for="t in TASKS" :key="t.id" class="task-row">
           <label>
@@ -220,7 +228,7 @@ onMounted(() => load(true))
         <button type="button" class="primary" data-test="save-tasks" :disabled="busy" @click="saveTasks"><Icon name="check" :size="15" />Save models</button>
       </div>
       <p v-if="tasksMessage" class="message" :class="tasksMessage.kind" role="status">{{ tasksMessage.text }}</p>
-    </SettingsSection>
+    </SettingsFold>
   </SettingsCard>
 </template>
 

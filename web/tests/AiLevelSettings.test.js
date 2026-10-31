@@ -93,7 +93,7 @@ describe('AiLevelSettings', () => {
     const w = mount(AiLevelSettings)
     await flushPromises()
     expect(w.get('[data-test="release-feeds"]').text()).toContain('dani-garcia/vaultwarden')
-    await w.get('[data-test="switch-miss_check"]').setValue(false)
+    await w.get('[data-test="switch-miss_check"] input').setValue(false)
     await w.get('[data-test="max-searches"]').setValue(8)
     await w.get('[data-test="save-level"]').trigger('click')
     await flushPromises()

@@ -9,6 +9,7 @@ import Icon from '../components/Icon.vue'
 import RunProgress from '../components/RunProgress.vue'
 import PipelineFlow from '../components/PipelineFlow.vue'
 import ConnectorDetailModal from '../components/ConnectorDetailModal.vue'
+import ExposureSourceModal from '../components/ExposureSourceModal.vue'
 import HostDetailModal from '../components/HostDetailModal.vue'
 
 const data = ref(null)
@@ -114,6 +115,7 @@ async function copyStep(i, text) {
 
 // Detailansicht einer Matrixzeile: woher jede Bewertung kommt
 const detail = ref(null)
+const source = ref(null)
 
 
 onMounted(loadData)
@@ -146,12 +148,12 @@ useLive(['systems', 'runs', 'findings', 'settings'], loadData, 1000)
     <section v-if="data.reports_paused_until" class="notice" data-test="reports-paused">
       <strong>Reports paused until {{ data.reports_paused_until }}.</strong>
       Alerts and errors still go out.
-      <RouterLink to="/einstellungen?tab=notifications">Change</RouterLink>
+      <RouterLink to="/einstellungen?tab=alerts#set-pause">Change</RouterLink>
     </section>
     <section v-for="h in data.setup_hints.filter((x) => !x.done)" :key="h.id" class="notice">
       <strong>Next step:</strong>
       <template v-if="h.id === 'notifications'">set up a notification channel so reports and alerts reach you.</template>
-      <RouterLink :to="h.id === 'notifications' ? '/einstellungen?tab=notifications' : '/einstellungen'">Open settings</RouterLink>
+      <RouterLink :to="h.id === 'notifications' ? '/einstellungen?tab=alerts' : '/einstellungen'">Open settings</RouterLink>
     </section>
 
     <section class="posture card">
@@ -185,45 +187,7 @@ useLive(['systems', 'runs', 'findings', 'settings'], loadData, 1000)
       <span class="ew-open">Open<Icon name="chevron" :size="14" /></span>
     </RouterLink>
 
-    <section v-if="steps.length || doneSteps.length" class="card steps" aria-labelledby="steps-title">
-      <div class="card-header">
-        <h2 id="steps-title" class="panel-title">What to do</h2>
-        <span class="subtext">Most urgent first · actively exploited (KEV) before the rest</span>
-      </div>
-      <ol class="step-list">
-        <li v-for="(st, i) in shownSteps" :key="i" :class="['step', st.level]">
-          <i class="step-dot" aria-hidden="true" />
-          <div class="step-main">
-            <span class="step-title">{{ st.title }}</span>
-            <p v-if="st.detail" class="step-detail">{{ st.detail }}</p>
-            <span v-if="st.command" class="step-cmd">
-              <code class="mono">{{ st.command }}</code>
-              <button class="btn-sm" :aria-label="`Copy command for ${st.title}`" @click="copyStep(i, st.command)">
-                <Icon :name="copiedStep === i ? 'check' : 'copy'" :size="13" />{{ copiedStep === i ? 'Copied' : 'Copy' }}
-              </button>
-            </span>
-          </div>
-          <div class="step-actions">
-            <button v-if="st.action === 'scan'" class="btn-sm" :disabled="triggering || !!data?.active_run" @click="triggerScan('full')">{{ st.cta }}</button>
-            <RouterLink v-else-if="st.link" class="btn-sm step-link" :to="st.link">{{ st.cta || 'Open' }}</RouterLink>
-            <button class="btn-sm" title="Hide until the next run; it comes back if the next run still finds it" @click="markDone(st)">
-              <Icon name="check" :size="13" />Done</button>
-          </div>
-        </li>
-      </ol>
-      <p v-if="!steps.length" class="subtext">All steps marked done. The next run shows whether they are resolved.</p>
-      <button v-if="steps.length > STEPS_SHOWN" class="btn-link more" @click="allSteps = !allSteps">
-        {{ allSteps ? 'Show fewer' : `Show ${steps.length - STEPS_SHOWN} more` }}
-      </button>
-      <div v-if="doneSteps.length" class="done-steps">
-        <button class="btn-link" @click="showDone = !showDone">{{ showDone ? 'Hide' : 'Show' }} {{ doneSteps.length }} marked done</button>
-        <span class="subtext">hidden until the next run, which resolves them or shows them again</span>
-        <ul v-if="showDone">
-          <li v-for="st in doneSteps" :key="st.id"><span>{{ st.title }}</span>
-            <button class="btn-link" @click="markDone(st, false)">Undo</button></li>
-        </ul>
-      </div>
-    </section>
+    
 
     <p v-if="data.snoozed_count" class="subtext snoozed-note" data-test="snoozed">
       {{ fmt(data.snoozed_count) }} findings snoozed: not counted below, still listed in every report.
@@ -307,6 +271,48 @@ useLive(['systems', 'runs', 'findings', 'settings'], loadData, 1000)
 
     <PipelineFlow :data="data" :systems="systems" :triggering="triggering" @trigger="triggerScan('latest')" @changed="loadData" />
 
+
+<section v-if="steps.length || doneSteps.length" class="card steps" aria-labelledby="steps-title">
+      <div class="card-header">
+        <h2 id="steps-title" class="panel-title">What to do</h2>
+        <span class="subtext">Most urgent first · actively exploited (KEV) before the rest</span>
+      </div>
+      <ol class="step-list">
+        <li v-for="(st, i) in shownSteps" :key="i" :class="['step', st.level]">
+          <i class="step-dot" aria-hidden="true" />
+          <div class="step-main">
+            <span class="step-title">{{ st.title }}</span>
+            <p v-if="st.detail" class="step-detail">{{ st.detail }}</p>
+            <span v-if="st.command" class="step-cmd">
+              <code class="mono">{{ st.command }}</code>
+              <button class="btn-sm" :aria-label="`Copy command for ${st.title}`" @click="copyStep(i, st.command)">
+                <Icon :name="copiedStep === i ? 'check' : 'copy'" :size="13" />{{ copiedStep === i ? 'Copied' : 'Copy' }}
+              </button>
+            </span>
+          </div>
+          <div class="step-actions">
+            <button v-if="st.action === 'scan'" class="btn-sm" :disabled="triggering || !!data?.active_run" @click="triggerScan('full')">{{ st.cta }}</button>
+            <RouterLink v-else-if="st.link" class="btn-sm step-link" :to="st.link">{{ st.cta || 'Open' }}</RouterLink>
+            <button class="btn-sm" title="Hide until the next run; it comes back if the next run still finds it" @click="markDone(st)">
+              <Icon name="check" :size="13" />Done</button>
+          </div>
+        </li>
+      </ol>
+      <p v-if="!steps.length" class="subtext">All steps marked done. The next run shows whether they are resolved.</p>
+      <button v-if="steps.length > STEPS_SHOWN" class="btn-link more" @click="allSteps = !allSteps">
+        {{ allSteps ? 'Show fewer' : `Show ${steps.length - STEPS_SHOWN} more` }}
+      </button>
+      <div v-if="doneSteps.length" class="done-steps">
+        <button class="btn-link" @click="showDone = !showDone">{{ showDone ? 'Hide' : 'Show' }} {{ doneSteps.length }} marked done</button>
+        <span class="subtext">hidden until the next run, which resolves them or shows them again</span>
+        <ul v-if="showDone">
+          <li v-for="st in doneSteps" :key="st.id"><span>{{ st.title }}</span>
+            <button class="btn-link" @click="markDone(st, false)">Undo</button></li>
+        </ul>
+      </div>
+    </section>
+
+    
     <section class="card">
       <div class="card-header">
         <h2 class="panel-title">Coverage · system × check</h2>
@@ -347,8 +353,9 @@ useLive(['systems', 'runs', 'findings', 'settings'], loadData, 1000)
         <table class="data-table">
           <thead><tr><th>Exposure source</th><th>Status</th><th>Exposed</th><th>Not matched</th></tr></thead>
           <tbody>
-            <tr v-for="src in data.exposure_sources" :key="src.key">
-              <td class="strong">{{ src.label }}</td>
+            <tr v-for="src in data.exposure_sources" :key="src.key" class="clickable" tabindex="0"
+                :title="`Details for ${src.label}`" @click="source = src" @keydown.enter="source = src">
+              <td><span class="strong row-link">{{ src.label }}</span></td>
               <td>
                 <span :class="checkClass(src.status)">{{ label(src.status) }}</span>
                 <span class="subtext truncate" :title="src.detail">{{ src.detail }}</span>
@@ -365,6 +372,7 @@ useLive(['systems', 'runs', 'findings', 'settings'], loadData, 1000)
 
   <ConnectorDetailModal v-if="detail?.status === 'connector'" :system-id="detail.system_id" @close="detail = null" />
   <HostDetailModal v-else-if="detail" :system-id="detail.system_id" @close="detail = null" @changed="loadData()" />
+  <ExposureSourceModal v-if="source" :source="source" @close="source = null" />
 </template>
 
 <style scoped>
@@ -513,7 +521,7 @@ i.high { background: var(--high); }
   .chart { height: 190px; }
 }
 .state.bad { background: var(--danger); }
-.matrix tr.clickable { cursor: pointer; }
-.matrix tr.clickable:focus-visible { outline: 2px solid var(--text-2); outline-offset: -2px; }
+tr.clickable { cursor: pointer; }
+tr.clickable:focus-visible { outline: 2px solid var(--text-2); outline-offset: -2px; }
 .row-link { text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
 </style>

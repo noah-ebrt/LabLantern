@@ -191,7 +191,7 @@ const beatUrl = (t) => `${window.location.origin}/api/health/beat/${t}`
         </label>
         <p v-if="!options.fritz" class="hint">
           FRITZ!Box checks (device active, internet) need the FRITZ!Box connector.
-          <RouterLink to="/einstellungen?tab=integrations">Set it up under Settings → Integrations</RouterLink>; its user needs the right “FRITZ!Box settings”.
+          <RouterLink to="/einstellungen?tab=exposure#set-fritz">Set it up under Settings → Exposure</RouterLink>; its user needs the right “FRITZ!Box settings”.
         </p>
       </div>
 

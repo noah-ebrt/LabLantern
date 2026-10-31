@@ -39,6 +39,17 @@ describe('SettingsCard', () => {
     expect(w.find('.badge').text()).toBe('On')
     expect(w.find('.head-actions button').text()).toBe('Add')
   })
+
+  it('opens and scrolls to the details when the status badge has a target', async () => {
+    const w = mount(SettingsCard, { props: { icon: 'bell', title: 'T', status: { tone: 'danger', text: '2 failing', target: 'why' } },
+      slots: { default: '<details id="why"><summary>Why</summary>…</details>' }, attachTo: document.body })
+    const details = document.getElementById('why')
+    details.scrollIntoView = vi.fn()
+    await w.get('a.badge').trigger('click')
+    expect(details.open).toBe(true)
+    expect(details.scrollIntoView).toHaveBeenCalled()
+    w.unmount()
+  })
 })
 
 describe('labels', () => {

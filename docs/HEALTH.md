@@ -27,7 +27,7 @@ A host's state combines what vulnwatch sees from outside with what the agent rep
 | failing | silent | down |
 | failing | ok | degraded: likely a network or firewall problem |
 
-Devices without an agent that you connected under **Settings → Integrations** (TrueNAS, Home Assistant and every
+Devices without an agent that you connected under **Systems** (TrueNAS, Home Assistant and every
 other connector type with a URL) are watched the same way: a ping plus an HTTP(S) check on the address vulnwatch
 reads them from. For a pinned, self-signed certificate the HTTP check doesn't verify the certificate; the connector
 itself already checks its fingerprint.
@@ -75,7 +75,7 @@ outage" alert instead of one per host.
 ### Router checks (FRITZ!Box)
 
 The two FRITZ!Box checks become available once the FRITZ!Box connector is set up under
-**Settings → Integrations**. Use a separate FRITZ!Box user with the right "FRITZ!Box settings"; vulnwatch only reads.
+**Settings → Exposure**. Use a separate FRITZ!Box user with the right "FRITZ!Box settings"; vulnwatch only reads.
 If the FRITZ!Box itself is unreachable, these checks show **unknown**, not down.
 
 Phones change their Wi-Fi MAC address per network by default. Turn off the private address for your home Wi-Fi,

@@ -112,10 +112,15 @@ const addMail = () => run(async () => {
 const test = () => run(() => api.post('/api/integrations/notifications/test'), 'Test notification sent to all channels.')
 
 onMounted(() => run(load))
+
+// Apprise-Schema als Name, den man kennt; unbekannte Schemata bleiben, wie sie sind
+const SCHEMES = { mailto: 'Mail', mailtos: 'Mail', ntfy: 'ntfy', ntfys: 'ntfy', tgram: 'Telegram', discord: 'Discord', slack: 'Slack',
+  msteams: 'Teams', json: 'Webhook', jsons: 'Webhook', gotify: 'Gotify', gotifys: 'Gotify', pover: 'Pushover', signal: 'Signal', signals: 'Signal' }
+const schemeLabel = (s) => SCHEMES[s] || s
 </script>
 
 <template>
-  <SettingsCard icon="bell" title="Notification Channels" subtitle="Receive immediate vulnerability warnings and daily scan reports">
+  <SettingsCard icon="bell" title="Channels" subtitle="Where alerts and scan reports go: mail, push or chat">
     <template #actions>
         <button
           v-if="!showAddForm"
@@ -134,15 +139,15 @@ onMounted(() => run(load))
           @click="test"
         >
           <Icon name="refresh" :size="15" />
-          Send test notification
+          Test all channels
         </button>
     </template>
 
-    <SettingsSection title="Channels" :count="channels.length" hint="URLs and passwords stored encrypted, never shown again">
+    <SettingsSection title="Configured" :count="channels.length" hint="URLs and passwords are stored encrypted and never shown again">
       <SettingsList :empty="!channels.length" empty-text="No channel yet: alerts and scan reports currently go nowhere.">
         <SettingsEntry v-for="ch in channels" :key="ch.index" :icon="ch.scheme === 'mailtos' || ch.scheme === 'mailto' ? 'mail' : 'bell'"
                        :title="ch.name">
-          <template #badge><span class="badge neutral mono">{{ ch.scheme }}</span></template>
+          <template #badge><span class="badge neutral">{{ schemeLabel(ch.scheme) }}</span></template>
           <template #actions>
             <select v-model="ch.gets" data-test="channel-gets" :aria-label="`What ${ch.name} gets`" class="gets" :disabled="busy" @change="setGets(ch)">
               <option value="both">report and alerts</option>
@@ -164,8 +169,8 @@ onMounted(() => run(load))
     <div v-if="showAddForm" class="add-channel-panel">
       <div class="panel-header">
         <div class="panel-heading">
-          <h3>Add Notification Channel</h3>
-          <p class="subtitle">Choose channel type and enter credentials</p>
+          <h3>Add a channel</h3>
+          <p class="subtitle">Mail over SMTP, or push and chat through Apprise</p>
         </div>
         <button
           type="button"

@@ -36,6 +36,15 @@ def compute_ampel(counts: dict, cov: dict, last_run: ScanRun | None, now: dateti
 def build_overview_router(ctx: Context, guards: Guards) -> APIRouter:
     router = APIRouter()
 
+    @router.get("/overview/exposure/{key}", dependencies=[Depends(guards.require_session)])
+    def exposure_source(key: str):
+        from .exposure import source_detail
+        with ctx.session_factory() as s:
+            found = source_detail(s, key, datetime.now(timezone.utc).timestamp())
+        if found is None:
+            raise HTTPException(404, "Exposure source not set up")
+        return found
+
     @router.get("/overview", dependencies=[Depends(guards.require_session)])
     def overview():
         now = datetime.now(timezone.utc)

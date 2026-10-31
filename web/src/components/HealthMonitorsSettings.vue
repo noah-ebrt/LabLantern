@@ -103,7 +103,7 @@ const fritzStatus = computed(() => (props.options.fritz ? { tone: 'ok', text: 'C
       cannot be reached, these checks show “unknown” instead of “down”.
     </p>
     <p class="text">
-      <RouterLink to="/einstellungen?tab=integrations">{{ options.fritz ? 'Change the connector' : 'Set up the connector' }} under Settings → Integrations</RouterLink>.
+      <RouterLink to="/einstellungen?tab=exposure#set-fritz">{{ options.fritz ? 'Change the connector' : 'Set up the connector' }} under Settings → Exposure</RouterLink>.
       Use a separate FRITZ!Box user with the right “FRITZ!Box settings”; vulnwatch only reads.
     </p>
   </SettingsCard>

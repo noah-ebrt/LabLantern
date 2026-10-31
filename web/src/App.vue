@@ -187,7 +187,7 @@ nav { flex: 1; overflow-y: auto; }
 .search:focus-within { border-color: var(--text-2); background: var(--surface-2); box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.05); }
 .search input { flex: 1; min-width: 0; border: none; background: none; padding: 0; min-height: 34px; color: var(--text); font-size: 0.86rem; }
 .search input:focus-visible { outline: none; }
-kbd { font: 0.7rem var(--mono); color: var(--muted); border: 1px solid var(--line-strong); border-radius: 999px; padding: 0.1rem 0.45rem; white-space: nowrap; background: var(--surface-2); }
+kbd { font: 0.7rem var(--mono); color: var(--text-2); border: 1px solid var(--line-strong); border-radius: 999px; padding: 0.1rem 0.45rem; white-space: nowrap; background: var(--surface-2); }
 main { padding: 2rem; width: 100%; max-width: 1680px; margin: 0 auto; }
 .menu-btn, .scrim { display: none; }
 

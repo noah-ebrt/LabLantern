@@ -55,7 +55,7 @@ describe('AiSettings', () => {
     expect(select(w, 'classify').findAll('option')[0].text()).toContain('Haiku')
     expect(w.text()).toContain('Classify feed advisories')
     expect(w.text()).toContain('Web research')
-    expect(w.text()).toContain('Check high hits with the vendor')
+    expect(w.text()).toContain('Vendor check of critical and high matches')
   })
 
   it('shows "not available" when a task cannot resolve', async () => {
@@ -116,7 +116,7 @@ describe('AiSettings', () => {
   it('shows one provider at a time, starting with the first configured one', async () => {
     const w = mount(AiSettings)
     await flushPromises()
-    expect(w.get('button[data-test=tab-anthropic]').attributes('aria-selected')).toBe('true')
+    expect(w.get('button[data-test=tab-anthropic]').attributes('aria-checked')).toBe('true')
     expect(w.find('form[data-test=form-anthropic]').exists()).toBe(true)
     expect(w.find('form[data-test=form-openai]').exists()).toBe(false)
     expect(w.find('form[data-test=form-c1]').exists()).toBe(false)

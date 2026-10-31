@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import ProductsSettings from '../src/components/ProductsSettings.vue'
+import ExposureSettings from '../src/components/ExposureSettings.vue'
+import VersionCheckSettings from '../src/components/VersionCheckSettings.vue'
 import { setCsrf } from '../src/api.js'
 
 let calls, npm
@@ -30,7 +31,7 @@ afterEach(() => { vi.unstubAllGlobals(); setCsrf(null) })
 
 describe('NPM exposure from public DNS', () => {
   it('lists LAN-only hosts and failed checks, and marks a name by hand', async () => {
-    const w = mount(ProductsSettings, { global: { stubs: { SecretField: true } } })
+    const w = mount(ExposureSettings, { global: { stubs: { SecretField: true } } })
     await flushPromises()
     expect(w.get('[data-test=npm-lan-only]').text()).toContain('nas.example.org → nas:80')
     expect(w.get('[data-test=npm-dns-failed]').text()).toContain('counted as internet-exposed')
@@ -41,6 +42,23 @@ describe('NPM exposure from public DNS', () => {
     expect(put).toEqual({ url: '/api/settings/exposure-overrides', method: 'PUT',
       body: { hosts: { 'old.example.org': 'public', 'nas.example.org': 'public' }, entrypoints: {} } })
     expect(calls.some((c) => c.url === '/api/settings/npm/test' && c.method === 'POST')).toBe(true)
+  })
+
+  it('links the status badge to the outdated and not checkable images', async () => {
+    const base = fetch.getMockImplementation()
+    vi.stubGlobal('fetch', vi.fn(async (url, init) => url === '/api/versions'
+      ? json({ at: 1, systems: { 3: { rows: [
+        { containers: ['web'], image: 'nginx:1.25', status: 'outdated', detail: 'newer build of the tag' },
+        { containers: ['db'], image: 'pg:16', status: 'current' },
+        { containers: ['app'], image: 'sha256:abc', status: 'unknown', detail: 'untagged image' }] } } })
+      : base(url, init)))
+    const w = mount(VersionCheckSettings)
+    await flushPromises()
+    expect(w.get('a.badge').attributes('href')).toBe('#version-problems')
+    const lines = w.findAll('[data-test=version-problems] .more-line').map((l) => l.text())
+    expect(lines).toHaveLength(2)
+    expect(lines[0]).toContain('not checkable · #3 · sha256:abc · untagged image')
+    expect(lines[1]).toContain('outdated · #3 · nginx:1.25')
   })
 
   it('saves the Cloudflare Tunnel connection and lists unmatched routes', async () => {
@@ -56,7 +74,7 @@ describe('NPM exposure from public DNS', () => {
       if (url === '/api/settings/cftunnel/test') return json(cf.state)
       return base(url, init)
     }))
-    const w = mount(ProductsSettings, { global: { stubs: { SecretField: true } } })
+    const w = mount(ExposureSettings, { global: { stubs: { SecretField: true } } })
     await flushPromises()
     expect(w.get('[data-test=cf-unmatched]').text()).toContain('locally managed config.yml')
     await w.get('form.settings-form input[name=cf_account]').element.form.dispatchEvent(new Event('submit'))
@@ -71,7 +89,7 @@ describe('NPM exposure from public DNS', () => {
         unmatched: [{ what: 'wiki on host-c', router: 'wiki', why: 'HostRegexp rules cannot be checked, mark it by hand' }] } })
       return base(url, init)
     }))
-    const w = mount(ProductsSettings, { global: { stubs: { SecretField: true } } })
+    const w = mount(ExposureSettings, { global: { stubs: { SecretField: true } } })
     await flushPromises()
     expect(w.get('[data-test=traefik]').text()).toContain('3 routers, 1 containers internet-exposed')
     expect(w.get('[data-test=traefik-unmatched]').text()).toContain('wiki on host-c (router wiki)')

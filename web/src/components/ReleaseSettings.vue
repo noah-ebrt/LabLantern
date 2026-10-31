@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { api } from '../api.js'
-import { fmtDateTime, timeAgo } from '../time.js'
+import { fmtStamp, timeAgo } from '../time.js'
 import { useLive } from '../live.js'
 import Icon from './Icon.vue'
 import SettingsCard from './SettingsCard.vue'
@@ -38,23 +38,22 @@ useLive(['settings'], load)
 const health = computed(() => {
   const c = state.value.last_check
   if (!c) return { tone: 'neutral', text: 'Not checked yet' }
-  return c.ok ? { tone: 'ok', text: `v${c.version ?? state.value.current_version}` } : { tone: 'danger', text: 'Action needed' }
+  return c.ok ? { tone: 'ok', text: `v${c.version ?? state.value.current_version}` } : { tone: 'danger', text: 'Action needed', target: 'set-release-check' }
 })
 </script>
 
 <template>
-  <SettingsCard icon="package" title="Agent Releases &amp; Updates" subtitle="Agents built and signed by this install from agent/ in the repository" :status="health">
+  <SettingsCard icon="package" title="Agent release" subtitle="The agent version this master offers to your hosts" :status="health">
     <template #intro>
-      Every <code>docker compose up -d --build</code> rebuilds the agent when its code changed and signs it with this
-      install's own key. The master verifies the signature, then offers the new version under Systems, where one passkey
-      touch updates all hosts.
+      <code>docker compose up -d --build</code> rebuilds the agent when its code changed and signs it with this install's key.
+      The new version then shows up under Systems, where one passkey touch updates every host.
     </template>
 
-    <SettingsSection title="Status">
+    <SettingsSection title="Current">
       <SettingsList>
         <SettingsEntry icon="package" :title="state.current_version ? `v${state.current_version}` : 'No release yet'" mono
-                       :meta="state.current_version ? `Active release, offered to the agents${state.built ? ` · built ${fmtDateTime(state.built)}` : ''}` : 'Built when the stack starts'" />
-        <SettingsEntry icon="refresh" title="Release check"
+                       :meta="state.current_version ? `Active release, offered to the agents${state.built ? ` · built ${fmtStamp(state.built)}` : ''}` : 'Built when the stack starts'" />
+        <SettingsEntry id="set-release-check" icon="refresh" title="Release check"
                        :meta="state.last_check ? `${timeAgo(state.last_check.at)} · checks every minute` : 'not yet'">
           <template #badge>
             <span v-if="state.last_check" :class="['badge', state.last_check.ok ? 'ok' : 'danger']">{{ state.last_check.ok ? 'OK' : 'Failed' }}</span>

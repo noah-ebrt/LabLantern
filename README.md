@@ -71,11 +71,11 @@ the log, then creates your admin account with password and authenticator app.
 
 Then, in this order:
 
-1. **Settings → Passkeys:** add a passkey. It confirms reboots and agent updates and signs the key list your agents
+1. **Settings → System → Passkeys:** add a passkey. It confirms reboots and agent updates and signs the key list your agents
    trust, so add it before the first host. Browsers allow passkeys only on the DNS name with a trusted certificate:
    trust the CA first.
 2. **Systems → Add Linux agent:** copy the setup command, run it on the host, compare the pairing code, approve.
-3. **Settings → Notification channels:** add a mail or push channel and send a test.
+3. **Settings → Alerts & reports → Channels:** add a mail or push channel and send a test.
 4. Optional: offsite watchdog, Nginx Proxy Manager, AI provider (Anthropic, OpenAI or Ollama), Prometheus metrics.
 
 The first full run starts at the scheduled time (default 03:00) or with **Scan now** on the overview.

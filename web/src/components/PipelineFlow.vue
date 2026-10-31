@@ -452,7 +452,7 @@ const failing = computed(() => props.data.coverage.flatMap((s) => Object.entries
     <template #actions>
       <button v-if="info === 'schedule' && !run" class="primary" :disabled="triggering" @click="emit('trigger'); info = null"><Icon name="play" :size="13" /> Scan latest data</button>
       <RouterLink v-if="info === 'result'" class="btn-link" to="/funde">Show findings</RouterLink>
-      <RouterLink v-if="['schedule', 'ai', 'notify'].includes(info)" class="btn-link" :to="`/einstellungen?tab=${{ schedule: 'general', ai: 'integrations', notify: 'notifications' }[info]}`">Settings</RouterLink>
+      <RouterLink v-if="['schedule', 'ai', 'notify'].includes(info)" class="btn-link" :to="`/einstellungen?tab=${{ schedule: 'scanning', ai: 'ai', notify: 'alerts' }[info]}`">Settings</RouterLink>
     </template>
   </Modal>
 </template>
