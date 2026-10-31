@@ -86,6 +86,7 @@ type HostReport struct {
 	Containers           []ContainerInfo   `json:"containers"`
 	HostPorts            []int             `json:"host_ports,omitempty"` // TCP-Ports von Diensten des Hosts selbst
 	Packages             []PackageInfo     `json:"packages"`
+	Storage              *Storage          `json:"storage,omitempty"` // Laufwerke und Pools, nur auf echter Hardware (ab 0.18)
 	CollectionErrors     map[string]string `json:"collection_errors"`
 }
 
@@ -142,6 +143,7 @@ func Collect(env Env, agentVersion string) *HostReport {
 	collectPackages(env, r)
 	collectSecurityUpdates(env, r)
 	collectContainers(env, r)
+	collectStorage(env, r)
 	return r
 }
 

@@ -7,6 +7,7 @@ import { fmtClockSec } from '../time.js'
 import EarlyWarningWatch from './EarlyWarningWatch.vue'
 import HostCoverage from './HostCoverage.vue'
 import Modal from './Modal.vue'
+import StorageView from './StorageView.vue'
 
 // Host-Popup (Inventar, Befehle, Neustart/Update); genutzt von Systeme und Übersicht
 const props = defineProps({ systemId: { type: Number, required: true } })
@@ -145,6 +146,11 @@ useLive(['commands'], loadCommands)
       <p class="subtext">Problems also appear as <RouterLink :to="{ path: '/funde', query: { q: system.name } }" @click="emit('close')">findings</RouterLink>.</p>
 
       <HostCoverage :system-id="systemId" />
+
+      <template v-if="system.inventory?.storage">
+        <h3>Storage</h3>
+        <StorageView :storage="system.inventory.storage" />
+      </template>
 
       <template v-if="system.status === 'active' && system.host_type !== 'collector'">
         <h3>Actions</h3>

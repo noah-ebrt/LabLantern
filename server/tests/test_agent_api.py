@@ -334,3 +334,25 @@ def test_install_commands_pin_the_current_passkey_list(admin):
     d = client.post("/api/systems/enrollment-token", headers=h).json()
     for key in ("install_cmd", "enroll_cmd", "setup_cmd"):
         assert d[key].endswith(f" --passkeys-sha256 {want}"), key
+
+
+def test_agent_storage_becomes_the_common_shape(admin):
+    """Ab 0.18: Laufwerke und Pools vom Agenten; Zustand und Aufbau rechnet der Master, Unbekanntes bleibt unbekannt."""
+    env, client, h = admin
+    sid, bearer = activate(env, client, h)
+    storage = {"pools": [{"name": "tank", "kind": "ZFS pool", "vdevs": ["MIRROR", "MIRROR"], "status": "DEGRADED",
+                          "size": 1000, "alloc": 250, "disks": ["sda", "sdb"]}],
+               "disks": [{"name": "sda", "model": "WD Red", "size": 4000, "type": "hdd", "status": "ONLINE", "smart": "PASSED",
+                          "temp": 33, "pool": "tank"},
+                         {"name": "sdb", "type": "hdd", "status": "ONLINE", "smart": "FAILED", "pool": "tank"},
+                         {"name": "sdc", "type": "ssd"}]}
+    agent = env.new_client()
+    assert agent.post("/api/agent/report", headers=bearer, json=report(storage=storage)).json()["ok"] is True
+    st = client.get(f"/api/systems/{sid}").json()["inventory"]["storage"]
+    tank = st["pools"][0]
+    assert (tank["layout"], tank["state"], tank["percent"]) == ("2× MIRROR", "bad", 25.0)
+    disks = {d["name"]: d for d in st["disks"]}
+    assert (disks["sda"]["state"], disks["sda"]["temp"]) == ("ok", 33)
+    assert disks["sdb"]["state"] == "bad" and disks["sdc"]["state"] == "unknown"
+    assert agent.post("/api/agent/report", headers=bearer, json=report()).json()["ok"] is True   # VM: kein Speicher
+    assert "storage" not in client.get(f"/api/systems/{sid}").json()["inventory"]

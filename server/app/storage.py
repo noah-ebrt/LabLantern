@@ -58,6 +58,15 @@ def storage(pools: list[dict] | None, disks: list[dict] | None, error: str = "")
     return {"pools": pools or [], "disks": disks or [], "error": error[:300]}
 
 
+def from_agent(raw: dict) -> dict:
+    """Bericht des Agenten (ab 0.18) in die gemeinsame Form: Zustände und Aufbau rechnet der Master, nicht der Agent."""
+    pools = [pool(p["name"], p["kind"] or "Pool", p["status"], p["alloc"] * 100 / p["size"] if p["size"] and p["alloc"] else None,
+                  p["size"] or None, layout_of(p["vdevs"]), p["disks"]) for p in raw.get("pools") or []]
+    disks = [disk(d["name"], d["model"], d["serial"], d["size"] or None, d["type"], d["status"], d["smart"], d["temp"],
+                  d["pool"], d["detail"]) for d in raw.get("disks") or []]
+    return storage(pools, disks, raw.get("error") or "")
+
+
 def drive_findings(st: dict, hint: str) -> list[dict]:
     """Ein Fund je gestörtem Laufwerk (Pools melden die Geräte-Module selbst). `hint`: wo man es auf dem Gerät prüft."""
     out = []

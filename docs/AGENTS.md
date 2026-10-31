@@ -5,7 +5,7 @@ An agent is a small Go program in a `.deb` or `.rpm` package (amd64, arm64). It 
 | Part | Runs as | Does |
 | --- | --- | --- |
 | `vulnwatch-agentd` | user `vulnwatch`, no rights | keeps one outgoing HTTPS connection to the master, sends reports, receives commands |
-| `vulnwatch-collect` | root, no network | reads packages, pending security updates, reboot flag, Docker containers and image SBOMs |
+| `vulnwatch-collect` | root, no network | reads packages, pending security updates, reboot flag, Docker containers and image SBOMs; on bare metal also drives and pools (`lsblk`, `zpool`, `/proc/mdstat`, `smartctl` if installed) |
 | `vulnwatch-action` | root, no network | reboot and agent update, only with a passkey signature it verifies itself |
 
 No port is opened on the host. The master never holds a key to log in to your hosts.
