@@ -108,8 +108,8 @@ def test_admin_reads_update_storage_and_packages(admin, dsm):
     assert products["Synology DSM"]["version"] == "7.2.2-72806 Update 3"
     assert products["Container Manager"]["keyword"] == "container manager"
     _, client, h = admin
-    st = next(x for x in client.get("/api/systems", headers=h).json() if x["id"] == sid)["connector"]["storage"]
-    pool = next(p for p in st["pool_list"] if p["kind"] == "Storage pool")
+    st = client.get(f"/api/systems/{sid}", headers=h).json()["inventory"]["connector"]["storage"]
+    pool = next(p for p in st["pools"] if p["kind"] == "Storage pool")
     assert (pool["layout"], pool["disks"], pool["state"]) == ("SHR WITH 1 DISK PROTECT", ["Drive 1", "Drive 2"], "bad")
     drives = {d["name"]: d for d in st["disks"]}
     assert (drives["Drive 1"]["temp"], drives["Drive 1"]["pool"], drives["Drive 2"]["state"]) == (31, "reuse_1", "bad")

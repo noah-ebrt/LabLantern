@@ -131,9 +131,9 @@ coverage. A failed or older-than-24-hour read is an error in the matrix, never a
 
 **Storage:** for TrueNAS, Synology DSM and Proxmox VE vulnwatch also reads pools and drives into one common shape:
 each pool with its layout (RAIDZ1, 2× MIRROR, SHR …), state and fill level, each drive with model, size, type,
-temperature where the API has it, and health. The overview shows a **Storage** card with one disk symbol per drive
-(green healthy, yellow warning, red failing, dashed when the API gives no state); the host's details list them by
-pool, with model and temperature on hover. A failing drive is a finding (high; drive errors or warnings medium). On
+temperature where the API has it, and health. The host's details show them side by side per pool, one disk symbol
+per drive (green healthy, yellow warning, red failing, dashed when the API gives no state), with model and
+temperature on hover. A failing drive is a finding (high; drive errors or warnings medium). On
 TrueNAS that comes from the pool topology (`disk.query`, `disk.temperatures`, `boot.get_state`), on Proxmox from
 `/nodes/{node}/disks/list` and `/disks/zfs` (PVEAuditor is enough), on Synology from `SYNO.Storage.CGI.Storage`
 (administrators only).
