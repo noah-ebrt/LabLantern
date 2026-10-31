@@ -95,7 +95,7 @@ def build_runs_router(ctx: Context, guards: Guards) -> APIRouter:
         system_id: int | None = Query(None),
         status: str = Query("open"),
         q: str | None = Query(None, max_length=100),
-        source: str | None = Query(None, pattern=r"^(grype|osv|both|registry|eol|ai|npm|scanner|products|appliances|truenas|homeassistant)$"),
+        source: str | None = Query(None, pattern=r"^(grype|osv|both|registry|eol|ai|npm|scanner|products|appliances|truenas|homeassistant|proxmox|synology|opnsense)$"),
         kev: bool | None = Query(None),
         exposed: bool | None = Query(None),
         has_fix: bool | None = Query(None),
@@ -113,7 +113,7 @@ def build_runs_router(ctx: Context, guards: Guards) -> APIRouter:
             if system_id:
                 stmt = stmt.where(Finding.system_id == system_id)
             groups = {"scanner": ("grype", "osv", "both"), "products": ("registry", "eol"),
-                      "appliances": ("truenas", "homeassistant")}
+                      "appliances": ("truenas", "homeassistant", "proxmox", "synology", "opnsense")}
             if source:
                 stmt = stmt.where(Finding.source.in_(groups.get(source, (source,))))
             if kev is not None:

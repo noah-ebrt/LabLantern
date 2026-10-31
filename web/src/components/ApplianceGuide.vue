@@ -7,12 +7,51 @@ import SecretField from './SecretField.vue'
 // Anleitung und Formular für ein Gerät ohne Agent (TrueNAS, Home Assistant): was gelesen wird, was vorher auf dem
 // Gerät einzurichten ist, welche API-Aufrufe vulnwatch macht. Mit `entry` wird eine bestehende Verbindung bearbeitet.
 const props = defineProps({
-  kind: { type: String, required: true },     // truenas | homeassistant | proxmox
+  kind: { type: String, required: true },     // truenas | homeassistant | proxmox | synology | opnsense
   entry: { type: Object, default: null },     // aus /api/settings/appliances
 })
 const emit = defineEmits(['saved'])
 
 const GUIDES = {
+  synology: {
+    title: 'Synology DSM',
+    reads: ['DSM version and model (any account)',
+      'A newer DSM from DSM’s own update check: same line → high, new line → medium',
+      'Storage pools, volumes and drives: degraded or crashed → high, a failing drive (status or S.M.A.R.T.) → high, a volume 90 % full → medium, 95 % → high',
+      'Installed packages (Container Manager, Synology Photos, …) with versions, for the early warning'],
+    steps: [
+      'Control Panel → User &amp; Group → Create: a user <code>vulnwatch</code> with a long random password.',
+      'Put it in the <strong>administrators</strong> group: DSM has no read-only role, and only administrators may read the update check, packages and storage. Without it vulnwatch reads only the version and shows the rest as n/a.',
+      'Deny it everything it does not need: under <strong>Applications</strong> deny all (File Station, SMB, AFP, FTP …), under <strong>Permissions</strong> no access to shared folders. vulnwatch only uses the DSM Web API.',
+      'No 2-factor authentication for this user (exempt it if 2FA is enforced) and make sure Auto Block does not list vulnwatch’s IP.',
+      'Enter <code>https://&lt;nas&gt;:5001</code>, the account and its password.',
+    ],
+    url: 'https://nas.lan:5001', secret: 'Password', account: 'Account',
+    api: [
+      ['Connection', 'HTTPS to &lt;nas&gt;:5001, certificate pinned when saved; one session per read, logged out afterwards'],
+      ['Requests', 'POST /webapi/entry.cgi: SYNO.API.Auth login/logout, SYNO.DSM.Info getinfo, SYNO.Core.Upgrade.Server check, SYNO.Core.Package list, SYNO.Storage.CGI.Storage load_info'],
+      ['Writes', 'none'],
+    ],
+  },
+  opnsense: {
+    title: 'OPNsense',
+    reads: ['Installed version and the result of the firewall’s last update check: a newer OPNsense (same line → high, new line → medium), other pending package updates (medium), a major upgrade (medium)',
+      'End of life of the release line from endoflife.date',
+      'Installed plugins (os-wireguard, os-haproxy, …) with versions, for the early warning'],
+    steps: [
+      'System → Access → Users → Add: a user <code>vulnwatch</code> without login shell, password scrambled.',
+      'Give it the privilege <strong>System: Firmware</strong> (Effective Privileges). For the port forwards under Settings → Exposure it also needs <strong>Firewall: NAT: Destination NAT</strong>; the same key works for both.',
+      'In the user, under API keys, click <strong>+</strong>: OPNsense downloads a file with <code>key=</code> and <code>secret=</code>.',
+      'Enter <code>https://&lt;firewall&gt;</code>, the key and the secret. vulnwatch does not start an update check itself: it reads the result of the last check on the firewall (System → Firmware → Status → Check for updates). A regular check can be scheduled under System → Settings → Cron.',
+    ],
+    url: 'https://opnsense.lan', secret: 'API secret', account: 'API key',
+    api: [
+      ['Connection', 'HTTPS to &lt;firewall&gt;:443, certificate pinned when saved'],
+      ['Requests', 'GET /api/core/firmware/status, /api/core/firmware/info'],
+      ['Header', 'Authorization: Basic &lt;key:secret&gt;'],
+      ['Writes', 'none'],
+    ],
+  },
   truenas: {
     title: 'TrueNAS',
     reads: ['Installed version and the system update check (patch → high, new release line → medium)',
@@ -73,7 +112,7 @@ const GUIDES = {
 }
 const g = GUIDES[props.kind]
 const form = reactive({ name: props.entry?.name || props.kind,
-  url: props.entry?.url || '', token: '' })
+  url: props.entry?.url || '', account: props.entry?.account || '', token: '' })
 const message = ref(null)
 const busy = ref(false)
 
@@ -81,7 +120,7 @@ async function save() {
   busy.value = true
   message.value = null
   try {
-    const body = { kind: props.kind, name: form.name, url: form.url, token: form.token || null }
+    const body = { kind: props.kind, name: form.name, url: form.url, token: form.token || null, ...(g.account ? { account: form.account } : {}) }
     const r = props.entry ? await api.put(`/api/settings/appliances/${props.entry.system_id}`, body)
       : await api.post('/api/settings/appliances', body)
     form.token = ''
@@ -114,13 +153,14 @@ async function save() {
       <div class="grid">
         <label><span class="field-label">Name (as host)</span><input v-model="form.name" name="appliance_name" autocomplete="off" required /></label>
         <label><span class="field-label">URL</span><input v-model="form.url" name="appliance_url" :placeholder="g.url" autocomplete="off" required /></label>
+        <label v-if="g.account"><span class="field-label">{{ g.account }}</span><input v-model="form.account" name="appliance_account" autocomplete="off" required /></label>
         <SecretField v-model="form.token" name="appliance_token" :label="g.secret" :set="!!entry?.token?.set" :required="!entry" />
       </div>
       <p class="subtext">Over HTTPS vulnwatch pins the certificate it sees now and sends the {{ g.secret.toLowerCase() }} only to that certificate.
         The {{ g.secret.toLowerCase() }} is stored encrypted and never shown again.</p>
       <p v-if="message" class="message" :class="message.kind" role="status">{{ message.text }}</p>
       <div class="actions">
-        <button class="primary" :disabled="busy || !form.name || !form.url || (!entry && !form.token)">
+        <button class="primary" :disabled="busy || !form.name || !form.url || (g.account && !form.account) || (!entry && !form.token)">
           <Icon name="check" :size="15" />{{ busy ? 'Connecting…' : entry ? 'Save and test' : 'Add and test' }}</button>
       </div>
     </form>

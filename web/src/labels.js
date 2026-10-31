@@ -38,7 +38,7 @@ export function hostState(s) {
 }
 
 // Geräte ohne Agent (Connectors) und Kurztext unter dem Hostnamen
-export const APPLIANCE_KINDS = { truenas: 'TrueNAS', homeassistant: 'Home Assistant', proxmox: 'Proxmox VE' }
+export const APPLIANCE_KINDS = { truenas: 'TrueNAS', homeassistant: 'Home Assistant', proxmox: 'Proxmox VE', synology: 'Synology DSM', opnsense: 'OPNsense' }
 export const hostVersion = (s) => (s.connector ? `${APPLIANCE_KINDS[s.connector.kind]} ${s.connector.version || ''}`.trim()
   : `v${s.agent_version || '?'}`)
 

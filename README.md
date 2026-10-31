@@ -13,9 +13,10 @@ reachable only in your LAN.
   touch that the agent verifies itself.
 - **Your own agent builds:** the master builds the agent from `agent/` in this repository and signs it with a key
   only your install has. Change the agent or `git pull`, rebuild, and one passkey touch updates all hosts.
-- **Devices without an agent:** TrueNAS, Home Assistant and Proxmox VE are read through their API, read-only
-  (version, pending updates, apps, alerts; for Proxmox also which VMs and LXCs have no agent yet). Unraid, Synology,
-  OpenWrt and anything else that can run a small cron script report through the collector API.
+- **Devices without an agent:** TrueNAS, Home Assistant, Proxmox VE, Synology DSM and OPNsense are read through
+  their API, read-only (version, pending updates, apps, alerts, storage health; for Proxmox also which VMs and LXCs
+  have no agent yet). Unraid, UGREEN, Synology, OpenWrt and anything else that can run a small cron script report
+  through the collector API.
 - **Two scanners:** Grype (with CISA KEV and EPSS) and OSV-Scanner, offline, over host packages and container images.
 - **Versions and end of life:** registry digests for every running image (outdated tag, newer version) and release
   lines from endoflife.date.
@@ -96,7 +97,7 @@ offers the new version within a minute; **Update all** installs it on every host
 | [docs/INSTALL.md](docs/INSTALL.md) | install, DNS and certificates, updates, backup and restore, moving to another host, troubleshooting |
 | [docs/AGENTS.md](docs/AGENTS.md) | adding hosts, what an agent collects, commands, updates, removal, changing the agent |
 | [docs/HEALTH.md](docs/HEALTH.md) | health monitoring: checks, thresholds, alerts, router checks, heartbeat, API for status LEDs and other devices |
-| [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) | notifications, schedule and report frequency, snooze and exclusions, offsite watchdog, exposure sources (NPM, Traefik, Cloudflare Tunnel, FRITZ!Box, OPNsense, UniFi), TrueNAS, Home Assistant and Proxmox VE, collector scripts, version check, AI early warning, sharp drop alarm, configuration as JSON, Prometheus, what leaves your network |
+| [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) | notifications, schedule and report frequency, snooze and exclusions, offsite watchdog, exposure sources (NPM, Traefik, Cloudflare Tunnel, FRITZ!Box, OPNsense, UniFi), TrueNAS, Home Assistant, Proxmox VE, Synology DSM and OPNsense, collector scripts, version check, AI early warning, sharp drop alarm, configuration as JSON, Prometheus, what leaves your network |
 | [collectors/README.md](collectors/README.md) | collector scripts for Unraid, Synology and OpenWrt, and the report format for your own |
 | [SECURITY.md](SECURITY.md) | threat model: what a compromised master, agent or worker can and cannot do |
 | [docs/INTERNALS.md](docs/INTERNALS.md) | architecture and data flow for contributors |

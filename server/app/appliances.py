@@ -35,7 +35,13 @@ log = logging.getLogger("vulnwatch.appliances")
 
 CONFIG_KEY = "appliances.config"   # {System-ID: {"kind", "url", "fingerprint"}}
 STATE_KEY = "appliances.state"     # {System-ID: letzter Abruf}
-KINDS = {"truenas": "TrueNAS", "homeassistant": "Home Assistant", "proxmox": "Proxmox VE"}
+KINDS = {"truenas": "TrueNAS", "homeassistant": "Home Assistant", "proxmox": "Proxmox VE", "synology": "Synology DSM",
+         "opnsense": "OPNsense"}
+HTTPS_ONLY = {"truenas": "TrueNAS only over HTTPS: it revokes an API key that was sent over HTTP",
+              "proxmox": "Proxmox VE only over HTTPS, e.g. https://pve.lan:8006",
+              "synology": "Synology DSM only over HTTPS, e.g. https://nas.lan:5001: the password must not travel in plain text",
+              "opnsense": "OPNsense only over HTTPS, e.g. https://opnsense.lan"}
+WITH_ACCOUNT = {"synology": "Account", "opnsense": "API key"}   # zweites Feld neben dem Geheimnis
 _URL = re.compile(r"^https?://[A-Za-z0-9.-]+(:\d{1,5})?/?$")
 TIMEOUT = 15
 MAX_MESSAGE = 20_000_000
@@ -716,9 +722,22 @@ def refresh_one(ctx: Context, sid: str, cfg: dict) -> dict:
             for n in data["nodes"] if db else []:
                 if f := _eol_finding(db, "proxmox-ve", n["version"], f"eol:{n['node']}", "Proxmox VE"):
                     desired.append(f)
-        else:
+        elif cfg["kind"] == "synology":
+            from .synology import fetch_synology, synology_findings
+            data = fetch_synology(cfg["url"], cfg["fingerprint"], cfg.get("account", ""), key)
+            desired = synology_findings(data)   # endoflife.date führt DSM nicht: kein EOL-Fund
+        elif cfg["kind"] == "opnsense":
+            from .opnsense import fetch_firmware, opnsense_findings
+            data = fetch_firmware(cfg["url"], cfg["fingerprint"], cfg.get("account", ""), key)
+            desired = opnsense_findings(data)
+            db, _ = eol_mod.load(ctx.settings.data_dir / "eol")
+            if db and (f := _eol_finding(db, "opnsense", data["version"], "eol", "OPNsense")):
+                desired.append(f)
+        elif cfg["kind"] == "homeassistant":
             data = fetch_homeassistant(cfg["url"], cfg.get("fingerprint", ""), key)
             desired = homeassistant_findings(data, datetime.now(timezone.utc))
+        else:
+            raise ApplianceError(f"unknown device kind {cfg['kind']}")
         now = datetime.now(timezone.utc)
         with ctx.session_factory() as s:
             sys = s.get(System, int(sid))
@@ -780,8 +799,9 @@ def connector_checks(sys: System, now: datetime, open_updates: int) -> dict[str,
     keys = ("versionen", "images", "reboot") if truenas else ("versionen",)
     if problem:
         return {**checks, **{k: ("fehler", problem) for k in keys}}
-    if sys.host_type == "proxmox":
-        from .proxmox import versions_check
+    if sys.host_type in ("proxmox", "synology", "opnsense"):
+        from importlib import import_module
+        versions_check = import_module(f".{sys.host_type}", __package__).versions_check
         return {**checks, "versionen": versions_check(data, open_updates)}
     checks["versionen"] = ("fund" if open_updates else "ok",
                            f"{data.get('version') or '?'} · {open_updates} update(s) open")
@@ -797,9 +817,10 @@ def connector_checks(sys: System, now: datetime, open_updates: int) -> dict[str,
 # --- API -------------------------------------------------------------------------------------------------------
 
 class ApplianceIn(BaseModel):
-    kind: Literal["truenas", "homeassistant", "proxmox"]
+    kind: Literal["truenas", "homeassistant", "proxmox", "synology", "opnsense"]
     name: str = Field(min_length=1, max_length=63, pattern=r"^[A-Za-z0-9][A-Za-z0-9 ._-]*$")
     url: str = Field(max_length=300)
+    account: str = Field(default="", max_length=200)   # Synology: Konto, OPNsense: API-Schlüssel
     token: str | None = Field(default=None, min_length=8, max_length=4096)   # None = unverändert
     trust_certificate: bool = False   # neues Zertifikat übernehmen
 
@@ -822,10 +843,11 @@ def build_appliances_router(ctx: Context, guards: Guards) -> APIRouter:
         url = body.url.strip().rstrip("/")
         if not _URL.match(url):
             raise HTTPException(422, "URL must look like https://truenas.lan or http://homeassistant.lan:8123")
-        if body.kind == "truenas" and not url.startswith("https://"):
-            raise HTTPException(422, "TrueNAS only over HTTPS: it revokes an API key that was sent over HTTP")
-        if body.kind == "proxmox" and not url.startswith("https://"):
-            raise HTTPException(422, "Proxmox VE only over HTTPS, e.g. https://pve.lan:8006")
+        if body.kind in HTTPS_ONLY and not url.startswith("https://"):
+            raise HTTPException(422, HTTPS_ONLY[body.kind])
+        account = body.account.strip()
+        if body.kind in WITH_ACCOUNT and not account:
+            raise HTTPException(422, f"{WITH_ACCOUNT[body.kind]} required")
         with ctx.session_factory() as s:
             all_cfg = setting(s, CONFIG_KEY) or {}
             old = all_cfg.get(str(sid), {}) if sid else {}
@@ -850,7 +872,8 @@ def build_appliances_router(ctx: Context, guards: Guards) -> APIRouter:
             else:
                 sys = s.get(System, sid)
                 sys.name, sys.ip = body.name, _split(url)[1]
-            all_cfg[str(sid)] = {"kind": body.kind, "url": url, "fingerprint": fp}
+            all_cfg[str(sid)] = {"kind": body.kind, "url": url, "fingerprint": fp,
+                                 **({"account": account} if body.kind in WITH_ACCOUNT else {})}
             put_setting(s, CONFIG_KEY, all_cfg)
             ctx.audit(s, user, "connector.appliance.saved", f"{KINDS[body.kind]} {url}")
             s.commit()

@@ -7,6 +7,7 @@ command or an update.
 | Script | Device | Reports |
 |---|---|---|
 | `unraid.sh` | Unraid | Unraid version, Slackware packages (`/var/log/packages`), Docker containers |
+| `ugreen.sh` | UGREEN NAS (UGOS Pro) | OS version, Debian packages (`dpkg-query`, checked against Debian's advisories), Docker containers |
 | `synology.sh` | Synology DSM | DSM version, installed packages (`/var/packages/*/INFO`), Container Manager containers |
 | `openwrt.sh` | OpenWrt | release, `opkg list-installed` (from 24.10 on: `apk list --installed`) |
 
@@ -18,7 +19,8 @@ Each script is POSIX `sh` and needs `curl`. On OpenWrt install it first (`opkg i
    with the device's token, once.
 2. Run that command on the device as root. It downloads vulnwatch's root certificate, checks its fingerprint and
    stores the address, the token and the certificate in `/etc/vulnwatch-collector`. On Unraid, `/etc` is lost on
-   reboot: run `export VW_DIR=/boot/config/vulnwatch` first (the Unraid script uses that directory by default).
+   reboot: run `export VW_DIR=/boot/config/vulnwatch` first (the Unraid script uses that directory by default). On a
+   UGREEN NAS a firmware update may reset the system disk: use `export VW_DIR=/volume1/vulnwatch`.
 3. Copy the script to the device and add the schedule from its header (cron, Unraid User Scripts, or the DSM Task
    Scheduler). Hourly is a good interval.
 
@@ -28,7 +30,7 @@ Lost the token? **New token** in the device's row issues a new one; the old one 
 
 Only what the report provides. The rest shows as **n/a** in the coverage matrix:
 
-- **Package CVEs:** checked for deb (Debian, Ubuntu), rpm (RHEL family, SUSE, Fedora), apk (Alpine, Wolfi) and
+- **Package CVEs:** checked for deb (Debian, Ubuntu; also UGREEN's UGOS Pro, which is Debian-based), rpm (RHEL family, SUSE, Fedora), apk (Alpine, Wolfi) and
   language packages (npm, pypi, golang, cargo, gem, nuget, composer). There's no vulnerability database for opkg,
   Slackware or Synology packages: they're recorded, and the check shows n/a with that reason.
 - **Containers and images:** with `syft` on the device, the scripts send a CycloneDX SBOM per image and vulnwatch scans
