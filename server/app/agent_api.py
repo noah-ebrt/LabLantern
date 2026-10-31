@@ -18,6 +18,7 @@ from .context import Context
 from .guards import Guards, client_ip
 from .models import AgentCommand, EnrollmentToken, ImageSbom, System
 from .sbom import build_cyclonedx
+from .storage import from_agent
 from .scanrun import (IMAGE_ID, advance_collecting_runs, agent_should_report, image_sbom_path, remove_system_files,
                       system_images)
 from .trust import ca_fingerprint
@@ -124,6 +125,35 @@ class UpdateIn(BaseModel):
     from_: str = Field(default="", max_length=200, alias="from")
 
 
+class StoragePoolIn(BaseModel):
+    name: str = Field(max_length=100)
+    kind: str = Field(default="", max_length=40)
+    vdevs: list[str] = Field(default_factory=list, max_length=100)
+    status: str = Field(default="", max_length=40)
+    size: int = Field(default=0, ge=0)
+    alloc: int = Field(default=0, ge=0)
+    disks: list[str] = Field(default_factory=list, max_length=500)
+
+
+class StorageDiskIn(BaseModel):
+    name: str = Field(max_length=100)
+    model: str = Field(default="", max_length=200)
+    serial: str = Field(default="", max_length=100)
+    size: int = Field(default=0, ge=0)
+    type: str = Field(default="", max_length=10)
+    status: str = Field(default="", max_length=40)
+    smart: str = Field(default="", max_length=20)
+    temp: int | None = Field(default=None, ge=-50, le=200)
+    pool: str = Field(default="", max_length=100)
+    detail: str = Field(default="", max_length=300)
+
+
+class StorageIn(BaseModel):
+    pools: list[StoragePoolIn] = Field(default_factory=list, max_length=200)
+    disks: list[StorageDiskIn] = Field(default_factory=list, max_length=500)
+    error: str = Field(default="", max_length=300)
+
+
 class AgentReportIn(BaseModel):
     agent_version: str = Field(default="0.1.0", max_length=32)
     os_name: str = Field(default="", max_length=200)
@@ -138,6 +168,7 @@ class AgentReportIn(BaseModel):
     containers: list[ContainerInfo] = Field(default_factory=list, max_length=5000)
     host_ports: list[int] = Field(default_factory=list, max_length=2000)   # Dienste des Hosts (ab 0.14)
     packages: list[PackageIn] = Field(default_factory=list, max_length=100_000)
+    storage: StorageIn | None = None   # Laufwerke und Pools, nur auf echter Hardware (ab 0.18)
     collection_errors: dict[str, str] = Field(default_factory=dict)
 
 
@@ -523,6 +554,7 @@ def build_agent_router(ctx: Context, guards: Guards) -> APIRouter:
                 "containers": [c.model_dump() for c in body.containers], "host_ports": body.host_ports,
                 "packages_count": len(body.packages), "has_sbom": sbom is not None,
                 "security_updates": [{"name": u.name, "from": u.from_, "to": u.to} for u in body.security_updates],
+                **({"storage": from_agent(body.storage.model_dump())} if body.storage else {}),
             })
             if "containers" not in errors:
                 learn_baseline(system)

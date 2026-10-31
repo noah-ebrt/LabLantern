@@ -138,6 +138,11 @@ TrueNAS that comes from the pool topology (`disk.query`, `disk.temperatures`, `b
 `/nodes/{node}/disks/list` and `/disks/zfs` (PVEAuditor is enough), on Synology from `SYNO.Storage.CGI.Storage`
 (administrators only).
 
+Agent hosts (0.18 and newer) show the same in their details, but only on bare metal: in a VM or container the
+drives are virtual or belong to the host, so the agent skips them. Drives come from `lsblk`, ZFS pools from `zpool`,
+mdraid from `/proc/mdstat`. Health and temperature need `smartctl` (package `smartmontools`); without it every drive
+shows a dashed symbol. Sleeping disks are not woken (`smartctl -n standby`).
+
 ### TrueNAS
 
 Prepare on the NAS:

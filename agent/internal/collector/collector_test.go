@@ -46,7 +46,10 @@ func (f *fake) env() Env {
 			return "", errors.New("not found")
 		},
 		Run: func(name string, args ...string) ([]byte, error) {
-			r, ok := f.cmds[name]
+			r, ok := f.cmds[name+" "+strings.Join(args, " ")] // genauer Aufruf vor dem bloßen Namen
+			if !ok {
+				r, ok = f.cmds[name]
+			}
 			if !ok {
 				return nil, fmt.Errorf("unerwarteter Aufruf %s", name)
 			}
