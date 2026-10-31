@@ -49,9 +49,9 @@ The worker processes untrusted input (SBOMs) and has no access to the database o
 
 ## Requirements
 
-- A Linux host in your LAN with Docker and the Compose plugin, 4 GB RAM or more (8 GB recommended: OSV loads its
-  databases into memory; `VULNWATCH_SCANNERS=grype` runs Grype alone and skips OSV), about 5 GB of disk for scanner
-  databases and the 90-day raw data archive.
+- A Linux host in your LAN with Docker and the Compose plugin, 4 GB RAM or more (measured figures for both scanner
+  modes in [docs/INSTALL.md](docs/INSTALL.md); `VULNWATCH_SCANNERS=grype` runs Grype alone and is about five times
+  faster), about 5 GB of disk for scanner databases and the 90-day raw data archive.
 - Outbound HTTPS from that host (vulnerability databases, container registries, endoflife.date).
 - A DNS name for the master in your LAN, `vulnwatch.lan` by default: one entry in your router or DNS server
   (AdGuard, Pi-hole, …), or in the hosts file of the machine you browse from. Passkeys need it (browsers refuse them

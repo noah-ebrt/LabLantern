@@ -26,6 +26,21 @@ Edit `.env`:
 | `VULNWATCH_TAG` | no | Image tag. Set it when you run a second stack on the same host, so the two do not overwrite each other's images. |
 | `VULNWATCH_EDGE_SUBNET`, `_PROXY_IP`, `_SERVER_IP` | no | Internal network between proxy and server. Change only on a collision. |
 
+**Memory.** Measured on 31 Oct 2026 on a homelab with 4 hosts and 53 running images (57 SBOMs), each mode scanning
+all of them once against the current databases:
+
+| Mode | Worker peak | Full scan |
+| --- | --- | --- |
+| `grype+osv` (default) | about 1.0 GB | about 28 minutes |
+| `grype` (light mode) | about 1.0 GB | about 5 minutes |
+
+Between runs the worker uses almost nothing, the server about 250 MB and the proxy about 50 MB. With OSV, a run
+mostly costs time here, not memory. 4 GB of RAM is enough for a setup of this size; the rest of the host's memory
+serves as file cache for the scanner databases. One exception: a very large image (a multi-gigabyte build image with
+thousands of packages) can push a single Grype process past 25 GB until the kernel stops it. The worker has no
+memory limit, so remove stopped build containers you don't want scanned; the deploy script does this for the agent
+build.
+
 ```bash
 docker compose up -d --build
 docker compose ps -a                      # proxy, server, worker, announce; agent-* have exited (0)
