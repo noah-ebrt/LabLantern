@@ -58,21 +58,6 @@ def storage(pools: list[dict] | None, disks: list[dict] | None, error: str = "")
     return {"pools": pools or [], "disks": disks or [], "error": error[:300]}
 
 
-def summary(st: dict | None) -> dict | None:
-    """Kurzform für Listen: Anzahl Pools und Laufwerke, wie viele davon gestört sind, dazu die Laufwerke selbst
-    (für die Laufwerkssymbole)."""
-    if not st or not (st.get("pools") or st.get("disks")):
-        return None if not st or not st.get("error") else {"pools": 0, "disks": [], "bad": 0, "warn": 0,
-                                                           "error": st["error"], "pool_list": []}
-    items = st.get("pools", []) + st.get("disks", [])
-    return {"pools": len(st.get("pools", [])), "error": st.get("error", ""),
-            "bad": sum(i["state"] == "bad" for i in items), "warn": sum(i["state"] == "warn" for i in items),
-            "pool_list": [{k: p[k] for k in ("name", "kind", "layout", "state", "percent", "size", "disks")}
-                          for p in st.get("pools", [])],
-            "disks": [{k: d[k] for k in ("name", "model", "size", "type", "state", "status", "temp", "pool")}
-                      for d in st.get("disks", [])]}
-
-
 def drive_findings(st: dict, hint: str) -> list[dict]:
     """Ein Fund je gestörtem Laufwerk (Pools melden die Geräte-Module selbst). `hint`: wo man es auf dem Gerät prüft."""
     out = []

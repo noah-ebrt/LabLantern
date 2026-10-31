@@ -1,7 +1,7 @@
 """Speicher in gemeinsamer Form (storage.py): TrueNAS-Topologie und Proxmox-Laufwerke, Zustände, Kurzform für Listen."""
 from app import appliances
 from app.proxmox import fetch_proxmox, proxmox_findings
-from app.storage import layout_of, state_of, summary
+from app.storage import layout_of, state_of
 from tests.test_appliances import KEY, TRUENAS, truenas  # noqa: F401 (Fixture)
 from tests.test_proxmox import TOKEN, FakePve, pve  # noqa: F401 (Fixture)
 
@@ -50,8 +50,6 @@ def test_truenas_topology_drives_and_temperatures(truenas):  # noqa: F811
     assert (disks["sde"]["pool"], disks["sde"]["state"]) == ("", "unknown")   # kein Pool: Zustand unbekannt, nicht ok
     found = {f["target"]: f for f in appliances.truenas_findings(data)}
     assert found["drive:sdc"]["severity"] == "hoch" and found["drive:sdb"]["severity"] == "mittel"
-    s = summary(st)
-    assert (s["pools"], len(s["disks"]), s["bad"], s["warn"]) == (2, 6, 2, 1)   # tank + sdc schlecht, sdb Warnung
 
 
 def test_proxmox_drives_and_zfs(pve, monkeypatch):  # noqa: F811
@@ -85,4 +83,3 @@ def test_proxmox_without_disk_rights_keeps_the_rest(pve):  # noqa: F811
     data = fetch_proxmox(pve, appliances.read_fingerprint(pve), TOKEN)
     assert data["version"] and data["guests"]
     assert data["storage"]["disks"] == [] and "drives not readable" in data["storage"]["error"]
-    assert summary(data["storage"])["error"]
