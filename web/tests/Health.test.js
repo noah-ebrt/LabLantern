@@ -82,6 +82,8 @@ describe('HealthView', () => {
     await flushPromises()
     expect(w.text()).toContain('pve')
     expect(w.text()).toContain('99.50%')
+    expect(w.text()).toContain('Critical availability 24 h')
+    expect(w.text()).toContain('all hosts 99.50%')
     expect(w.find('.row.down').exists()).toBe(true)
     await r.push('/gesundheit?tab=settings')
     await flushPromises()

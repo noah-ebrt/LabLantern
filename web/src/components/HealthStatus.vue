@@ -24,10 +24,15 @@ const monitors = computed(() => {
   return list.sort((a, b) => ORDER[a.state] - ORDER[b.state] || a.name.localeCompare(b.name))
 })
 const s = computed(() => props.data.summary)
-const avgUptime = computed(() => {
-  const v = props.data.monitors.map((m) => m.uptime['24h']).filter((x) => x != null)
+// Mittlere 24-h-Verfügbarkeit; groß die der kritischen Hosts, darunter die aller
+const avgUptime = (list) => {
+  const v = list.map((m) => m.uptime['24h']).filter((x) => x != null)
   return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null
-})
+}
+const criticalUptime = computed(() => avgUptime(props.data.monitors.filter((m) => m.critical)))
+const allUptime = computed(() => avgUptime(props.data.monitors))
+const uptimeHint = computed(() => [`all hosts ${fmtPct(allUptime.value)}`,
+  s.value.unknown ? `${s.value.unknown} unknown` : '', s.value.paused ? `${s.value.paused} paused` : ''].filter(Boolean).join(' · '))
 </script>
 
 <template>
@@ -40,7 +45,7 @@ const avgUptime = computed(() => {
     <StatTile label="Up" :value="s.up" tone="ok" :hint="`of ${s.total} hosts`" />
     <StatTile label="Degraded" :value="s.degraded" :tone="s.degraded ? 'warning' : ''" hint="failing checks, not down yet" />
     <StatTile label="Down" :value="s.down" :tone="s.down ? 'danger' : ''" :hint="s.down ? 'confirmed outages' : 'nothing down'" />
-    <StatTile label="Availability 24 h" :value="fmtPct(avgUptime)" :hint="`${s.unknown} unknown · ${s.paused} paused`" />
+    <StatTile label="Critical availability 24 h" :value="fmtPct(criticalUptime)" :hint="uptimeHint" />
   </div>
 
   <section class="card monitors">
