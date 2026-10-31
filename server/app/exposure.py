@@ -27,16 +27,17 @@ class ExposureSource:
     state_key: str
     refresh: Callable[[Context], dict]   # liest und speichert; {"configured": False} ohne Einrichtung
     matrix_label: str = ""               # Name in der Abdeckungsmatrix, sonst label
+    config_key: str = ""                 # Einrichtung mit url und system_id: Ort und Verwaltungsadresse im Detail
 
 
 def sources() -> list[ExposureSource]:
     from .cftunnel import CF_STATE, refresh_cftunnel
-    from .connectors import NPM_STATE, refresh_npm
+    from .connectors import NPM_CONFIG, NPM_STATE, refresh_npm
     from .fritzbox import FRITZ_STATE, refresh_fritz
     from .routerforwards import ROUTERS, refresh_router
     from .traefik import TRAEFIK_STATE, refresh_traefik
 
-    return [ExposureSource("npm", "NPM", "NPM", NPM_STATE, refresh_npm),
+    return [ExposureSource("npm", "NPM", "NPM", NPM_STATE, refresh_npm, "Nginx Proxy Manager", NPM_CONFIG),
             ExposureSource("fritzbox", "FRITZ!Box", "router", FRITZ_STATE, refresh_fritz),
             *(ExposureSource(r.kind, r.label, "router", r.state_key, partial(refresh_router, kind=r.kind))
               for r in ROUTERS.values()),
@@ -135,7 +136,7 @@ def source_detail(s, key: str, now: float) -> dict | None:
     row = next((r for r in source_rows(s, now) if r["key"] == key), None)
     if row is None:
         return None
-    state = next(st for src, st in _states(s) if src.key == key)
+    src, state = next((src, st) for src, st in _states(s) if src.key == key)
     exposed, via = state.get("exposed") or {}, state.get("via") or {}
     ids = [int(k) for k in exposed]
     names = dict(s.execute(select(System.id, System.name).where(System.id.in_(ids))).all()) if ids else {}
@@ -143,4 +144,15 @@ def source_detail(s, key: str, now: float) -> dict | None:
               "via": (via.get(sid) or {}).get(n) or []}
              for sid, ns in exposed.items() for n in ns]
     items.sort(key=lambda i: (i["system_name"].lower(), i["name"]))
-    return {**row, "items": items, "unmatched_items": [_unmatched_line(u) for u in state.get("unmatched") or []]}
+    return {**row, "host": _host(s, src), "items": items,
+            "unmatched_items": [_unmatched_line(u) for u in state.get("unmatched") or []]}
+
+
+def _host(s, src: ExposureSource) -> dict | None:
+    """Wo die Quelle läuft: gewähltes System und die eingetragene Adresse, über die man sie verwaltet."""
+    cfg = (setting(s, src.config_key) if src.config_key else None) or {}
+    if not cfg.get("url"):
+        return None
+    system = s.get(System, cfg["system_id"]) if cfg.get("system_id") else None
+    return {"url": cfg["url"], "system_id": system.id if system else None,
+            "system_name": system.name if system else "", "ip": system.ip if system else ""}

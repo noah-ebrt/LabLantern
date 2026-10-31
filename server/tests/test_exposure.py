@@ -85,3 +85,15 @@ def test_source_detail_lists_exposed_and_unmatched(ctx):
     assert d["items"] == [{"system_id": sid, "system_name": d["items"][0]["system_name"], "name": "vw",
                            "via": ["vw.example.org"]}]
     assert d["unmatched_items"] == [{"what": "a.example.org → 10.0.0.9:80", "why": "no host with this address"}]
+    assert d["label"] == "Nginx Proxy Manager" and d["host"] is None
+
+
+def test_source_detail_names_host_and_management_url(ctx):
+    sid = make_system(ctx)
+    with ctx.session_factory() as s:
+        put_setting(s, NPM_CONFIG, {"url": "http://10.0.0.5:81", "email": "a@b.c", "system_id": sid})
+        put_setting(s, NPM_STATE, {"configured": True, "ok": True, "at": time.time(), "exposed": {}})
+        s.commit()
+        d = exposure.source_detail(s, "npm", time.time())
+    assert d["host"]["url"] == "http://10.0.0.5:81" and d["host"]["system_id"] == sid
+    assert d["host"]["system_name"]
