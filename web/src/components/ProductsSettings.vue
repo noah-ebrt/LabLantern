@@ -4,6 +4,7 @@ import { api } from '../api.js'
 import { useLive } from '../live.js'
 import { fmtDateTime, timeAgo } from '../time.js'
 import Icon from './Icon.vue'
+import RouterForwardsSettings from './RouterForwardsSettings.vue'
 import SecretField from './SecretField.vue'
 import SettingsCard from './SettingsCard.vue'
 import SettingsEntry from './SettingsEntry.vue'
@@ -325,6 +326,8 @@ useLive(['settings', 'findings'], load, 3000)
         </div>
       </form>
     </SettingsSection>
+
+    <RouterForwardsSettings />
 
     <SettingsSection title="Cloudflare Tunnel">
       <SettingsList :empty="!cf?.config" empty-text="Not connected. With a read-only API token vulnwatch reads the public hostnames of your Cloudflare Tunnels and marks the containers and hosts behind them as internet-exposed.">

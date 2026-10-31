@@ -1,0 +1,7 @@
+{"total": 5, "rowCount": 5, "current": 1, "rows": [
+  {"uuid": "6f1d2a40-0001-4c3e-9a51-000000000001", "disabled": "0", "nordr": "0", "interface": "wan", "ipprotocol": "inet", "protocol": "TCP", "destination.port": "443", "target": "10.0.0.5", "local-port": "443", "descr": "npm https"},
+  {"uuid": "6f1d2a40-0002-4c3e-9a51-000000000002", "disabled": "0", "nordr": "0", "interface": "wan", "ipprotocol": "inet", "protocol": "TCP/UDP", "destination": {"network": "wanip", "port": "25565"}, "target": "10.0.0.6", "local-port": "", "descr": "minecraft"},
+  {"uuid": "6f1d2a40-0003-4c3e-9a51-000000000003", "disabled": "1", "nordr": "0", "interface": "wan", "ipprotocol": "inet", "protocol": "TCP", "destination.port": "8080", "target": "10.0.0.5", "local-port": "80", "descr": "old test"},
+  {"uuid": "6f1d2a40-0004-4c3e-9a51-000000000004", "disabled": "0", "nordr": "0", "interface": "wan", "ipprotocol": "inet", "protocol": "UDP", "destination.port": "51820", "target": "10.0.0.9", "local-port": "51820", "descr": "wireguard box"},
+  {"uuid": "6f1d2a40-0005-4c3e-9a51-000000000005", "disabled": "0", "nordr": "0", "interface": "wan", "ipprotocol": "inet", "protocol": "TCP", "destination.port": "8443", "target": "webservers", "local-port": "8443", "descr": "alias target"}
+]}

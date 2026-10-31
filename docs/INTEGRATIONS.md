@@ -58,10 +58,27 @@ vulnwatch then reads every 6 hours:
 It never reads private keys, access lists or DNS credentials. The user stays read-only, so vulnwatch cannot renew or
 change certificates.
 
+## Router port forwards: FRITZ!Box, OPNsense, UniFi (optional)
+
+Settings › Versions & exposure. vulnwatch reads the port forwards of the router every 6 hours and matches each target
+(internal IP and port) to a container or a host service, like the NPM routes. That also covers services that bypass
+the proxy (game servers, VPN). A forward without a clear target is listed with the reason, and a failed read is an
+error in the coverage matrix while the last known mapping stays.
+
+| Router | Access | Notes |
+| --- | --- | --- |
+| FRITZ!Box | TR-064 on port 49000, a FRITZ!Box user with "FRITZ!Box settings" | IPv4 only; mark IPv6 releases by hand |
+| OPNsense 26.1 or newer | API key and secret of a user with only the privilege for Firewall: NAT: Destination NAT | `GET /api/firewall/d_nat/search_rule`. OPNsense has no read-only variant of that privilege; vulnwatch only sends GET requests |
+| UniFi OS console, Network 9 or newer | API key of an admin with the role View Only (Settings › Control Plane › Integrations) | `GET /proxy/network/api/s/<site>/rest/portforward` |
+
+OPNsense and UniFi only over HTTPS; the certificate is pinned when you save, as for TrueNAS. Port and target aliases
+in OPNsense are not resolved: such rules appear in the list to mark by hand. The OPNsense and UniFi readers were
+built from the vendors' API documentation and not yet tested against a real device. pfSense has no comparable API.
+
 ## Cloudflare Tunnel (optional)
 
 Create an API token under My Profile › API Tokens with only **Account · Cloudflare Tunnel · Read** for your account,
-and enter it with the account ID in Settings, below the FRITZ!Box card. vulnwatch then reads, every 6 hours, the public hostnames of
+and enter it with the account ID in Settings, below the router cards. vulnwatch then reads, every 6 hours, the public hostnames of
 every remotely managed tunnel and maps each origin to a container or host:
 
 - `http://<container>:<port>`: the container with that name (the one next to cloudflared if several hosts have it),
@@ -277,5 +294,6 @@ vulnwatch has no telemetry and no update check of its own. These are the outboun
 | Claude API (AI early warning, optional) | daily and per new feed entry | product names and versions, never secrets, addresses or host names |
 | Your notification channels and offsite watchdog (optional) | per report, alert, ping | the report or alert text, the ping |
 
-Inside the LAN only: agents, collector scripts, Nginx Proxy Manager, FRITZ!Box, TrueNAS, Home Assistant and Proxmox VE. Building the images and the
+Inside the LAN only: agents, collector scripts, Nginx Proxy Manager, FRITZ!Box, OPNsense, UniFi, TrueNAS, Home
+Assistant and Proxmox VE. Building the images and the
 agent fetches packages from Docker Hub, PyPI, npm and the Go module proxy, at build time only.

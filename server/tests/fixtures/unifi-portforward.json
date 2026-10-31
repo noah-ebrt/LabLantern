@@ -1,0 +1,6 @@
+{"meta": {"rc": "ok"}, "data": [
+  {"_id": "66f0c0de0000000000000001", "name": "https", "enabled": true, "pfwd_interface": "wan", "src": "any", "dst_port": "443", "fwd": "10.0.0.5", "fwd_port": "443", "proto": "tcp", "log": false},
+  {"_id": "66f0c0de0000000000000002", "name": "ssh", "enabled": true, "pfwd_interface": "wan", "src": "any", "dst_port": "2222", "fwd": "10.0.0.6", "fwd_port": "22", "proto": "tcp_udp", "log": false},
+  {"_id": "66f0c0de0000000000000003", "name": "off", "enabled": false, "pfwd_interface": "wan", "src": "any", "dst_port": "8080", "fwd": "10.0.0.5", "fwd_port": "80", "proto": "tcp", "log": false},
+  {"_id": "66f0c0de0000000000000004", "name": "nas", "enabled": true, "pfwd_interface": "both", "src": "any", "dst_port": "5001", "fwd": "10.0.0.50", "fwd_port": "5001", "proto": "tcp", "log": false}
+]}

@@ -6,6 +6,7 @@ die letzte Zuordnung stehen (ein Ausfall stuft nichts herab), die Quelle steht a
 import logging
 import time
 from dataclasses import dataclass
+from functools import partial
 from typing import Callable
 
 from .context import Context
@@ -30,10 +31,13 @@ def sources() -> list[ExposureSource]:
     from .cftunnel import CF_STATE, refresh_cftunnel
     from .connectors import NPM_STATE, refresh_npm
     from .fritzbox import FRITZ_STATE, refresh_fritz
+    from .routerforwards import ROUTERS, refresh_router
     from .traefik import TRAEFIK_STATE, refresh_traefik
 
     return [ExposureSource("npm", "NPM", "NPM", NPM_STATE, refresh_npm),
             ExposureSource("fritzbox", "FRITZ!Box", "router", FRITZ_STATE, refresh_fritz),
+            *(ExposureSource(r.kind, r.label, "router", r.state_key, partial(refresh_router, kind=r.kind))
+              for r in ROUTERS.values()),
             ExposureSource("cftunnel", "Cloudflare Tunnel", "Cloudflare", CF_STATE, refresh_cftunnel),
             ExposureSource("traefik", "Traefik", "Traefik", TRAEFIK_STATE, refresh_traefik, "Traefik (Docker labels)")]
 
