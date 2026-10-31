@@ -55,8 +55,11 @@ describe('EarlyWarningsView', () => {
     expect(w.text()).toContain('dani-garcia/vaultwarden: HTTP 404')   // Release-Feeds: das Repo statt github.com
     expect(w.get('[data-test="health"]').text()).toContain('Web research failed: Anthropic: limit (HTTP 400)')
     const cov = w.get('[data-test="coverage"]').text()
-    expect(cov).toContain('warned early 1, late 0, same product without CVE 1, only via KEV 0, missed 0')
-    expect(cov).toContain('same product, no CVE Plex Media Server')
+    expect(w.get('[data-test="coverage-count-early"]').text()).toBe('Warned early1')
+    expect(w.get('[data-test="coverage-count-related"]').text()).toBe('Same product, no CVE1')
+    expect(w.get('[data-test="coverage-count-missed"]').classes()).toContain('zero')
+    expect(cov).toContain('same product, no CVE')
+    expect(cov).toContain('Plex Media Server CVE-2026-1')
     expect(cov).toContain('warning 6 days after')
     expect(cov).not.toContain('GitLab: CVE-2026-2')   // früh gewarnt: keine Lücke
     await w.get('[data-test="coverage-now"]').trigger('click')

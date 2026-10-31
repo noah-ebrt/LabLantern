@@ -108,6 +108,17 @@ onBeforeUnmount(() => poll && clearInterval(poll))
 const coverageBusy = ref(false)
 const coverage = computed(() => data.value?.coverage || null)
 const STATUS_TEXT = { early: 'warned early', late: 'warned late', related: 'same product, no CVE', kev_only: 'only via KEV', missed: 'missed' }
+const STATUS_LABEL = { early: 'Warned early', late: 'Warned late', related: 'Same product, no CVE', kev_only: 'Only via KEV', missed: 'Missed' }
+const COUNT_KEYS = ['early', 'late', 'related', 'kev_only', 'missed']
+// Farbe nur, wo etwas zu tun ist: verpasst rot, späte oder indirekte Treffer gelb, null gedämpft
+const countTone = (k) => {
+  const n = coverage.value?.counts?.[k] ?? 0
+  if (!n) return 'zero'
+  return k === 'missed' ? 'danger' : k === 'early' ? '' : 'warning'
+}
+// "Plex Media Server: CVE-2026-1 exploited" → "Plex Media Server"; die CVE steht daneben
+const kevProduct = (r) => r.title.replace(/:\s*CVE-\d+-\d+.*$/i, '').trim() || r.title
+const days = (n) => `${n} day${n === 1 ? '' : 's'}`
 const coverageGaps = computed(() => (coverage.value?.kev || []).filter((r) => r.status !== 'early'))
 const coveragePossible = computed(() => (coverage.value?.ghsa || []).filter((a) => a.status === 'possible'))
 async function checkCoverage() {
@@ -227,22 +238,42 @@ useLive(['findings', 'settings'], load, 3000)
   <section v-if="data" class="card coverage" aria-label="Coverage check" data-test="coverage">
     <div class="coverage-head">
       <div>
-        <strong>Coverage check</strong>
-        <span v-if="coverage" class="subtext">
-          {{ timeAgo(new Date(coverage.at * 1000).toISOString()) }} · exploited issues (CISA KEV) for your products in the last {{ coverage.window_days }} days:
-          {{ coverage.kev.length }} — warned early {{ coverage.counts.early }}, late {{ coverage.counts.late }}, same product without CVE {{ coverage.counts.related ?? 0 }}, only via KEV {{ coverage.counts.kev_only }}, missed {{ coverage.counts.missed }}<template v-if="coverage.ghsa.length">; GitHub advisories {{ coverage.counts.ghsa_seen }} seen, {{ coverage.counts.ghsa_possible }} possibly missed</template>
-        </span>
-        <span v-else class="subtext">Not run yet. Once a week vulnwatch checks whether the early warning caught every actively exploited issue for your products.</span>
-        <span v-for="(e, src) in coverage?.errors || {}" :key="src" class="subtext text-danger">{{ e }}</span>
+        <h2>Coverage check</h2>
+        <p v-if="coverage" class="subtext">
+          Exploited issues (CISA KEV) for your products in the last {{ coverage.window_days }} days · checked {{ timeAgo(new Date(coverage.at * 1000).toISOString()) }}
+        </p>
+        <p v-else class="subtext">Not run yet. Once a week vulnwatch checks whether the early warning caught every actively exploited issue for your products.</p>
+        <p v-for="(e, src) in coverage?.errors || {}" :key="src" class="subtext text-danger">{{ e }}</p>
       </div>
       <button class="secondary btn-sm" :disabled="coverageBusy" data-test="coverage-now" @click="checkCoverage">
         <Icon name="refresh" :size="14" :class="{ spin: coverageBusy }" />{{ coverageBusy ? 'Checking…' : 'Check now' }}
       </button>
     </div>
-    <ul v-if="coverageGaps.length || coveragePossible.length" class="coverage-list">
-      <li v-for="r in coverageGaps" :key="r.cve"><span :class="['badge', r.status === 'missed' ? 'danger' : 'warning']">{{ STATUS_TEXT[r.status] }}</span> {{ r.title }} <span class="subtext">added {{ r.added }}<template v-if="r.lead_days != null"> · warning {{ Math.abs(r.lead_days) }} days {{ r.lead_days >= 0 ? 'before' : 'after' }}</template></span></li>
-      <li v-for="a in coveragePossible" :key="a.id"><span class="badge neutral">possible</span> <a :href="a.url" target="_blank" rel="noopener">{{ a.id }}</a> {{ a.products.join(', ') }}: {{ a.summary }}</li>
-    </ul>
+    <dl v-if="coverage" class="coverage-counts">
+      <div class="total"><dt>Exploited</dt><dd>{{ coverage.kev.length }}</dd></div>
+      <div v-for="k in COUNT_KEYS" :key="k" :class="countTone(k)" :data-test="`coverage-count-${k}`">
+        <dt>{{ STATUS_LABEL[k] }}</dt><dd>{{ coverage.counts[k] ?? 0 }}</dd>
+      </div>
+      <template v-if="coverage.ghsa.length">
+        <div><dt>GitHub advisories seen</dt><dd>{{ coverage.counts.ghsa_seen }}</dd></div>
+        <div :class="coverage.counts.ghsa_possible ? 'warning' : 'zero'"><dt>Possibly missed</dt><dd>{{ coverage.counts.ghsa_possible }}</dd></div>
+      </template>
+    </dl>
+    <div v-if="coverageGaps.length || coveragePossible.length" class="coverage-gaps">
+      <h3>Not warned early <span class="gap-count">{{ coverageGaps.length + coveragePossible.length }}</span></h3>
+      <ul class="coverage-list">
+        <li v-for="r in coverageGaps" :key="r.cve" class="coverage-row">
+          <span :class="['badge', r.status === 'missed' ? 'danger' : 'warning']">{{ STATUS_TEXT[r.status] }}</span>
+          <span class="what"><span class="product">{{ kevProduct(r) }}</span> <span class="mono cve">{{ r.cve }}</span></span>
+          <span class="when">added {{ r.added }}<template v-if="r.lead_days != null"> · warning {{ days(Math.abs(r.lead_days)) }} {{ r.lead_days >= 0 ? 'before' : 'after' }}</template></span>
+        </li>
+        <li v-for="a in coveragePossible" :key="a.id" class="coverage-row">
+          <span class="badge neutral">possible</span>
+          <span class="what"><a class="mono cve" :href="a.url" target="_blank" rel="noopener">{{ a.id }}</a> <span class="product">{{ a.products.join(', ') }}</span> <span class="summary">{{ a.summary }}</span></span>
+          <span class="when">published {{ a.published }}</span>
+        </li>
+      </ul>
+    </div>
   </section>
 
   <section v-if="showConfig" id="ew-config" class="card config">
@@ -345,10 +376,43 @@ useLive(['findings', 'settings'], load, 3000)
 .facts strong { color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
 .text-danger { color: var(--crit); }
 
-.coverage { padding: 0.75rem 1rem; margin-bottom: 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
-.coverage-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; flex-wrap: wrap; }
-.coverage-head > div { display: flex; flex-direction: column; gap: 0.125rem; min-width: 0; flex: 1 1 260px; }
-.coverage-list { margin: 0; padding-left: 1rem; display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.875rem; overflow-wrap: anywhere; }
+.coverage { display: flex; flex-direction: column; gap: 1.25rem; }
+.coverage-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem 1rem; flex-wrap: wrap; }
+.coverage-head > div { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; flex: 1 1 260px; }
+.coverage-head h2 { margin: 0; }
+.coverage-head p { margin: 0; }
+/* Zählerleiste: Zellen auf --ground, die 1px-Lücken zeigen die Linie, auch beim Umbruch */
+.coverage-counts {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: 1px; margin: 0;
+  background: var(--line); border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden;
+}
+.coverage-counts > div { display: flex; flex-direction: column; gap: 0.25rem; padding: 0.75rem 1rem; background: var(--ground); }
+.coverage-counts dt { display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: var(--muted); }
+.coverage-counts dd { margin: 0; font: 600 1.125rem/1.2 var(--mono); color: var(--text); }
+.coverage-counts .total dd { font-size: 1.5rem; }
+.coverage-counts .zero dd { color: var(--muted); font-weight: 400; }
+.coverage-counts .warning dt::before, .coverage-counts .danger dt::before { content: ''; width: 6px; height: 6px; border-radius: 50%; flex: none; }
+.coverage-counts .warning dt::before { background: var(--warn); }
+.coverage-counts .danger dt::before { background: var(--danger); }
+.coverage-counts .danger dd { color: var(--danger); }
+.coverage-gaps { display: flex; flex-direction: column; gap: 0.5rem; }
+.coverage-gaps h3 { margin: 0; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-2); }
+.gap-count { margin-left: 0.5rem; font: 0.6875rem var(--mono); color: var(--muted); letter-spacing: 0; }
+.coverage-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--ground); }
+.coverage-row {
+  display: grid; grid-template-columns: 11.5rem minmax(0, 1fr) auto; align-items: center; gap: 0.25rem 1rem;
+  padding: 0.75rem 1rem; border-top: 1px solid var(--line); font-size: 0.875rem;
+}
+.coverage-row:first-child { border-top: 0; }
+.coverage-row .badge { justify-self: start; }
+.what { min-width: 0; color: var(--text); overflow-wrap: anywhere; }
+.what .cve { margin-left: 0.25rem; font-size: 0.8125rem; color: var(--text-2); }
+.what .summary { color: var(--text-2); }
+.when { font-size: 0.75rem; color: var(--muted); white-space: nowrap; text-align: right; }
+@media (max-width: 640px) {
+  .coverage-row { grid-template-columns: minmax(0, 1fr); gap: 0.5rem; }
+  .when { white-space: normal; text-align: left; }
+}
 .notice { display: flex; gap: 0.75rem; align-items: flex-start; padding: 0.75rem 1rem; margin-bottom: 1rem; color: var(--crit); }
 .notice div { display: flex; flex-direction: column; gap: 0.125rem; }
 .notice strong { color: var(--text); font-weight: 500; }
