@@ -60,14 +60,15 @@ const iso = (d) => d?.toISOString()
         <template v-if="system.last_seen"> · last read {{ timeAgo(system.last_seen) }}</template></p>
       <p v-if="readError" class="message error">Last read failed: {{ readError }}</p>
 
-      <template v-if="data.storage">
-        <h3>Storage</h3>
-        <StorageView :storage="data.storage" />
-      </template>
       <p class="subtext">Problems also appear as <RouterLink :to="{ path: '/funde', query: { source: 'appliances', q: system.name } }" @click="emit('close')">findings</RouterLink>.
         Read every 6 hours; Test in the host list reads now.</p>
 
       <HostCoverage :system-id="systemId" />
+
+      <template v-if="data.storage">
+        <h3>Storage</h3>
+        <StorageView :storage="data.storage" />
+      </template>
 
       <template v-if="kind === 'homeassistant'">
         <h3>State</h3>
