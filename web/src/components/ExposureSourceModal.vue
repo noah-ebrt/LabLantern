@@ -10,6 +10,7 @@ const emit = defineEmits(['close'])
 
 const ANCHORS = { npm: 'set-npm', fritzbox: 'set-fritz', cftunnel: 'set-cf', traefik: 'set-traefik' }
 const detail = ref(null)
+const address = (url) => url.replace(/^https?:\/\//, '').replace(/\/$/, '')
 const error = ref('')
 onMounted(async () => {
   try {
@@ -29,6 +30,13 @@ onMounted(async () => {
     <p v-if="error" class="message error" role="alert">{{ error }}</p>
     <div v-else-if="!detail" class="empty">Loading…</div>
     <template v-else>
+      <p v-if="detail.host" class="host" data-test="exposure-host">
+        Runs on
+        <RouterLink v-if="detail.host.system_id" class="strong" :to="{ path: '/systeme', query: { open: String(detail.host.system_id) } }" @click="emit('close')">{{ detail.host.system_name }}</RouterLink>
+        <span v-if="detail.host.ip" class="mono">{{ detail.host.ip }}</span>
+        · management
+        <a class="mono" :href="detail.host.url" target="_blank" rel="noopener noreferrer">{{ address(detail.host.url) }} ↗</a>
+      </p>
       <h3>Internet-exposed ({{ detail.items.length }})</h3>
       <table v-if="detail.items.length" class="data-table" data-test="exposure-items">
         <thead><tr><th>System</th><th>Container</th><th>Via</th></tr></thead>
@@ -65,4 +73,5 @@ onMounted(async () => {
 
 <style scoped>
 .via { display: block; overflow-wrap: anywhere; }
+.host { display: flex; flex-wrap: wrap; gap: 0 .5em; align-items: baseline; }
 </style>
