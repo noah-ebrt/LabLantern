@@ -32,6 +32,7 @@ WORKERS = 16
 AGENT_FRESH = 75.0         # letzter Long-Poll jünger als das: Agent meldet sich
 AGENT_GRACE = 150.0        # nach dem Start: Agenten erst wieder verbinden lassen, bevor sie als stumm gelten
 ENGINE_STALE = 60.0        # so lange ohne Tick: Engine gilt als stehend, die API meldet alles "unknown"
+METRICS_PUSH = 15.0        # neue Messwerte (Latenz, Alter) höchstens so oft an offene Seiten melden
 SAMPLE_DAYS = 7
 ROLLUP_DAYS = 400
 OUTAGE_SHARE = 0.75        # so viele Monitore gleichzeitig down: ein Alarm "Netzausfall" statt vieler
@@ -326,6 +327,11 @@ class HealthEngine:
         self.last_tick: float = 0.0
         self.last_sync = 0.0
         self.last_prune = 0.0
+        self.last_metrics_push = 0.0
+        self._measured = False
+        # Live-Meldung an offene Seiten (main.py: EventHub.publish). Zustandswechsel melden die DB-Hooks sofort
+        # als „health“; hier nur gedrosselt „health-metrics“, wenn neue Messwerte da sind.
+        self.publish = None
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
@@ -370,8 +376,11 @@ class HealthEngine:
                 s.commit()
                 self.last_sync = now
             self._schedule(s, now)
-        transitions = self._collect(now)
+        transitions, measured = self._collect(now)
         self.last_tick = now
+        if measured and self.publish is not None and now - self.last_metrics_push >= METRICS_PUSH:
+            self.last_metrics_push = now
+            self.publish(["health-metrics"])
         if transitions:
             self._alert(transitions)
 
@@ -408,11 +417,12 @@ class HealthEngine:
             with self._lock:
                 self.inflight[c.id] = (future, now)
 
-    def _collect(self, now: float) -> list[tuple[HealthMonitor, str, str]]:
+    def _collect(self, now: float) -> tuple[list[tuple[HealthMonitor, str, str]], bool]:
         with self._lock:
             done = {cid: f for cid, (f, _t) in self.inflight.items() if f.done()}
             for cid in done:
                 del self.inflight[cid]
+        self._measured = False
         with self.ctx.session_factory() as s:
             for cid, f in done.items():
                 c = s.get(HealthCheck, cid)
@@ -429,10 +439,11 @@ class HealthEngine:
                 prune(s, now)
                 self.last_prune = now
             s.commit()
-            return transitions
+            return transitions, self._measured
 
     def _apply(self, s, c: HealthCheck, r: ProbeResult, now: float) -> None:
         apply_result(c, r, now)
+        self._measured = True
         if not r.inconclusive:
             record_sample(s, c, r, now)
         with self._lock:

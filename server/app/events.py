@@ -79,7 +79,8 @@ class EventHub:
         self.max_subscribers = max_subscribers
         self.heartbeat = heartbeat
         self.watch_interval = watch_interval
-        self.snapshot: Callable[[], object] | None = None   # für den Wächter (in main.py gesetzt)
+        # für den Wächter (in main.py gesetzt): {Thema: Wert}; ändert sich ein Wert, geht dieses Thema raus
+        self.snapshot: Callable[[], dict[str, object]] | None = None
         self._lock = threading.Lock()
         self._subs: dict[asyncio.Queue, asyncio.AbstractEventLoop] = {}
         self._watcher: asyncio.Task | None = None
@@ -126,8 +127,8 @@ class EventHub:
         while self.subscriber_count:
             try:
                 snap = await asyncio.to_thread(self.snapshot)
-                if last is not None and snap != last:
-                    self.publish(["systems"])
+                if last is not None:
+                    self.publish([topic for topic, value in snap.items() if last.get(topic) != value])
                 last = snap
             except Exception:   # der Wächter darf nie den Strom mitreißen
                 log.exception("live-update watcher failed")

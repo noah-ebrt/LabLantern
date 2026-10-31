@@ -119,10 +119,12 @@ def create_app(settings: Settings, clock: Callable[[], float] = time.time) -> Fa
     def live_tick():
         with session_factory() as s:
             expire_pairings(ctx, s)   # abgelaufene Anfragen verschwinden auch ohne Neuladen
-        return live_snapshot(ctx)
+        # zeitabhängig, ohne Schreibzugriff: Agenten verbunden/getrennt und ob die Gesundheitsprüfungen laufen
+        return {"systems": live_snapshot(ctx), "health": health.ok()}
 
     hub.snapshot = live_tick
     install_db_hooks(session_factory, hub)
+    health.publish = hub.publish
     app.state.events = hub
 
     @app.exception_handler(RequestValidationError)

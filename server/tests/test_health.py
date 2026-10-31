@@ -154,6 +154,28 @@ def test_stale_engine_reports_unknown_not_up(hw):
     assert all(c["stale"] for c in doc["monitors"][0]["checks"])
 
 
+def test_live_updates_are_pushed_not_polled(hw):
+    env, client, h, engine, probes, sent = hw
+    pushed = []
+    engine.publish = pushed.append
+    create(client, h)
+    for _ in range(4):   # 4 Runden à 2 s: neue Messwerte, aber höchstens eine Meldung je 15 s
+        engine.tick()
+        env.clock.advance(2)
+    assert pushed == [["health-metrics"]]
+    env.clock.advance(health.METRICS_PUSH)
+    engine.poke()
+    engine.tick()
+    assert pushed == [["health-metrics"]] * 2
+
+    # Stehen die Prüfungen, meldet der Live-Wächter „health“ (Schnappschuss kippt ohne Schreibzugriff)
+    hub = env.app.state.events
+    before = hub.snapshot()
+    assert before["health"] is True
+    env.clock.advance(health.ENGINE_STALE + 1)
+    assert hub.snapshot()["health"] is False and hub.snapshot()["systems"] == before["systems"]
+
+
 def test_api_needs_a_valid_token_or_session(hw):
     env, client, h, engine, probes, sent = hw
     anon = env.new_client()

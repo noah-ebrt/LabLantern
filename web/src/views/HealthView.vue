@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../api.js'
 import { useLive } from '../live.js'
@@ -28,14 +28,10 @@ async function load() {
   }
 }
 
-useLive(['health', 'systems', 'settings'], load)
-// Messwerte (Latenz, Alter) ändern sich ohne Zustandswechsel: solange die Seite sichtbar ist, alle 20 s nachladen
-let timer = null
-onMounted(() => {
-  load()
-  timer = setInterval(() => { if (document.visibilityState === 'visible') load() }, 20000)
-})
-onBeforeUnmount(() => clearInterval(timer))
+// Nur auf Meldung des Servers neu laden, kein Abfragetakt: „health“ bei jedem Zustandswechsel und wenn die
+// Prüfungen stehen bleiben, „health-metrics“ höchstens alle 15 s mit neuen Messwerten (Latenz, Alter)
+useLive(['health', 'health-metrics', 'systems', 'settings'], load)
+onMounted(load)
 
 const problems = computed(() => (data.value ? data.value.summary.down + data.value.summary.degraded : null))
 const tabs = computed(() => [
