@@ -220,9 +220,11 @@ def test_fritz_checks_need_the_connector(hw):
         s.add(Setting(key="fritz.config", value='{"url": "http://192.0.2.1", "user": "vw"}'))
         s.commit()
     create(client, h, name="Phone", host="", checks=[{"kind": "fritz_host", "params": {"target": "REDACTED"}}])
+    create(client, h, name="Internet", host="", checks=[{"kind": "fritz_wan"}])
     run(env, engine)
-    spec = probes.calls[-1]
+    spec = next(c for c in probes.calls if c.kind == "fritz_host")
     assert spec.host == "REDACTED" and spec.fritz["password"] == "pw"
+    assert any(c.kind == "fritz_wan" for c in probes.calls)   # läuft ohne Host
     assert spec.fritz["url"] == "http://192.0.2.1:49000"
 
 

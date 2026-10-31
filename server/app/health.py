@@ -339,7 +339,7 @@ class HealthEngine:
             if c.kind in FRITZ_KINDS and not fritz_loaded:
                 fritz, fritz_loaded = self._fritz(), True
             spec = self.spec_for(c, m, fritz)
-            if not spec.host:
+            if not spec.host and c.kind != "fritz_wan":   # Internet-Status fragt die FRITZ!Box, kein Ziel nötig
                 continue
             future = self.executor.submit(self.probe, spec)
             with self._lock:
