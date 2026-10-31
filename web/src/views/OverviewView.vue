@@ -523,7 +523,4 @@ i.high { background: var(--high); }
   .chart { height: 190px; }
 }
 .state.bad { background: var(--danger); }
-tr.clickable { cursor: pointer; }
-tr.clickable:focus-visible { outline: 2px solid var(--text-2); outline-offset: -2px; }
-.row-link { text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
 </style>

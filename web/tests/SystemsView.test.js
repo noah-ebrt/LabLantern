@@ -130,6 +130,16 @@ describe('SystemsView', () => {
     expect(w.text()).not.toContain('vulnwatch-agent enroll')
   })
 
+  it('ganze Zeile öffnet die Details wie in der Übersicht, Knöpfe darin nicht', async () => {
+    const w = mount(SystemsView, { global: { stubs: { HostDetailModal: { template: '<div class="host-detail" />' } } } })
+    await flushPromises()
+    const row = w.findAll('tbody tr.clickable')[1]   // host-c, wartet auf Freigabe
+    await row.find('.btn-approve').trigger('click')
+    expect(w.find('.host-detail').exists()).toBe(false)
+    await w.findAll('tbody tr.clickable')[0].trigger('keydown.enter')
+    expect(w.find('.host-detail').exists()).toBe(true)
+  })
+
   it('gibt ausstehenden Agenten frei', async () => {
     const w = mount(SystemsView)
     await flushPromises()

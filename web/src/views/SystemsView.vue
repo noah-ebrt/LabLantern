@@ -174,6 +174,8 @@ const HOST_KINDS = [
 ]
 const addKind = ref(null)
 const connectorId = ref(null)   // Detailansicht eines Geräts ohne Agent
+// Ganze Zeile öffnet die Details, wie in der Abdeckung der Übersicht
+const openRow = (s) => (s.connector ? (connectorId.value = s.id) : viewDetails(s.id))
 const editEntry = ref(null)
 const appliances = ref([])
 const notice = ref('')
@@ -434,9 +436,10 @@ onMounted(() => {
         </tr>
       </thead>
       <tbody>
-        <tr v-for="s in systems" :key="s.id">
-          <td class="strong">
-            <a href="#" @click.prevent="s.connector ? (connectorId = s.id) : viewDetails(s.id)">{{ s.name }}</a>
+        <tr v-for="s in systems" :key="s.id" class="clickable" tabindex="0" :title="`Details for ${s.name}`"
+            @click="openRow(s)" @keydown.enter.self="openRow(s)">
+          <td>
+            <span class="strong row-link">{{ s.name }}</span>
             <span v-if="s.connector" class="subtext">{{ hostVersion(s) }} · read via API<template v-if="applianceOf(s)"> · {{ applianceOf(s).url }}</template></span>
             <span v-else-if="s.host_type === 'collector'" class="subtext">collector script, no agent</span>
             <span v-else class="subtext">v{{ s.agent_version || '0.1.0' }}<template v-if="s.agent_outdated"> · outdated</template><template v-if="s.online"> · connected</template></span>
@@ -448,13 +451,13 @@ onMounted(() => {
           <td>{{ s.container_count }}</td>
           <td>
             <button v-if="s.security_updates_count > 0" class="count-link text-danger" :title="`Show which updates ${s.name} needs`"
-                    @click="viewDetails(s.id)">{{ s.security_updates_count }}</button>
+                    @click.stop="viewDetails(s.id)">{{ s.security_updates_count }}</button>
             <span v-else>{{ s.security_updates_count }}</span>
             <span v-if="s.reboot_required" class="badge-reboot">Reboot!</span>
             <span v-for="(msg, k) in s.collection_errors || {}" :key="k" class="badge danger" :title="msg">Data error: {{ k }}</span>
           </td>
           <td>{{ s.last_seen ? `${s.age_hours} h ago` : 'never' }}</td>
-          <td class="action-cell text-right">
+          <td class="action-cell text-right" @click.stop @keydown.enter.stop>
             <div class="actions-inline">
               <button v-if="s.status === 'active' && s.agent_outdated && !s.needs_reenroll" class="btn-sm btn-update" :disabled="busy(s)" :title="busy(s) ? busyLabel(s) : `Update agent to v${update?.version || ''} (requires passkey)`" @click="updateAgent(s)">{{ s.pending_action === 'update_agent' ? 'Updating…' : 'Update' }}</button>
               <template v-if="s.connector && applianceOf(s)">
