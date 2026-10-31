@@ -108,7 +108,7 @@ async function includeAgain() {
           </div>
         </form>
       </template>
-      <p class="subtext">
+      <p class="subtext report-age">
         {{ row.status === 'connector' ? 'Last read' : 'Last agent report' }} {{ ago(row.age_hours) }}
         <template v-if="row.status !== 'connector'"> ·
           <template v-if="row.last_scan">last scanned in run #{{ row.last_scan.run_id }} ({{ fmtDateTime(row.last_scan.at) }})</template>
@@ -136,7 +136,7 @@ async function includeAgain() {
         </table>
       </div>
 
-      <p v-if="row.last_scan">
+      <p v-if="row.last_scan" class="status-line last-scan">
         <span class="label">Last scan:</span>
         <span :class="['badge', row.last_scan.status === 'ok' ? 'ok' : 'danger']">{{ row.last_scan.status === 'ok' ? 'OK' : 'FAILED' }}</span>
         {{ fmt(row.last_scan.findings_count) }} findings ·
@@ -168,7 +168,9 @@ async function includeAgain() {
 .exclude { display: grid; gap: 0.5rem; max-width: 26rem; margin: 0.5rem 0 0.75rem; }
 .exclude .actions { display: flex; gap: 0.5rem; }
 h3 { margin-top: 1.25rem; }
-.label { color: var(--muted); margin-right: 0.5rem; }
+.label { color: var(--muted); }
+.report-age { margin-top: 0.5rem; }
+.last-scan { margin-top: 1rem; }
 .detail-table th { text-transform: none; letter-spacing: 0; font-size: 0.8125rem; color: var(--text); white-space: nowrap; vertical-align: top; }
 .problem { margin: 0.5rem 0 0.75rem; }
 .detail-table td { vertical-align: top; }

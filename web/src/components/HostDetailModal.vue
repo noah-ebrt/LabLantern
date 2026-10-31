@@ -239,9 +239,10 @@ useLive(['commands'], loadCommands)
 </template>
 
 <style scoped>
-.cmd-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0; }
-.cmd-entry { margin: 10px 0; }
-.cmd-entry .badge { margin: 0 6px; }
+.cmd-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0 0 0.5rem; }
+.cmd-bar + .subtext { margin-top: 0.75rem; }
+.cmd-entry { margin: 0.75rem 0; }
+.cmd-entry .badge { margin: 0 0.5rem; }
 .cmd-bar .badge { align-self: center; }
 .chk { display: inline-flex; flex-direction: row; align-items: center; margin-left: 0.25rem; gap: 0.25rem; font-size: 0.8125rem; color: var(--muted); }
 .chk input, td input[type=checkbox] { width: auto; margin: 0; }

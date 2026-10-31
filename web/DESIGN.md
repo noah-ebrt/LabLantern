@@ -19,6 +19,8 @@ Dark, monochrome admin dashboard (structure after the owner's SaaS reference: gr
 - `.card` panel, `.panel-title` uppercase 0.72rem/0.09em heading, `.card-header` title row.
 - `.data-table` inside `.table-wrap` (scrolls inside the card, never the page); long values use `.truncate` with a `title`.
 - `.badge` status pill with leading dot (`ok`, `warning`, `danger`, `neutral`); `.badge-sev.<kritisch|hoch|mittel|info>`; `.badge-kev`.
+- A pill next to running text ("OK · read just now", "Last scan: OK · 39,737 findings") goes in a `.status-line` row (flex, centred, 0.5rem gap), never inline in a `<p>`: the 24px pill otherwise stretches the 21px text line and sits off-centre.
+- A caption (`p.subtext`) under a button, button row or command block needs its own top margin (0.5–0.75rem); outside a flex container with `gap` it otherwise sticks to the control.
 - Icons: `components/Icon.vue`, 24-grid strokes at 1.75px.
 
 ### Settings language (`components/Settings*.vue`, `SecretField.vue`)
