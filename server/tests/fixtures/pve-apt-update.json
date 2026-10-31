@@ -1,0 +1,4 @@
+{"data": [
+  {"Package": "pve-manager", "OldVersion": "8.2.4", "Version": "8.2.7", "Title": "Proxmox Virtual Environment Management Tools", "Origin": "Proxmox", "Priority": "important", "Section": "admin", "Arch": "amd64"},
+  {"Package": "libc6", "OldVersion": "2.36-9+deb12u7", "Version": "2.36-9+deb12u8", "Title": "GNU C Library: Shared libraries", "Origin": "Debian", "Priority": "optional", "Section": "libs", "Arch": "amd64"}
+]}

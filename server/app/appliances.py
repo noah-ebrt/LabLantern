@@ -35,7 +35,7 @@ log = logging.getLogger("vulnwatch.appliances")
 
 CONFIG_KEY = "appliances.config"   # {System-ID: {"kind", "url", "fingerprint"}}
 STATE_KEY = "appliances.state"     # {System-ID: letzter Abruf}
-KINDS = {"truenas": "TrueNAS", "homeassistant": "Home Assistant"}
+KINDS = {"truenas": "TrueNAS", "homeassistant": "Home Assistant", "proxmox": "Proxmox VE"}
 _URL = re.compile(r"^https?://[A-Za-z0-9.-]+(:\d{1,5})?/?$")
 TIMEOUT = 15
 MAX_MESSAGE = 20_000_000
@@ -708,6 +708,14 @@ def refresh_one(ctx: Context, sid: str, cfg: dict) -> dict:
             db, _ = eol_mod.load(ctx.settings.data_dir / "eol")   # ohne Daten: kein EOL-Fund, der Rest bleibt
             if db and (f := _eol_finding(db, "truenas", data["version"], "eol", "TrueNAS")):
                 desired.append(f)
+        elif cfg["kind"] == "proxmox":
+            from .proxmox import fetch_proxmox, proxmox_findings
+            data = fetch_proxmox(cfg["url"], cfg["fingerprint"], key)
+            desired = proxmox_findings(data)
+            db, _ = eol_mod.load(ctx.settings.data_dir / "eol")
+            for n in data["nodes"] if db else []:
+                if f := _eol_finding(db, "proxmox-ve", n["version"], f"eol:{n['node']}", "Proxmox VE"):
+                    desired.append(f)
         else:
             data = fetch_homeassistant(cfg["url"], cfg.get("fingerprint", ""), key)
             desired = homeassistant_findings(data, datetime.now(timezone.utc))
@@ -772,6 +780,9 @@ def connector_checks(sys: System, now: datetime, open_updates: int) -> dict[str,
     keys = ("versionen", "images", "reboot") if truenas else ("versionen",)
     if problem:
         return {**checks, **{k: ("fehler", problem) for k in keys}}
+    if sys.host_type == "proxmox":
+        from .proxmox import versions_check
+        return {**checks, "versionen": versions_check(data, open_updates)}
     checks["versionen"] = ("fund" if open_updates else "ok",
                            f"{data.get('version') or '?'} · {open_updates} update(s) open")
     if truenas:
@@ -786,7 +797,7 @@ def connector_checks(sys: System, now: datetime, open_updates: int) -> dict[str,
 # --- API -------------------------------------------------------------------------------------------------------
 
 class ApplianceIn(BaseModel):
-    kind: Literal["truenas", "homeassistant"]
+    kind: Literal["truenas", "homeassistant", "proxmox"]
     name: str = Field(min_length=1, max_length=63, pattern=r"^[A-Za-z0-9][A-Za-z0-9 ._-]*$")
     url: str = Field(max_length=300)
     token: str | None = Field(default=None, min_length=8, max_length=4096)   # None = unverändert
@@ -813,6 +824,8 @@ def build_appliances_router(ctx: Context, guards: Guards) -> APIRouter:
             raise HTTPException(422, "URL must look like https://truenas.lan or http://homeassistant.lan:8123")
         if body.kind == "truenas" and not url.startswith("https://"):
             raise HTTPException(422, "TrueNAS only over HTTPS: it revokes an API key that was sent over HTTP")
+        if body.kind == "proxmox" and not url.startswith("https://"):
+            raise HTTPException(422, "Proxmox VE only over HTTPS, e.g. https://pve.lan:8006")
         with ctx.session_factory() as s:
             all_cfg = setting(s, CONFIG_KEY) or {}
             old = all_cfg.get(str(sid), {}) if sid else {}

@@ -9,6 +9,7 @@ import Icon from '../components/Icon.vue'
 import RunProgress from '../components/RunProgress.vue'
 import PipelineFlow from '../components/PipelineFlow.vue'
 import ConnectorDetailModal from '../components/ConnectorDetailModal.vue'
+import GuestCoverage from '../components/GuestCoverage.vue'
 import HostDetailModal from '../components/HostDetailModal.vue'
 
 const data = ref(null)
@@ -343,6 +344,8 @@ useLive(['systems', 'runs', 'findings', 'settings'], loadData, 1000)
           <span class="badge neutral">QUEUED</span> new data, checked in the next run · click a row for details
         </p>
       </div>
+      <p v-else class="empty">No systems connected yet. <RouterLink to="/systeme">Add a Linux agent</RouterLink></p>
+      <GuestCoverage v-if="data.guests?.length" :guests="data.guests" @changed="loadData()" />
       <div v-if="data.exposure_sources?.length" class="table-wrap" data-test="exposure-sources">
         <table class="data-table">
           <thead><tr><th>Exposure source</th><th>Status</th><th>Exposed</th><th>Not matched</th></tr></thead>
@@ -359,7 +362,6 @@ useLive(['systems', 'runs', 'findings', 'settings'], loadData, 1000)
           </tbody>
         </table>
       </div>
-      <p v-else class="empty">No systems connected yet. <RouterLink to="/systeme">Add a Linux agent</RouterLink></p>
     </section>
   </template>
 

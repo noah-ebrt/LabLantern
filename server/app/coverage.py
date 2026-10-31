@@ -241,6 +241,12 @@ def calculate_coverage_matrix(session: Session, now: datetime | None = None, sbo
                                    .where(Finding.status == "accepted").group_by(Finding.system_id)).all())
     for entry in matrix:
         entry["snoozed"] = snoozed.get(entry["system_id"], 0)
+    # Proxmox-Gäste (PLAN-extensions D1): ohne Agent eine Lücke, ausgenommen zählt weder als geprüft noch als Lücke
+    from .proxmox import guest_rows
+    guests = guest_rows(session, exclusions)
+    total += sum(g["status"] != "excluded" for g in guests)
+    ok_count += sum(g["status"] == "ok" for g in guests)
+    excluded += sum(g["status"] == "excluded" for g in guests)
     # Jede Expositionsquelle ist eine Prüfung: fällt sie aus, ist das eine Lücke, kein "nicht erreichbar"
     from .exposure import source_rows
     sources = source_rows(session, now.timestamp())
@@ -256,4 +262,5 @@ def calculate_coverage_matrix(session: Session, now: datetime | None = None, sbo
         "ok_checks": ok_count,
         "systems": matrix,
         "exposure_sources": sources,
+        "guests": guests,
     }

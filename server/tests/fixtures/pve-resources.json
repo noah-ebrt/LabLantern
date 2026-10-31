@@ -1,0 +1,7 @@
+{"data": [
+  {"id": "qemu/100", "vmid": 100, "node": "pve1", "type": "qemu", "name": "web01", "status": "running", "template": 0, "tags": "prod;web", "maxmem": 4294967296},
+  {"id": "qemu/102", "vmid": 102, "node": "pve1", "type": "qemu", "name": "vm-102", "status": "running", "template": 0},
+  {"id": "lxc/101", "vmid": 101, "node": "pve1", "type": "lxc", "name": "db", "status": "running", "template": 0, "tags": "prod"},
+  {"id": "lxc/103", "vmid": 103, "node": "pve1", "type": "lxc", "name": "old-test", "status": "stopped", "template": 0},
+  {"id": "qemu/9000", "vmid": 9000, "node": "pve1", "type": "qemu", "name": "tpl-debian", "status": "stopped", "template": 1}
+]}

@@ -303,6 +303,10 @@ def appliance_products(s) -> list[dict]:
             for a in data.get("apps") or []:
                 out.append({**base, "keyword": a["name"].lower(), "product": a["name"], "version": a["version"],
                             "target": f"app:{a['name']}"})
+        elif sys.host_type == "proxmox":
+            if data.get("version"):
+                out.append({**base, "keyword": "proxmox", "product": "Proxmox VE", "version": data["version"],
+                            "target": "host"})
         else:
             for u in data.get("updates") or []:   # Core, OS, Supervisor, Add-ons, Firmware
                 core = u["entity_id"] == "update.home_assistant_core_update"   # Meldungen sagen „Home Assistant“

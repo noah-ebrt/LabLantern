@@ -200,7 +200,11 @@ def build_runs_router(ctx: Context, guards: Guards) -> APIRouter:
         now = datetime.now(timezone.utc)
         with ctx.session_factory() as s:
             kind, _, ident = body.subject.partition(":")
-            if kind != "system" or not ident.isdigit() or not s.get(System, int(ident)):
+            from .proxmox import known_guest
+            if kind == "pve-guest":   # Gast einer Proxmox-Verbindung (PLAN-extensions D1)
+                if not known_guest(s, body.subject):
+                    raise HTTPException(422, "Unknown Proxmox guest")
+            elif kind != "system" or not ident.isdigit() or not s.get(System, int(ident)):
                 raise HTTPException(422, "Unknown subject: use system:<id> of an existing system")
             try:
                 ex = create_exclusion(s, body.subject, _until(body.until), body.reason, found[0].username, now)

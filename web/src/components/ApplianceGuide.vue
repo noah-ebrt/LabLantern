@@ -7,7 +7,7 @@ import SecretField from './SecretField.vue'
 // Anleitung und Formular für ein Gerät ohne Agent (TrueNAS, Home Assistant): was gelesen wird, was vorher auf dem
 // Gerät einzurichten ist, welche API-Aufrufe vulnwatch macht. Mit `entry` wird eine bestehende Verbindung bearbeitet.
 const props = defineProps({
-  kind: { type: String, required: true },     // truenas | homeassistant
+  kind: { type: String, required: true },     // truenas | homeassistant | proxmox
   entry: { type: Object, default: null },     // aus /api/settings/appliances
 })
 const emit = defineEmits(['saved'])
@@ -27,6 +27,25 @@ const GUIDES = {
       ['Connection', 'WebSocket wss://&lt;host&gt;/api/current, JSON-RPC 2.0 (before 24.10: /websocket)'],
       ['Login', 'auth.login_with_api_key'],
       ['Read calls', 'system.info · update.status (before 25.10: update.check_available) · alert.list · app.query (before 24.10: chart.release.query)'],
+      ['Writes', 'none'],
+    ],
+  },
+  proxmox: {
+    title: 'Proxmox VE',
+    reads: ['Proxmox VE version per node and a newer pve-manager (same line → high, new line → medium); end of life from endoflife.date',
+      'Pending package updates per node (the agent on the node rates them; install it for package CVEs)',
+      'Every VM and LXC with name, state and tags: each one is matched to an agent host by name, else by IP. Guests without an agent are gaps in the coverage; stopped ones can be excluded with a reason. Templates do not count.'],
+    steps: [
+      'Datacenter → Permissions → Users → Add: <code>vulnwatch@pve</code> (realm Proxmox VE authentication server), no password needed.',
+      'Datacenter → Permissions → API Tokens → Add: user <code>vulnwatch@pve</code>, token ID <code>vulnwatch</code>, <strong>Privilege Separation off</strong>. Copy the secret.',
+      'Datacenter → Permissions → Add → User Permission: path <code>/</code>, user <code>vulnwatch@pve</code>, role <strong>PVEAuditor</strong> (read-only).',
+      'Enter <code>https://&lt;host&gt;:8006</code> and as token <code>vulnwatch@pve!vulnwatch=&lt;secret&gt;</code>. Older PVE releases only list pending updates with Sys.Modify; vulnwatch does not ask for it and shows that check as n/a.',
+    ],
+    url: 'https://pve.lan:8006', secret: 'API token (user@realm!id=secret)',
+    api: [
+      ['Connection', 'HTTPS to &lt;host&gt;:8006, certificate pinned when saved'],
+      ['Requests', 'GET /api2/json/version, /nodes, /nodes/{node}/version, /nodes/{node}/apt/update, /cluster/resources?type=vm; for matching by IP /nodes/{node}/lxc/{id}/config and /nodes/{node}/qemu/{id}/agent/network-get-interfaces'],
+      ['Header', 'Authorization: PVEAPIToken=&lt;user&gt;@&lt;realm&gt;!&lt;id&gt;=&lt;secret&gt;'],
       ['Writes', 'none'],
     ],
   },
@@ -53,7 +72,7 @@ const GUIDES = {
   },
 }
 const g = GUIDES[props.kind]
-const form = reactive({ name: props.entry?.name || (props.kind === 'truenas' ? 'truenas' : 'homeassistant'),
+const form = reactive({ name: props.entry?.name || props.kind,
   url: props.entry?.url || '', token: '' })
 const message = ref(null)
 const busy = ref(false)

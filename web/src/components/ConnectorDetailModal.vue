@@ -95,6 +95,22 @@ const iso = (d) => d?.toISOString()
         <p v-else-if="!batteries.length" class="subtext">No battery entities.</p>
       </template>
 
+      <template v-else-if="kind === 'proxmox'">
+        <h3>Nodes</h3>
+        <table class="data-table" data-test="pve-nodes">
+          <thead><tr><th>Node</th><th>Proxmox VE</th><th>Pending updates</th></tr></thead>
+          <tbody><tr v-for="n in data.nodes || []" :key="n.node"><td>{{ n.node }}</td><td class="mono">{{ n.version || '?' }}</td>
+            <td :class="tone(!!n.error, (n.updates || []).length)">{{ n.error || `${(n.updates || []).length} package(s)` }}</td></tr></tbody>
+        </table>
+        <h3>Guests ({{ (data.guests || []).filter((g) => !g.template).length }}, templates not counted)</h3>
+        <table v-if="(data.guests || []).length" class="data-table">
+          <thead><tr><th>Guest</th><th>Node</th><th>State</th><th>Addresses</th></tr></thead>
+          <tbody><tr v-for="g in data.guests" :key="g.subject"><td>{{ g.name }} <span class="subtext">{{ g.type === 'lxc' ? 'LXC' : 'VM' }} {{ g.vmid }}{{ g.template ? ' · template' : '' }}</span></td>
+            <td>{{ g.node }}</td><td>{{ g.status }}</td><td class="mono">{{ (g.ips || []).join(', ') || '–' }}</td></tr></tbody>
+        </table>
+        <p class="subtext">Which guest belongs to which agent host is in the overview, under coverage.</p>
+      </template>
+
       <template v-else>
         <h3>System</h3>
         <table class="data-table kv">

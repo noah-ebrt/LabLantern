@@ -81,7 +81,7 @@ In Settings › Traefik you can mark an entrypoint such as `lan` as LAN only or 
 still wins. Rules that cannot be checked (`HostRegexp`, ``HostSNI(`*`)``, no rule) are listed there too. Only the
 Docker provider on the same host is visible; routes from Traefik's file provider are missing.
 
-## Devices without agent: TrueNAS and Home Assistant
+## Devices without agent: TrueNAS, Home Assistant and Proxmox VE
 
 Added under **Systems → Add host**, not in the settings: each device becomes a host of its own, with findings, a
 row in the coverage matrix and the actions **Test**, **Edit** and **Delete** in the host list. vulnwatch only reads,
@@ -158,6 +158,27 @@ name. From `/api/config` it keeps only the state and the list of integrations, n
 
 The loaded integrations (Shelly, Matter, Nuki, Tuya, …) feed the AI early warning, so reports about them are
 matched to this Home Assistant. If NPM forwards a domain to the device, its findings are marked internet-exposed.
+
+### Proxmox VE
+
+Read with an API token of a user with the role **PVEAuditor** (read-only, path `/`, privilege separation off). The
+guide under **Systems → Add host → Proxmox VE** walks through it. HTTPS only, certificate pinned as above.
+
+| What | From | Rating |
+| --- | --- | --- |
+| Newer Proxmox VE per node | `pve-manager` in `/nodes/{node}/apt/update` | same line high, new line medium |
+| End of life per node | endoflife.date `proxmox-ve` | as for other products |
+| Guests without agent | `/cluster/resources?type=vm` | a gap in the coverage |
+
+**Guests:** every VM and LXC is matched to an agent host, first by name (case-insensitive, without the domain), then
+by an address: from the LXC configuration (`net0 ip=`), or from the QEMU guest agent if it runs. Matched guests are
+covered by their host's row. A running guest without an agent is a gap ("no agent", with its addresses), a stopped
+one too ("stopped, not checked") until you exclude it in the overview with a reason and an end date. Templates don't
+count. The PVE node itself is Debian: install the agent on it for package CVEs and security updates; the connector
+adds the view of the guests and the PVE version.
+
+**Older PVE releases** list pending updates only for tokens with `Sys.Modify`, a write privilege. vulnwatch
+doesn't ask for it: the version check then shows N/A with that reason, end of life is still checked.
 
 ## Other devices: collector scripts
 
@@ -256,5 +277,5 @@ vulnwatch has no telemetry and no update check of its own. These are the outboun
 | Claude API (AI early warning, optional) | daily and per new feed entry | product names and versions, never secrets, addresses or host names |
 | Your notification channels and offsite watchdog (optional) | per report, alert, ping | the report or alert text, the ping |
 
-Inside the LAN only: agents, Nginx Proxy Manager, FRITZ!Box, TrueNAS and Home Assistant. Building the images and the
+Inside the LAN only: agents, collector scripts, Nginx Proxy Manager, FRITZ!Box, TrueNAS, Home Assistant and Proxmox VE. Building the images and the
 agent fetches packages from Docker Hub, PyPI, npm and the Go module proxy, at build time only.
