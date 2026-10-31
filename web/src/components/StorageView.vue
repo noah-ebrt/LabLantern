@@ -56,7 +56,7 @@ const barTone = (p) => (p >= 95 ? 'bad' : p >= 90 ? 'warn' : 'ok')
 </template>
 
 <style scoped>
-.storage { display: flex; flex-wrap: wrap; gap: 0.6rem 1.6rem; }
+.storage { display: flex; flex-wrap: wrap; gap: 0.75rem 1.75rem; padding: 0.25rem 0 1rem; }
 .pool { display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; }
 .pool-head { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; font-size: 0.78rem; }
 .pool-name { font-weight: 500; }
@@ -80,10 +80,11 @@ const barTone = (p) => (p >= 95 ? 'bad' : p >= 90 ? 'warn' : 'ok')
 .disk:hover .icon, .disk:focus-visible .icon { transform: translateY(-2px); }
 .dot { position: absolute; top: -2px; right: -3px; width: 0.4rem; height: 0.4rem; border-radius: 50%; background: currentColor;
   box-shadow: 0 0 0 2px var(--surface); }
-.tip { display: none; position: absolute; z-index: 20; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+/* Unter dem Symbol und an seiner linken Kante: zentriert ragte es bei Laufwerken am linken Rand aus dem Dialog */
+.tip { display: none; position: absolute; z-index: 20; top: calc(100% + 6px); left: -0.25rem;
   flex-direction: column; gap: 0.1rem; min-width: 11rem; max-width: 16rem; padding: 0.45rem 0.6rem; border-radius: 8px;
   background: var(--surface-2); border: 1px solid var(--line-strong); color: var(--text-2); font-size: 0.75rem;
-  line-height: 1.35; text-align: left; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35); pointer-events: none; }
+  line-height: 1.35; text-align: left; overflow-wrap: anywhere; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35); pointer-events: none; }
 .tip strong { color: var(--text); }
 .disk:hover .tip, .disk:focus-visible .tip { display: flex; }
 .state-text.ok { color: var(--ok); }
