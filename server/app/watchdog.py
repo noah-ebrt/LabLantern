@@ -93,14 +93,23 @@ def _send(ctx: Context, kind: str, suffix: str, body: str, what: str) -> str | N
 
 def heartbeat(ctx: Context) -> None:
     """Alle 5 min aus dem Planer: Master lebt; meldet Fehler, wenn der Worker verstummt ist."""
+    from sqlalchemy import select
+
+    from .models import ScanJob
+    from .scanrun import JOB_TIMEOUT
     from .worker_api import worker_last_seen
 
     age = worker_last_seen(ctx)["age_seconds"]
-    if age is None or age > WORKER_SILENT:
+    with ctx.session_factory() as s:
+        busy = s.scalar(select(ScanJob.id).where(ScanJob.status == "running").limit(1)) is not None
+    # Während eines Laufs fragt der Worker bis zu ~25 min nichts an (Grype/OSV); ein hängender Job scheitert
+    # nach JOB_TIMEOUT mit eigenem Alarm, danach gilt wieder WORKER_SILENT.
+    if age is None or age > (JOB_TIMEOUT if busy else WORKER_SILENT):
         since = "never" if age is None else f"{age // 60} min ago"
         _send(ctx, "heartbeat", "/fail", f"vulnwatch master is up, but the scan worker was last seen {since}.", "fail")
     else:
-        _send(ctx, "heartbeat", "", f"vulnwatch master up, worker seen {age} s ago.", "success")
+        doing = ", busy with a scan job" if busy else ""
+        _send(ctx, "heartbeat", "", f"vulnwatch master up, worker seen {age} s ago{doing}.", "success")
 
 
 def _run_kind(trigger: str) -> str:

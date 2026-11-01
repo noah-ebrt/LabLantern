@@ -4,7 +4,7 @@ import urllib.error
 import pytest
 
 from app import watchdog
-from app.models import Setting
+from app.models import ScanJob, Setting
 
 HB = "https://watch.example.org/ping/911f7b7a-4644-4bfa-aa48-987388bac60d"
 RUN = "https://watch.example.org/ping/0a1b2c3d-4644-4bfa-aa48-987388bac60d"
@@ -67,6 +67,25 @@ def test_heartbeat_reports_a_silent_worker_as_failure(wd, monkeypatch):
     assert p.sent[-1][0] == HB and "worker seen 30 s ago" in p.sent[-1][1]
     last = client.get("/api/settings/watchdog").json()["heartbeat"]["last"]
     assert last["ok"] is True and last["sent"] == "success"
+
+
+def test_heartbeat_tolerates_a_worker_busy_with_a_long_job(wd, monkeypatch):
+    env, client, h, ctx = wd
+    ctx.secrets.set(watchdog.SECRETS["heartbeat"], HB)
+    p = Pings(monkeypatch)
+    with ctx.session_factory() as s:
+        s.add(Setting(key="worker.last_seen", value=str(ctx.clock() - 25 * 60)))   # Claim vor 25 min, seither still
+        job = ScanJob(target_type="system", status="running", claimed_at=ctx.clock() - 25 * 60)
+        s.add(job)
+        s.commit()
+        job_id = job.id
+    watchdog.heartbeat(ctx)
+    assert p.sent[-1][0] == HB and "busy with a scan job" in p.sent[-1][1]
+    with ctx.session_factory() as s:
+        s.get(ScanJob, job_id).status = "done"
+        s.commit()
+    watchdog.heartbeat(ctx)   # ohne laufenden Job: 25 min Stille ist ein Ausfall
+    assert p.sent[-1][0] == HB + "/fail"
 
 
 def test_runs_ping_start_then_success_or_fail_with_reason(wd, monkeypatch):
