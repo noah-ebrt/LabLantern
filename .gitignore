@@ -39,3 +39,4 @@ dist/
 /.ignore
 /agent/.ignore
 /serverStatusLed.rar
+/brag-output*
