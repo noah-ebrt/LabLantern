@@ -40,6 +40,28 @@ function add(kind, params = {}) {
 function remove(i) {
   form.checks.splice(i, 1)
 }
+// Eingefügte URL (http://drucker.lan:8080/index.html) gleich in die Felder zerlegen; der Server macht dasselbe
+function splitUrl(value) {
+  if (!String(value || '').includes('://')) return null
+  try {
+    const u = new URL(value.trim())
+    if (!['http:', 'https:'].includes(u.protocol) || !u.hostname) return null
+    return { scheme: u.protocol.slice(0, -1), host: u.hostname.replace(/^\[|\]$/g, ''), port: u.port ? Number(u.port) : null, path: u.pathname + u.search }
+  } catch {
+    return null
+  }
+}
+function targetFromUrl(c) {
+  const u = splitUrl(c.params.target)
+  if (!u) return
+  c.params.target = u.host
+  if (c.kind === 'http') Object.assign(c.params, { scheme: u.scheme, port: u.port ?? (u.scheme === 'https' ? 443 : 80), path: u.path })
+  else if (c.kind === 'tls' && u.port) c.params.port = u.port
+}
+function hostFromUrl() {
+  const u = splitUrl(form.host)
+  if (u) form.host = u.host
+}
 function onScheme(c) {
   if ([80, 443].includes(Number(c.params.port))) c.params.port = c.params.scheme === 'https' ? 443 : 80
 }
@@ -94,7 +116,7 @@ const beatUrl = (t) => `${window.location.origin}/api/health/beat/${t}`
           <span v-if="auto" class="hint">Hosts from Systems carry the name of their system.</span>
         </label>
         <label>Host (IP or name)
-          <input v-model="form.host" maxlength="253" placeholder="REDACTED" spellcheck="false" />
+          <input v-model="form.host" maxlength="2000" placeholder="REDACTED" spellcheck="false" @change="hostFromUrl" />
           <span class="hint">Target of all checks without their own target.</span>
         </label>
       </div>
@@ -127,7 +149,8 @@ const beatUrl = (t) => `${window.location.origin}/api/health/beat/${t}`
           </header>
 
           <div class="fields">
-            <label v-if="KINDS[c.kind].fields.includes('target')">Own target <input v-model="c.params.target" placeholder="host above" spellcheck="false" /></label>
+            <label v-if="KINDS[c.kind].fields.includes('target')">{{ c.kind === 'http' ? 'Own target or URL' : 'Own target' }}
+              <input v-model="c.params.target" :placeholder="c.kind === 'http' ? 'host above, or paste a URL' : 'host above'" spellcheck="false" @change="targetFromUrl(c)" /></label>
             <label v-if="KINDS[c.kind].fields.includes('fritz_target')">Device (MAC or IP) <input v-model="c.params.target" placeholder="REDACTED" spellcheck="false" /></label>
             <label v-if="KINDS[c.kind].fields.includes('scheme')">Scheme
               <select v-model="c.params.scheme" @change="onScheme(c)"><option value="http">http</option><option value="https">https</option></select>

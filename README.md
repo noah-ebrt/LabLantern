@@ -1,6 +1,6 @@
 # vulnwatch
 
-[![CI](https://github.com/noah-ebrt/vulwatch/actions/workflows/ci.yml/badge.svg)](https://github.com/noah-ebrt/vulwatch/actions/workflows/ci.yml)
+[![CI](https://github.com/noah-ebrt/vulnwatch/actions/workflows/ci.yml/badge.svg)](https://github.com/noah-ebrt/vulnwatch/actions/workflows/ci.yml)
 
 A self-hosted vulnerability monitor for a homelab or small network. One master collects inventories from small
 agents on your Linux hosts, scans host packages and every running container image, rates the findings with fixed
@@ -64,7 +64,7 @@ The worker processes untrusted input (SBOMs) and has no access to the database o
 ## Quick start
 
 ```bash
-git clone https://github.com/noah-ebrt/vulwatch.git vulnwatch && cd vulnwatch/deploy
+git clone https://github.com/noah-ebrt/vulnwatch.git vulnwatch && cd vulnwatch/deploy
 cp .env.example .env              # set VULNWATCH_BIND_IP and VULNWATCH_HOSTNAMES
 docker compose up -d --build      # first build takes a few minutes (it also builds and signs the agent)
 docker compose logs server | grep "Setup token"
@@ -96,7 +96,7 @@ offers the new version within a minute; **Update all** installs it on every host
 | --- | --- |
 | [docs/INSTALL.md](docs/INSTALL.md) | install, DNS and certificates, updates, backup and restore, moving to another host, troubleshooting |
 | [docs/AGENTS.md](docs/AGENTS.md) | adding hosts, what an agent collects, commands, updates, removal, changing the agent |
-| [docs/HEALTH.md](docs/HEALTH.md) | health monitoring: checks, thresholds, alerts, router checks, heartbeat, API for status LEDs and other devices |
+| [docs/HEALTH.md](docs/HEALTH.md) | health monitoring: checks, thresholds, alerts, router checks, heartbeat, API and webhooks for status LEDs and other devices |
 | [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) | notifications, schedule and report frequency, snooze and exclusions, offsite watchdog, exposure sources (NPM, Traefik, Cloudflare Tunnel, FRITZ!Box, OPNsense, UniFi), TrueNAS, Home Assistant, Proxmox VE, Synology DSM and OPNsense, collector scripts, version check, AI early warning, sharp drop alarm, configuration as JSON, Prometheus, what leaves your network |
 | [collectors/README.md](collectors/README.md) | collector scripts for Unraid, Synology and OpenWrt, and the report format for your own |
 | [SECURITY.md](SECURITY.md) | threat model: what a compromised master, agent or worker can and cannot do |

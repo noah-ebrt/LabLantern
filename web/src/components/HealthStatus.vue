@@ -13,7 +13,8 @@ const props = defineProps({ data: { type: Object, required: true }, refresh: { t
 const emit = defineEmits(['configure'])
 
 const FILTERS = [['all', 'All'], ['problems', 'Problems'], ['critical', 'Critical']]
-const filter = ref('all')
+// Standard: nur kritische Hosts (die, bei denen ein Ausfall alarmiert); ohne kritische Hosts alle
+const filter = ref(props.data.monitors.some((m) => m.critical) ? 'critical' : 'all')
 const open = ref(null)
 const ORDER = { down: 0, degraded: 1, unknown: 2, up: 3, paused: 4 }
 

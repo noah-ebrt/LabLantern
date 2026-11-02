@@ -22,6 +22,26 @@ onMounted(async () => {
   }
 })
 
+// Liest das Gerät sofort statt erst im 6-Stunden-Takt; HostCoverage hängt am Schlüssel und lädt mit neu
+const reading = ref(false)
+const readNotice = ref('')
+const readFailed = ref('')
+const readCount = ref(0)
+async function readNow() {
+  reading.value = true
+  readNotice.value = readFailed.value = ''
+  try {
+    const r = await api.post(`/api/settings/appliances/${props.systemId}/test`)
+    if (r.ok) readNotice.value = `Read, ${r.findings} open update(s) or alert(s).`
+    system.value = await api.get(`/api/systems/${props.systemId}`)
+    readCount.value++
+  } catch (e) {
+    readFailed.value = e.message
+  } finally {
+    reading.value = false
+  }
+}
+
 const data = computed(() => system.value?.inventory?.connector || {})
 const kind = computed(() => system.value?.host_type)
 const readError = computed(() => system.value?.collection_errors?.connector)
@@ -61,9 +81,14 @@ const iso = (d) => d?.toISOString()
       <p v-if="readError" class="message error">Last read failed: {{ readError }}</p>
 
       <p class="subtext">Problems also appear as <RouterLink :to="{ path: '/funde', query: { source: 'appliances', q: system.name } }" @click="emit('close')">findings</RouterLink>.
-        Read every 6 hours; Test in the host list reads now.</p>
+        Read every 6 hours.</p>
+      <div class="cmd-bar">
+        <button class="btn-sm primary" data-test="read-now" :disabled="reading" @click="readNow">{{ reading ? 'Reading…' : 'Read now' }}</button>
+        <span v-if="readNotice" class="subtext">{{ readNotice }}</span>
+        <span v-if="readFailed" class="text-danger">{{ readFailed }}</span>
+      </div>
 
-      <HostCoverage :system-id="systemId" />
+      <HostCoverage :key="readCount" :system-id="systemId" />
 
       <template v-if="data.storage">
         <h3>Storage</h3>
@@ -183,5 +208,6 @@ const iso = (d) => d?.toISOString()
 h3 { margin-top: 1.25rem; }
 .kv th { text-align: left; font-weight: 500; color: var(--muted); width: 14rem; }
 .text-warning { color: var(--med); }
+.cmd-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0.5rem 0; }
 .sort { font-size: 0.75rem; font-weight: 400; margin-left: 0.5rem; }
 </style>

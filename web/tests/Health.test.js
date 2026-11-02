@@ -2,7 +2,9 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { setCsrf } from '../src/api.js'
+import HealthApiSettings from '../src/components/HealthApiSettings.vue'
 import HealthMonitorForm from '../src/components/HealthMonitorForm.vue'
+import HealthStatus from '../src/components/HealthStatus.vue'
 import PageTabs from '../src/components/PageTabs.vue'
 import HealthView from '../src/views/HealthView.vue'
 
@@ -33,7 +35,10 @@ beforeEach(() => {
         monitors: [MON], incidents: [{ monitor_id: 1, name: 'pve', ts: 1800000000, detail: '' }], fritz: false })
     }
     if (url === '/api/health/options') return json(OPTIONS)
+    if (url === '/api/health/tokens' && init.method === 'POST') return json({ id: 1, token: 'vwh_secret' })
     if (url === '/api/health/tokens') return json([])
+    if (url === '/api/health/webhooks' && init.method === 'POST') return json({ id: 1, secret: 'vwhs_key' })
+    if (url === '/api/health/webhooks') return json([])
     if (url === '/api/health/monitors' && init.method === 'POST') return json({ id: 2, slug: 'nas', heartbeat_tokens: {} })
     return json({}, 404)
   }))
@@ -92,6 +97,25 @@ describe('HealthView', () => {
   })
 })
 
+describe('HealthStatus', () => {
+  const data = (monitors) => ({ engine: { ok: true, last_tick: 1 }, summary: { up: 1, degraded: 0, down: 1, unknown: 0, paused: 0, total: 2 },
+    monitors, incidents: [], fritz: false })
+  const printer = { ...MON, id: 2, name: 'printer', slug: 'printer', critical: false, state: 'up' }
+
+  it('lists only critical hosts by default, all of them on request', async () => {
+    const w = mount(HealthStatus, { props: { data: data([MON, printer]) }, global: { plugins: [router()] } })
+    expect(w.find('.seg-btn.active').text()).toBe('Critical')
+    expect(w.findAll('.row .name').map((n) => n.text())).toEqual(['pve'])
+    await w.findAll('.seg-btn').find((b) => b.text() === 'All').trigger('click')
+    expect(w.findAll('.row .name').map((n) => n.text())).toEqual(['pve', 'printer'])
+  })
+
+  it('starts on All when no host is critical', () => {
+    const w = mount(HealthStatus, { props: { data: data([printer]) }, global: { plugins: [router()] } })
+    expect(w.find('.seg-btn.active').text()).toBe('All')
+  })
+})
+
 describe('HealthMonitorForm', () => {
   it('offers FRITZ!Box checks only with the connector and posts the generated config', async () => {
     const w = mount(HealthMonitorForm, { props: { options: OPTIONS }, global: { plugins: [router()] } })
@@ -108,5 +132,70 @@ describe('HealthMonitorForm', () => {
     expect(post.body.name).toBe('NAS')
     expect(post.body.checks.map((c) => [c.kind, c.params.port ?? null])).toEqual([['ping', null], ['tcp', 445]])
     expect(w.emitted('saved')).toBeTruthy()
+  })
+
+  it('splits a pasted URL into host, scheme, port and path', async () => {
+    const w = mount(HealthMonitorForm, { props: { options: OPTIONS }, global: { plugins: [router()] } })
+    await w.find('input[placeholder="REDACTED"]').setValue('http://REDACTED/index.html')
+    await w.find('input[placeholder="REDACTED"]').trigger('change')
+    expect(w.find('input[placeholder="REDACTED"]').element.value).toBe('REDACTED')
+
+    await w.findAll('.chip').find((b) => b.text() === 'HTTPS').trigger('click')
+    const target = w.find('input[placeholder="host above, or paste a URL"]')
+    await target.setValue('http://printer.lan:8080/status?x=1')
+    await target.trigger('change')
+    expect(target.element.value).toBe('printer.lan')
+    const fields = w.findAll('.check').at(-1)
+    expect(fields.find('select').element.value).toBe('http')
+    expect(fields.find('input[type="number"]').element.value).toBe('8080')
+    expect(fields.find('input[placeholder="/"]').element.value).toBe('/status?x=1')
+  })
+})
+
+describe('HealthApiSettings', () => {
+  it('shows a new token and a new webhook key once, without examples', async () => {
+    const w = mount(HealthApiSettings)
+    await flushPromises()
+    expect(w.text()).not.toContain('ESP32')
+    expect(w.find('.cmd-block').exists()).toBe(false)
+
+    await w.find('input[aria-label="Token name"]').setValue('LED')
+    await w.findAll('form')[0].trigger('submit')
+    await flushPromises()
+    expect(w.find('.cmd-text').text()).toBe('vwh_secret')
+    expect(w.text()).toContain('Token for LED · shown only now')
+
+    await w.find('input[aria-label="Webhook name"]').setValue('Shelf')
+    await w.find('input[aria-label="Webhook URL"]').setValue('http://192.168.1.50/hook')
+    await w.findAll('form')[1].trigger('submit')
+    await flushPromises()
+    expect(calls.find((c) => c.url === '/api/health/webhooks' && c.method === 'POST').body).toEqual({
+      name: 'Shelf', url: 'http://192.168.1.50/hook', events: ['state_changed', 'engine_down', 'engine_up'], monitors: [], heartbeat_min: 0 })
+    expect(w.find('.cmd-text').text()).toBe('vwhs_key')
+    expect(w.text()).toContain('Signing key for Shelf')
+  })
+
+  it('edits a webhook’s filters without asking for the URL again', async () => {
+    const hook = { id: 7, name: 'HA', target: 'http://ha.lan:8123', created_at: 1800000000, events: ['state_changed'],
+      monitors: ['nas'], heartbeat_min: 5, last_sent: null, last_event: '', last_error: '' }
+    const base = fetch.getMockImplementation()
+    fetch.mockImplementation(async (url, init = {}) => {
+      if (url === '/api/health/webhooks' && (init.method || 'GET') === 'GET') { calls.push({ url, method: 'GET', body: null }); return json([hook]) }
+      if (url === '/api/health/webhooks/7') { calls.push({ url, method: init.method, body: JSON.parse(init.body) }); return json({ ok: true }) }
+      return base(url, init)
+    })
+    const w = mount(HealthApiSettings)
+    await flushPromises()
+    expect(w.text()).toContain('state changes · hosts nas · heartbeat every 5 min')
+
+    await w.findAll('button').find((b) => b.text() === 'Edit').trigger('click')
+    expect(w.find('input[aria-label="Only these hosts"]').element.value).toBe('nas')
+    await w.find('input[aria-label="Only these hosts"]').setValue('nas, pve')
+    await w.find('input[value="engine_down"]').setValue(true)
+    await w.find('form.hook-form').trigger('submit')
+    await flushPromises()
+    expect(calls.find((c) => c.method === 'PUT').body).toEqual({
+      name: 'HA', url: '', events: ['state_changed', 'engine_down'], monitors: ['nas', 'pve'], heartbeat_min: 5 })
+    expect(w.text()).toContain('HA saved.')
   })
 })

@@ -45,13 +45,14 @@ TOPICS_BY_TABLE = {
     "health_checks": "health",
     "health_events": "health",
     "health_tokens": "health",
+    "health_webhooks": "health",
 }
 # Spalten, die sich ständig ändern, ohne dass die Anzeige es braucht (der Long-Poll schreibt jede Sekunde).
 # Ob ein Agent dadurch verbunden/getrennt wirkt, meldet der Wächter.
 IGNORED_COLUMNS = {"systems": {"last_contact"},
                    # jede Prüfung schreibt alle paar Sekunden Messwerte; gemeldet wird nur ein Zustandswechsel
                    "health_checks": {"fails", "last_checked", "last_ok", "latency_ms", "error"},
-                   "health_tokens": {"last_used"}}
+                   "health_tokens": {"last_used", "last_ip"}}
 IGNORED_SETTINGS = {"worker.last_seen"}
 
 
