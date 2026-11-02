@@ -14,6 +14,7 @@ from sqlalchemy import select
 from starlette.concurrency import run_in_threadpool
 
 from . import auth
+from .agent_api import MAX_HOST_SBOM_BYTES, sbom_room
 from .containers import learn_baseline
 from .context import Context
 from .guards import Guards, client_ip
@@ -71,10 +72,10 @@ def _image_id(c: CollectorContainerIn) -> str:
     return c.image_id or "sha256:" + hashlib.sha256(c.image.encode()).hexdigest()
 
 
-def _write(path, data: dict) -> None:
+def _write(path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data), encoding="utf-8")
+    tmp.write_text(text, encoding="utf-8")
     os.replace(tmp, path)
 
 
@@ -105,13 +106,18 @@ def build_collector_router(ctx: Context, guards: Guards) -> APIRouter:
             system = s.get(System, system_id)
             sbom, ecosystems = packages_to_sbom(system.name, report.os.id, report.os.name, report.os.version,
                                                 [p.model_dump() for p in report.packages])
-            _write(sbom_path(ctx, system.id), sbom)
+            _write(sbom_path(ctx, system.id), json.dumps(sbom))
             containers = []
+            running = {_image_id(c) for c in report.containers}
             for c in report.containers:
                 iid = _image_id(c)
                 if c.sbom is not None:
-                    _write(image_sbom_path(ctx, system.id, iid), c.sbom)
-                    s.merge(ImageSbom(system_id=system.id, image_id=iid, error="", created_at=now))
+                    path, data = image_sbom_path(ctx, system.id, iid), json.dumps(c.sbom)
+                    error = "" if sbom_room(path, len(data), running) else \
+                        f"image SBOMs of this device exceed {MAX_HOST_SBOM_BYTES >> 30} GB"
+                    if not error:
+                        _write(path, data)
+                    s.merge(ImageSbom(system_id=system.id, image_id=iid, error=error, created_at=now))
                 containers.append({"name": c.name, "image": c.image, "image_id": iid, "repo_digests": c.repo_digests,
                                    "state": "running", "runtime": "docker", "labels": {}, "ports": []})
             system.last_seen = system.sbom_updated_at = now

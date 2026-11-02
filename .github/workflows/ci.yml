@@ -1,4 +1,5 @@
-# Tests, Lizenz- und Leak-Prüfung auf GitHub-eigenen Runnern. Keine Secrets außer der Musterliste für die
+# Tests, Lizenz- und Leak-Prüfung auf GitHub-eigenen Runnern. Actions auf Commit-Hashes festgelegt (ein umgehängter Tag
+# käme sonst an die Musterliste). Keine Secrets außer der Musterliste für die
 # Leak-Prüfung; bei Pull Requests aus Forks fehlt sie, dann laufen nur die allgemeinen Muster.
 name: CI
 
@@ -17,8 +18,8 @@ jobs:
       run:
         working-directory: server
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5.1.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6.3.0
         with:
           python-version: "3.12"
       - run: pip install --require-hashes -r requirements-dev.txt
@@ -30,8 +31,8 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444  # v5.0.0
         with:
           node-version: "22"
       - run: npm ci
@@ -44,8 +45,8 @@ jobs:
       run:
         working-directory: agent
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5.1.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16  # v6.5.0
         with:
           go-version-file: agent/go.mod
       - run: go vet ./...
@@ -62,7 +63,7 @@ jobs:
   leaks:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5.1.0
       - run: scripts/check-leaks.sh
         env:
           LEAK_PATTERNS: ${{ secrets.LEAK_PATTERNS }}

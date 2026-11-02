@@ -352,7 +352,7 @@ func (e Env) update(version string) Result {
 	defer os.RemoveAll(work)
 	// erst in ein Verzeichnis kopieren, das nur root beschreiben kann; danach prüfen und genau diese Kopie installieren
 	for _, f := range []string{"manifest.json", "manifest.json.sig", name} {
-		data, err := jobs.ReadNoFollow(filepath.Join(e.StageDir, f), maxPackage)
+		data, err := jobs.ReadNoFollowIn(e.StageDir, f, maxPackage)
 		if err != nil {
 			return Result{Status: "failed", Output: fmt.Sprintf("%s: %v", f, err)}
 		}

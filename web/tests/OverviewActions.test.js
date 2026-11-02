@@ -77,9 +77,9 @@ describe('Overview: what to do and early warnings', () => {
   it('opens the details of an exposure source on click', async () => {
     const base = overview
     const sources = [{ key: 'fritzbox', label: 'FRITZ!Box', status: 'ok', detail: 'read just now', exposed: 1, unmatched: 1 }]
-    const detail = { ...sources[0], host: { url: 'http://REDACTED:81', system_id: 1, system_name: 'REDACTED', ip: 'REDACTED' },
+    const detail = { ...sources[0], host: { url: 'http://192.0.2.2:81', system_id: 1, system_name: 'server1', ip: '192.0.2.2' },
       items: [{ system_id: 3, system_name: 'mini', name: '(host)', via: ['port 22'] }],
-      unmatched_items: [{ what: 'TCP 8080 → REDACTED:80', why: 'no system with this address' }] }
+      unmatched_items: [{ what: 'TCP 8080 → 192.0.2.40:80', why: 'no system with this address' }] }
     vi.stubGlobal('fetch', vi.fn(async (url) => url === '/api/overview' ? json({ ...base(), exposure_sources: sources })
       : url === '/api/overview/exposure/fritzbox' ? json(detail) : json([])))
     const w = mount(OverviewView, { global: { stubs: { RouterLink: true } }, attachTo: document.body })
@@ -87,8 +87,8 @@ describe('Overview: what to do and early warnings', () => {
     await w.get('[data-test=exposure-sources] tbody tr').trigger('click')
     await flushPromises()
     const link = w.get('[data-test=exposure-host] a')
-    expect(link.attributes('href')).toBe('http://REDACTED:81')
-    expect(link.text()).toContain('REDACTED:81')
+    expect(link.attributes('href')).toBe('http://192.0.2.2:81')
+    expect(link.text()).toContain('192.0.2.2:81')
     expect(w.get('[data-test=exposure-items]').text()).toContain('mini')
     expect(w.get('[data-test=exposure-items]').text()).toContain('host itself')
     expect(w.get('[data-test=exposure-unmatched]').text()).toContain('no system with this address')

@@ -265,10 +265,11 @@ def probe_http(spec: ProbeSpec) -> ProbeResult:
                 u = urllib.parse.urlsplit(nxt)
                 if u.scheme not in ("http", "https") or not u.hostname:
                     return ProbeResult(False, _ms(t0), "redirect to an unsupported address")
-                if u.hostname != host:
-                    headers.pop("Authorization", None)   # Zugangsdaten nie an einen anderen Host weiterreichen
-                scheme, host = u.scheme, u.hostname
-                port = u.port or (443 if u.scheme == "https" else 80)
+                nxt_port = u.port or (443 if u.scheme == "https" else 80)
+                if (u.scheme, u.hostname, nxt_port) != (scheme, host, port):
+                    # Zugangsdaten nie an eine andere Gegenstelle weiterreichen, auch nicht ohne TLS an denselben Host
+                    headers.pop("Authorization", None)
+                scheme, host, port = u.scheme, u.hostname, nxt_port
                 path = (u.path or "/") + (f"?{u.query}" if u.query else "")
                 continue
             latency = _ms(t0)

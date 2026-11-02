@@ -19,6 +19,7 @@ from .connectors import _URL, PortIndex, _note
 from .context import Context
 from .guards import Guards
 from .models import System, put_setting, setting
+from .secrets_store import kept_secret_error
 
 log = logging.getLogger("vulnwatch.fritzbox")
 
@@ -166,8 +167,11 @@ def build_fritzbox_router(ctx: Context, guards: Guards) -> APIRouter:
         url = body.url.strip()
         if not _URL.match(url):
             raise HTTPException(422, "URL must look like http://192.168.178.1:49000")
-        if body.password is None and not ctx.secrets.get(FRITZ_SECRET):
-            raise HTTPException(422, "Password required")
+        with ctx.session_factory() as s:
+            old = (setting(s, FRITZ_CONFIG) or {}).get("url")
+        if body.password is None and (
+                err := kept_secret_error(ctx.secrets, FRITZ_SECRET, old, tr064_url(url), "password")):
+            raise HTTPException(422, err)
         if body.password is not None:
             ctx.secrets.set(FRITZ_SECRET, body.password)
         with ctx.session_factory() as s:

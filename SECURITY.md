@@ -10,7 +10,7 @@ something the attacker does not have at that point.
 |---|---|
 | Web UI | LAN only, behind Caddy with its own internal CA; login with password plus TOTP or passkey; CSRF token; rate limits |
 | Live updates | Server-sent events only with a valid session (cookie, same origin), the session is re-checked continuously and logging out ends the stream; the stream carries topic names only, data comes through the normal API; at most 50 connections |
-| Secrets | AES-256-GCM with a master key that exists only in the server container; fields are write-only |
+| Secrets | AES-256-GCM with a master key that exists only in the server container; fields are write-only; a stored password or token is only reused for the same address (scheme, host, port): a changed address needs it entered again, so a stolen session cannot redirect it |
 | Worker | own container without the data and key volumes, job API only |
 | Agent connection | the agent connects out (no listening port), TLS against the pinned Caddy CA, the agent token is stored only as a hash on the server |
 | Image SBOMs | stored per system: an agent can only deliver the SBOMs of its own host |
@@ -27,14 +27,20 @@ something the attacker does not have at that point.
 
 | Attacker controls | can | cannot |
 |---|---|---|
-| the master's server container | read inventory and findings, request reports, run the fixed queries | reboot or update hosts (no passkey), ship foreign agent code (no release key), run shell commands (there are none), slip new passkeys to the agents (needs the signature of a trusted passkey) |
+| the master's server container | read inventory and findings, request reports, run the fixed queries; at the admin's next passkey touch (even a login) obtain a signature over a command or passkey list of its choice (see Known limits): then reboot hosts (at most once per 30 minutes each), remove agents, or add its own passkey to the agents' list | act on the hosts before the admin touches a passkey, ship foreign agent code (no release key), run shell commands (there are none) |
 | one `vulnwatch-agentd` | forge its own reports, trigger collection and queries on its own host | become root, reboot or update without a valid passkey signature, attack other hosts or the master |
 | an attacker in the LAN | announce a master, send pairing requests (rate limited) | pass pairing (the code does not match, the admin must approve), read traffic (pinned TLS) |
-| root on the master's Docker host | everything the server container can, plus sign agent releases (key volume) | update hosts without a passkey touch: every update still needs the admin's passkey signature |
+| root on the master's Docker host | everything the server container can, plus sign agent releases (key volume): combined with the admin's next passkey touch this is root on every host ("Update all") | update hosts before the admin touches a passkey again |
 | the passkey store (e.g. Vaultwarden) | confirm reboots and updates | create commands without the admin login; updates stay bound to the release signature |
 
 ## Known limits
 
+- **A passkey prompt does not show what it signs.** The server chooses the challenge of every passkey prompt, the
+  login included. A taken-over master can therefore turn the next touch into a signature over a command or passkey
+  list of its choice. Log in with password and TOTP, and touch a passkey only for an action you just started yourself.
+  If you suspect the master was taken over, remove each agent together with its configuration
+  (`dpkg --purge vulnwatch-agent` or `rpm -e vulnwatch-agent`) and set it up again with the command from the UI; that
+  also resets the passkey list the host trusts.
 - **First passkey list:** a host set up before there is a passkey (or without the command from the UI) accepts the
   first list unchecked; a compromised master could then give it a list of its own. Create the first passkey before
   setting up hosts.

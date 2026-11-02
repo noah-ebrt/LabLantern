@@ -28,6 +28,7 @@ from .connectors import NPM_STATE, sync_cert_findings
 from .context import Context
 from .guards import Guards
 from .models import Finding, System, put_setting, setting
+from .secrets_store import kept_secret_error
 from .rules import (BATTERY_LOW_PERCENT, SCRUB_GRACE_DAYS, classify_appliance_alert, classify_backup_age,
                     classify_disk, classify_product, classify_task_age, classify_update)
 
@@ -903,8 +904,9 @@ def build_appliances_router(ctx: Context, guards: Guards) -> APIRouter:
         with ctx.session_factory() as s:
             all_cfg = setting(s, CONFIG_KEY) or {}
             old = all_cfg.get(str(sid), {}) if sid else {}
-            if sid is None and body.token is None:
-                raise HTTPException(422, "Token required")
+            if body.token is None and (sid is None or (
+                    err := kept_secret_error(ctx.secrets, secret_name(sid), old.get("url"), url, "token"))):
+                raise HTTPException(422, "Token required" if sid is None else err)
             fp = old.get("fingerprint", "")
             if url.startswith("https://") and (not fp or old.get("url") != url or body.trust_certificate):
                 try:

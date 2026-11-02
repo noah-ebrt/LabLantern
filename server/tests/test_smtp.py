@@ -44,11 +44,11 @@ def test_save_then_get_shows_settings_but_never_the_password(admin, smtp_server)
 def test_omitting_password_keeps_the_stored_one(admin, smtp_server):
     env, client, h = admin
     client.put("/api/integrations/smtp", json=smtp_body(smtp_server.port), headers=h)
-    body = smtp_body(smtp_server.port, host="localhost")
+    body = smtp_body(smtp_server.port, to_addr="ops@example.org")   # gleicher Server (anderer: test_secret_retarget)
     del body["password"]
     assert client.put("/api/integrations/smtp", json=body, headers=h).status_code == 200
     assert env.app.state.ctx.secrets.get("smtp.password") == SMTP_PASS
-    assert client.get("/api/integrations/smtp").json()["host"] == "localhost"
+    assert client.get("/api/integrations/smtp").json()["to_addr"] == "ops@example.org"
 
 
 def test_invalid_settings_are_rejected(admin, smtp_server):

@@ -84,6 +84,11 @@ def build_integrations_router(ctx: Context, guards: Guards) -> APIRouter:
         new = SmtpConfig(**body.model_dump(exclude={"password"}))
         with ctx.session_factory() as s:
             old = load_smtp_config(s)
+            # gespeichertes Passwort nie an einen anderen Server (oder ohne die bisherige Verschlüsselung) schicken
+            if (body.password is None and old is not None and ctx.secrets.meta(SMTP_PASSWORD_SECRET)["set"]
+                    and (old.host.lower(), old.port, old.security) != (new.host.lower(), new.port, new.security)):
+                raise HTTPException(422, "The server changed: enter the password again "
+                                         "(a stored password is never sent to a new server)")
             changed = [k for k, v in new.__dict__.items() if old is None or getattr(old, k) != v]
             if body.password is not None:
                 changed.append("password changed")

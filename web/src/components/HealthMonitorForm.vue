@@ -116,7 +116,7 @@ const beatUrl = (t) => `${window.location.origin}/api/health/beat/${t}`
           <span v-if="auto" class="hint">Hosts from Systems carry the name of their system.</span>
         </label>
         <label>Host (IP or name)
-          <input v-model="form.host" maxlength="2000" placeholder="REDACTED" spellcheck="false" @change="hostFromUrl" />
+          <input v-model="form.host" maxlength="2000" placeholder="192.168.1.20" spellcheck="false" @change="hostFromUrl" />
           <span class="hint">Target of all checks without their own target.</span>
         </label>
       </div>

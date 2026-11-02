@@ -124,7 +124,7 @@ describe('HealthMonitorForm', () => {
     expect(fritz.text()).toContain('Integrations')
 
     await w.find('input[placeholder="e.g. TrueNAS"]').setValue('NAS')
-    await w.find('input[placeholder="REDACTED"]').setValue('192.0.2.20')
+    await w.find('input[placeholder="192.168.1.20"]').setValue('192.0.2.20')
     await w.findAll('.chip').find((b) => b.text() === 'SMB').trigger('click')
     await w.find('form').trigger('submit')
     await flushPromises()
@@ -136,9 +136,9 @@ describe('HealthMonitorForm', () => {
 
   it('splits a pasted URL into host, scheme, port and path', async () => {
     const w = mount(HealthMonitorForm, { props: { options: OPTIONS }, global: { plugins: [router()] } })
-    await w.find('input[placeholder="REDACTED"]').setValue('http://REDACTED/index.html')
-    await w.find('input[placeholder="REDACTED"]').trigger('change')
-    expect(w.find('input[placeholder="REDACTED"]').element.value).toBe('REDACTED')
+    await w.find('input[placeholder="192.168.1.20"]').setValue('http://192.0.2.39/index.html')
+    await w.find('input[placeholder="192.168.1.20"]').trigger('change')
+    expect(w.find('input[placeholder="192.168.1.20"]').element.value).toBe('192.0.2.39')
 
     await w.findAll('.chip').find((b) => b.text() === 'HTTPS').trigger('click')
     const target = w.find('input[placeholder="host above, or paste a URL"]')

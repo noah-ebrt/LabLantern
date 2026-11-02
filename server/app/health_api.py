@@ -391,7 +391,7 @@ def build_health_router(ctx: Context, guards: Guards, engine: HealthEngine) -> A
             out.append((c, params))
         return out
 
-    def _store_checks(s, m: HealthMonitor, items: list[tuple[CheckIn, dict]], tokens: dict) -> list:
+    def _store_checks(s, m: HealthMonitor, items: list[tuple[CheckIn, dict]], tokens: dict, old_host: str = "") -> list:
         """Prüfungen anlegen/ändern/entfernen. Liefert Änderungen am Geheimnisspeicher für nach dem Commit
         (der Speicher schreibt mit eigener Sitzung; vorher hielte diese Transaktion die Datenbank gesperrt)."""
         secret_ops: list[tuple[str, str | None]] = []
@@ -402,6 +402,14 @@ def build_health_router(ctx: Context, guards: Guards, engine: HealthEngine) -> A
             if c is None or c.kind != c_in.kind:
                 c = HealthCheck(monitor_id=m.id, kind=c_in.kind)
                 s.add(c)
+            elif c.kind == "http" and c_in.auth is None:
+                # gespeicherter Authorization-Header nie an eine andere Gegenstelle (oder ohne TLS) schicken
+                before = json.loads(c.params or "{}")
+                def where(p: dict, host: str) -> tuple:
+                    return (p.get("target") or host or "").lower(), p.get("scheme"), p.get("port")
+                if where(before, old_host) != where(params, m.host) and ctx.secrets.meta(secret_name(c.id))["set"]:
+                    raise HTTPException(422, "The address changed: enter the Authorization header again "
+                                             "(a stored header is never sent to a new address)")
             c.params = json.dumps(params)
             for f in ("interval_s", "retry_s", "timeout_s", "fails_degraded", "fails_down", "paused"):
                 setattr(c, f, getattr(c_in, f))
@@ -463,8 +471,9 @@ def build_health_router(ctx: Context, guards: Guards, engine: HealthEngine) -> A
                 m.slug = body.slug
             if m.system_id is None:   # Hosts aus „Systems“ tragen den Namen ihres Systems
                 m.name = body.name.strip()
+            old_host = m.host
             m.host, m.critical, m.paused = body.host.strip(), body.critical, body.paused
-            ops = _store_checks(s, m, items, tokens)
+            ops = _store_checks(s, m, items, tokens, old_host)
             ctx.audit(s, found[0].username, "health.monitor.updated", m.name)
             s.commit()
         _apply_secrets(ops)

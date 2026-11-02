@@ -20,13 +20,13 @@
 - Provider error text = provider's own message, ≤ 300 chars, key scrubbed. Format: `<Provider>: <message> (HTTP <code>)`.
 - Every write is admin-only and audited (provider id + model, never key/URL).
 - Prompts, tool schemas, `validate`, `validate_research` and `apply` stay unchanged.
-- Dependencies are hash-pinned: `uv pip compile requirements.in --generate-hashes --exclude-newer 2026-10-21T00:00:00Z --python-version 3.12 -o requirements.txt` (and the same for `requirements-dev`). uv is not installed on REDACTED, so run it via `docker run --rm -v "$PWD":/w -w /w ghcr.io/astral-sh/uv:0.9.5 pip compile …`.
+- Dependencies are hash-pinned: `uv pip compile requirements.in --generate-hashes --exclude-newer 2026-10-21T00:00:00Z --python-version 3.12 -o requirements.txt` (and the same for `requirements-dev`). uv is not installed on the master host, so run it via `docker run --rm -v "$PWD":/w -w /w ghcr.io/astral-sh/uv:0.9.5 pip compile …`.
 - Server tests: `cd server && CI=true .venv/bin/pytest -q < /dev/null`. Web tests: `cd web && CI=true npm test < /dev/null`.
 - Code comments and docstrings in German, like the surrounding code. UI copy and errors in English.
 
 ## Review Focus
 
-1. **A task's provider runs out of budget (the REDACTED case).** The task shows the provider's message and the other provider is not used. Test in Task 5: `test_failed_provider_is_not_replaced_by_another`.
+1. **A task's provider runs out of budget (the real-world case).** The task shows the provider's message and the other provider is not used. Test in Task 5: `test_failed_provider_is_not_replaced_by_another`.
 2. **Ollama model answers without a tool call / with prose around the JSON.** JSON fallback parses it, or it becomes an `unklar` item. It must never crash the pass. Test in Task 3: `test_compat_falls_back_to_json_when_tools_unsupported`, `test_compat_invalid_json_is_ai_error`.
 3. **Ollama/endpoint unreachable (PC asleep, IP changed).** Classification items become `unklar` with "… unreachable", the pass finishes, research/verify are unaffected. Test in Task 5: `test_unreachable_compat_endpoint_marks_items_unklar`.
 4. **Provider removed while tasks still point at it.** The task shows "no model — provider removed", no exception. Test in Task 4: `test_removed_provider_task_reports_error`.
@@ -241,7 +241,7 @@ Layout (reuse the existing card, field and button classes of `ClaudeSettings.vue
 **Files:**
 - Modify: `README.md` / `docs/` sections that mention the Claude API key (search `grep -rn "Claude" README.md docs/ --include=*.md`)
 
-- [ ] **Step 1: Real classify against Ollama.** Use `http://REDACTED:11434/v1` with model `qwen3.8:27b` (Noah's home PC; ask Noah to start Ollama first and check `curl -s http://REDACTED:11434/v1/models` from REDACTED). Run a short script with `server/.venv/bin/python` that builds an `OpenAIProvider(compat=True)` and calls `earlywarning.ask_ai` on one realistic advisory (e.g. a recent OpenSSH advisory text). Expected: it returns without `AiError`, and `validate` accepts it. If the first answer fails, tune only the JSON-fallback instruction, then re-run Task 3's tests.
+- [ ] **Step 1: Real classify against Ollama.** Use `http://192.0.2.99:11434/v1` with model `qwen3.8:27b` (Noah's home PC; ask Noah to start Ollama first and check `curl -s http://192.0.2.99:11434/v1/models` from the master host). Run a short script with `server/.venv/bin/python` that builds an `OpenAIProvider(compat=True)` and calls `earlywarning.ask_ai` on one realistic advisory (e.g. a recent OpenSSH advisory text). Expected: it returns without `AiError`, and `validate` accepts it. If the first answer fails, tune only the JSON-fallback instruction, then re-run Task 3's tests.
 - [ ] **Step 2: Update docs**: the provider choice, Ollama setup (`OLLAMA_HOST=0.0.0.0:11434`, firewall private network only), and that research/verify need Anthropic or OpenAI.
 - [ ] **Step 3: Full test run**: server suite and web suite, both PASS.
 - [ ] **Step 4: Commit** `docs: AI provider choice and Ollama setup`

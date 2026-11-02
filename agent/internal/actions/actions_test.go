@@ -198,6 +198,24 @@ func TestUpdateInstallsOnlyTheSignedConfirmedNewerPackage(t *testing.T) {
 	}
 }
 
+func TestUpdateRefusesASymlinkedStageDir(t *testing.T) {
+	f := setup(t)
+	f.run(t, Request{Kind: "passkeys", Envelope: f.trustEnvelope(1, f.key)})
+	f.stage(t, "0.8.0", []byte("deb-0.8.0"), false)
+	// Der Daemon besitzt das Verzeichnis und biegt es auf eine andere Stelle um
+	elsewhere := filepath.Join(t.TempDir(), "elsewhere")
+	if err := os.Rename(f.env.StageDir, elsewhere); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(elsewhere, f.env.StageDir); err != nil {
+		t.Fatal(err)
+	}
+	env := f.cmd("update_agent", map[string]any{"version": "0.8.0"}, fmt.Sprintf("%032d", 1))
+	if r := f.run(t, Request{Kind: "command", Envelope: env, Assertion: sign(f.key, env)}); r.Status == "done" || len(f.ran) != 0 {
+		t.Fatalf("installed from a symlinked stage directory: %+v ran=%v", r, f.ran)
+	}
+}
+
 func TestOneTouchUpdatesListedHostsButNeverReboots(t *testing.T) {
 	f := setup(t)
 	f.run(t, Request{Kind: "passkeys", Envelope: f.trustEnvelope(1, f.key)})

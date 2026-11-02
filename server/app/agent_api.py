@@ -34,6 +34,7 @@ SAFE_LABEL_KEYS = frozenset({"traefik.enable"})
 INIT_WINDOW = 180.0     # so lange darf ein frisch freigegebener Agent bis zum ersten Report brauchen
 STALE_HOURS = 24
 ONLINE_WINDOW = 120.0   # letzter Long-Poll jünger als das: verbunden
+MAX_HOST_SBOM_BYTES = 2 << 30   # alle Image-SBOMs eines Hosts zusammen: ein übernommener Agent füllt nicht die Platte
 
 
 def system_state(ctx: Context, r: System) -> str:
@@ -259,6 +260,26 @@ def _package_part(base: str, sums: dict[str, str | None]) -> str | None:
 
 def _sbom_path(ctx: Context, system_id: int):
     return ctx.settings.data_dir / "sboms" / f"{system_id}.json"
+
+
+def sbom_room(path, size: int, running: set[str]) -> bool:
+    """Passt eine Image-SBOM dieser Größe noch in den Platz des Hosts? Wenn nicht, zuerst die SBOMs der Images
+    löschen, die laut Inventar nicht mehr laufen."""
+    def used() -> int:
+        total = 0
+        for f in path.parent.glob("*.json"):
+            if f != path:
+                try:
+                    total += f.stat().st_size
+                except OSError:
+                    pass
+        return total
+    if not path.parent.is_dir() or used() + size <= MAX_HOST_SBOM_BYTES:
+        return True
+    for f in path.parent.glob("*.json"):
+        if f"sha256:{f.stem}" not in running:
+            f.unlink(missing_ok=True)
+    return used() + size <= MAX_HOST_SBOM_BYTES
 
 
 def agent_system(s, authorization: str | None) -> System:
@@ -498,16 +519,20 @@ def build_agent_router(ctx: Context, guards: Guards) -> APIRouter:
             system = agent_system(s, authorization)
             if not IMAGE_ID.match(body.image_id):
                 raise HTTPException(422, "invalid image ID")
-            if body.image_id not in {i["id"] for i in system_images(system)}:
+            running = {i["id"] for i in system_images(system)}
+            if body.image_id not in running:
                 raise HTTPException(403, "According to the inventory this image does not run on this host")
             path = image_sbom_path(ctx, system.id, body.image_id)
             row = s.get(ImageSbom, (system.id, body.image_id)) or ImageSbom(system_id=system.id, image_id=body.image_id)
+            data = json.dumps(body.sbom) if body.sbom is not None else ""
             if body.sbom is None:
                 row.error = body.error.strip()[:300] or "agent sent no SBOM"
+            elif not sbom_room(path, len(data), running):
+                row.error = f"image SBOMs of this host exceed {MAX_HOST_SBOM_BYTES >> 30} GB"
             else:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 tmp = path.with_suffix(".tmp")
-                tmp.write_text(json.dumps(body.sbom), encoding="utf-8")
+                tmp.write_text(data, encoding="utf-8")
                 os.replace(tmp, path)
                 row.error = ""
             row.created_at = datetime.now(timezone.utc)

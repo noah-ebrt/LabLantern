@@ -24,6 +24,7 @@ from .containers import HOST, containers_of, host_ports_of
 from .context import Context
 from .guards import Guards
 from .models import Finding, System, put_setting, setting
+from .secrets_store import kept_secret_error
 from .publicdns import CHECK_FAILED, OVERRIDES_KEY, classify_hostname, decide, load_overrides
 from .rules import classify_certificate
 
@@ -308,8 +309,10 @@ def build_connectors_router(ctx: Context, guards: Guards) -> APIRouter:
         url = body.url.strip()
         if not _URL.match(url):
             raise HTTPException(422, "URL must look like http://npm.lan:81")
-        if body.password is None and not ctx.secrets.get(NPM_SECRET):
-            raise HTTPException(422, "Password required")
+        with ctx.session_factory() as s:
+            old = (setting(s, NPM_CONFIG) or {}).get("url")
+        if body.password is None and (err := kept_secret_error(ctx.secrets, NPM_SECRET, old, url, "password")):
+            raise HTTPException(422, err)
         if body.password is not None:
             ctx.secrets.set(NPM_SECRET, body.password)
         with ctx.session_factory() as s:

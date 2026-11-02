@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -48,6 +49,28 @@ def migrate_master_key(legacy: Path, target: Path) -> None:
         with os.fdopen(fd, "wb") as f:
             f.write(old)
     legacy.unlink()
+
+
+def same_target(old_url: str | None, new_url: str) -> bool:
+    """Gleiche Gegenstelle (Schema, Host, Port). Nur dann gilt ein gespeichertes Geheimnis ohne neue Eingabe weiter:
+    Sonst könnte eine gestohlene Sitzung die Adresse umbiegen und sich das Passwort zuschicken lassen."""
+    def target(url: str) -> tuple:
+        p = urlsplit(url.strip())
+        scheme = p.scheme.lower()
+        return scheme, (p.hostname or "").lower(), p.port or {"http": 80, "https": 443}.get(scheme)
+    try:
+        return bool(old_url) and target(old_url) == target(new_url)
+    except ValueError:   # Port außerhalb 0–65535
+        return False
+
+
+def kept_secret_error(store: "SecretStore", name: str, old_url: str | None, new_url: str, what: str) -> str | None:
+    """Fehlertext, wenn ein Formular ohne neues Geheimnis gespeichert wird, das gespeicherte aber nicht gelten darf."""
+    if not store.meta(name)["set"]:
+        return f"{what.capitalize()} required"
+    if not same_target(old_url, new_url):
+        return f"The address changed: enter the {what} again (a stored {what} is never sent to a new address)"
+    return None
 
 
 def _seal(key: bytes, plaintext: bytes, aad: bytes) -> bytes:

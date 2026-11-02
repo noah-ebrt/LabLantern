@@ -104,11 +104,11 @@ def test_params_are_validated():
 
 
 def test_a_pasted_url_is_split_into_the_fields():
-    p = clean_params("http", {"target": "http://REDACTED/index.html", "scheme": "https", "port": 443})
-    assert (p["target"], p["scheme"], p["port"], p["path"]) == ("REDACTED", "http", 80, "/index.html")
+    p = clean_params("http", {"target": "http://192.0.2.39/index.html", "scheme": "https", "port": 443})
+    assert (p["target"], p["scheme"], p["port"], p["path"]) == ("192.0.2.39", "http", 80, "/index.html")
     p = clean_params("http", {"target": "https://printer.lan:8443/status?x=1"})
     assert (p["target"], p["scheme"], p["port"], p["path"]) == ("printer.lan", "https", 8443, "/status?x=1")
-    assert clean_params("ping", {"target": "http://REDACTED/"})["target"] == "REDACTED"
+    assert clean_params("ping", {"target": "http://192.0.2.39/"})["target"] == "192.0.2.39"
     assert clean_params("tls", {"target": "https://nas.lan:5001/"})["port"] == 5001
     for bad in ("ftp://printer.lan/", "http://", "http://printer.lan:99999/"):
         with pytest.raises(ValueError):
@@ -117,14 +117,14 @@ def test_a_pasted_url_is_split_into_the_fields():
 
 def test_monitor_host_may_be_a_url(hw):
     env, client, h, *_ = hw
-    r = create(client, h, host="http://REDACTED/index.html",
-               checks=[{"kind": "http", "params": {"target": "http://REDACTED:8080/index.html"}}])
+    r = create(client, h, host="http://192.0.2.39/index.html",
+               checks=[{"kind": "http", "params": {"target": "http://192.0.2.39:8080/index.html"}}])
     mon = client.get("/api/health/overview").json()["monitors"][0]
-    assert r["slug"] == "nas" and mon["host"] == "REDACTED"
+    assert r["slug"] == "nas" and mon["host"] == "192.0.2.39"
     with env.app.state.ctx.session_factory() as s:
         c = s.scalars(select(HealthCheck)).one()
         params = json.loads(c.params)
-    assert (params["target"], params["scheme"], params["port"], params["path"]) == ("REDACTED", "http", 8080, "/index.html")
+    assert (params["target"], params["scheme"], params["port"], params["path"]) == ("192.0.2.39", "http", 8080, "/index.html")
 
 
 # --- Engine über die API ---

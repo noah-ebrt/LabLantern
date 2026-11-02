@@ -7,7 +7,7 @@ Date: 2026-10-30 · Status: draft for review
 vulnwatch is released publicly. Today every AI feature is hard-wired to Anthropic: one API key, Haiku for
 classification, and a Sonnet model, invisible on the settings page, for web research and vendor checks. Each
 installation should be able to use the vendor it already trusts or pays for, including a model running
-locally with no cloud at all. The trigger was the Anthropic spend limit running out on REDACTED (Sonnet research used
+locally with no cloud at all. The trigger was the Anthropic spend limit running out on the master host (Sonnet research used
 up the budget, so Haiku classification failed too, shown only as "Claude API HTTP 400"). That incident also shows two
 smaller problems this work fixes: users can't see which model costs money, and provider errors get swallowed.
 
@@ -49,7 +49,7 @@ smaller problems this work fixes: users can't see which model costs money, and p
 - One block per provider type: Anthropic, OpenAI, OpenAI-compatible. Each has the same pattern as today: key stored
   encrypted and never shown again, "Test", "Remove", fetched model list (cached 24 h, "Refresh list"), and
   "last used <time> with <model> (ok/failed: <reason>)".
-- OpenAI-compatible additionally has a **base URL** and a display **name** (e.g. "Ollama on REDACTED"). The key is
+- OpenAI-compatible additionally has a **base URL** and a display **name** (e.g. "Ollama on the master host"). The key is
   optional. One custom endpoint is enough for v1 (*my call*: a list of several is a later extension; keep the data
   shape a list so it can grow).
 - Below the providers: **"Models per task"**, three dropdowns (Classify, Research, Verify). Options are grouped by

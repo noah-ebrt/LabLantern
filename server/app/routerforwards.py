@@ -30,6 +30,7 @@ from .context import Context
 from .fritzbox import match_forwards
 from .guards import Guards
 from .models import put_setting, setting
+from .secrets_store import kept_secret_error
 
 log = logging.getLogger("vulnwatch.routerforwards")
 
@@ -212,10 +213,11 @@ def build_routerforwards_router(ctx: Context, guards: Guards) -> APIRouter:
             raise HTTPException(422, f"URL must look like https://{kind}.lan (HTTPS only)")
         if kind == "opnsense" and not body.key.strip():
             raise HTTPException(422, "API key required (the secret is the second half)")
-        if body.secret is None and not ctx.secrets.get(router.secret_key):
-            raise HTTPException(422, "Secret required")
         with ctx.session_factory() as s:
             old = setting(s, router.config_key) or {}
+            if body.secret is None and (
+                    err := kept_secret_error(ctx.secrets, router.secret_key, old.get("url"), url, "secret")):
+                raise HTTPException(422, err)
             fp = old.get("fingerprint", "")
             if not fp or old.get("url") != url or body.trust_certificate:
                 try:
