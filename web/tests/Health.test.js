@@ -133,7 +133,7 @@ describe('HealthApiSettings', () => {
     await w.findAll('form')[1].trigger('submit')
     await flushPromises()
     expect(calls.find((c) => c.url === '/api/health/webhooks' && c.method === 'POST').body).toEqual({
-      name: 'Shelf', url: 'http://192.168.1.50/hook', events: [], monitors: [], heartbeat_min: 0 })
+      name: 'Shelf', url: 'http://192.168.1.50/hook', events: ['state_changed', 'engine_down', 'engine_up'], monitors: [], heartbeat_min: 0 })
     expect(w.find('.cmd-text').text()).toBe('vwhs_key')
     expect(w.text()).toContain('Signing key for Shelf')
   })

@@ -5,6 +5,7 @@ import { fmtStamp, timeAgo } from '../time.js'
 import Icon from './Icon.vue'
 import SettingsCard from './SettingsCard.vue'
 import SettingsEntry from './SettingsEntry.vue'
+import SettingsFold from './SettingsFold.vue'
 import SettingsList from './SettingsList.vue'
 import SettingsSection from './SettingsSection.vue'
 
@@ -14,9 +15,10 @@ const hooks = ref([])
 const name = ref('')
 const hookName = ref('')
 const hookUrl = ref('')
-// Filter je Webhook: keine Auswahl heißt alle Ereignisse bzw. alle Hosts
+// Filter je Webhook. Der Server speichert „alle Ereignisse“ als leere Liste; hier sind dann alle angehakt.
 const EVENTS = [['state_changed', 'State changes'], ['engine_down', 'Checks stopped'], ['engine_up', 'Checks running again']]
-const hookEvents = ref([])
+const ALL_EVENTS = EVENTS.map(([k]) => k)
+const hookEvents = ref([...ALL_EVENTS])
 const hookHosts = ref('')
 const hookBeat = ref(0)
 const editing = ref(null)   // Webhook, der gerade geändert wird; URL leer lassen behält sie
@@ -45,14 +47,14 @@ const create = () => attempt(async () => {
 function resetHook() {
   editing.value = null
   hookName.value = hookUrl.value = hookHosts.value = ''
-  hookEvents.value = []
+  hookEvents.value = [...ALL_EVENTS]
   hookBeat.value = 0
 }
 function editHook(w) {
   editing.value = w
   hookName.value = w.name
   hookUrl.value = ''
-  hookEvents.value = [...w.events]
+  hookEvents.value = w.events.length ? [...w.events] : [...ALL_EVENTS]
   hookHosts.value = w.monitors.join(', ')
   hookBeat.value = w.heartbeat_min
 }
@@ -85,12 +87,15 @@ async function removeHook(w) {
   await load()
 }
 
+const SENT = { state_changed: 'state change', engine_down: 'checks stopped', engine_up: 'checks running again',
+  heartbeat: 'heartbeat', test: 'test' }
+const canSaveHook = computed(() => hookName.value.trim() && hookEvents.value.length && (editing.value || hookUrl.value.trim()))
 const hookFilter = (w) => [
   w.events.length ? EVENTS.filter(([k]) => w.events.includes(k)).map(([, l]) => l.toLowerCase()).join(', ') : 'all events',
   w.monitors.length ? `hosts ${w.monitors.join(', ')}` : 'all hosts',
   w.heartbeat_min ? `heartbeat every ${w.heartbeat_min} min` : null].filter(Boolean).join(' · ')
 const hookMeta = (w) => [w.target, hookFilter(w), w.last_sent
-  ? `${w.last_error ? `failed ${timeAgo(w.last_sent)}: ${w.last_error}` : `${w.last_event || 'delivered'} ${timeAgo(w.last_sent)}`}`
+  ? `${w.last_error ? `failed ${timeAgo(w.last_sent)}: ${w.last_error}` : `${SENT[w.last_event] || w.last_event || 'call'} delivered ${timeAgo(w.last_sent)}`}`
   : `added ${fmtStamp(w.created_at)} · nothing sent yet`]
 const status = computed(() => {
   const n = tokens.value.length + hooks.value.length
@@ -119,14 +124,14 @@ onMounted(load)
       Three ways in: ask now and then, wait for the next change (long-poll, best for status LEDs), or get a webhook.
     </template>
 
-    <SettingsSection title="Endpoints">
+    <SettingsFold title="Endpoints" hint="states · long-poll · full status">
       <SettingsList>
-        <SettingsEntry dense mono title="GET /api/health/states" meta="compact: {key: state} for microcontrollers, with rev and ETag; add ?hosts=1 for names and critical flags" />
+        <SettingsEntry dense mono title="GET /api/health/states" meta="compact: {key: state} for microcontrollers, with rev and ETag; ?hosts=1 adds names and critical flags" />
         <SettingsEntry dense mono title="GET /api/health/states?since=<rev>&wait=55" meta="long-poll: answers as soon as something changes, else 304 after the wait; no open port needed" />
-        <SettingsEntry dense mono title="GET /api/health/status" meta="full: every host with its checks, latency, age of each result and summary" />
+        <SettingsEntry dense mono title="GET /api/health/status" meta="full: every host with its checks, latency, age of each result and summary; takes ?since=&wait= too" />
         <SettingsEntry dense mono title="GET /api/health/status/<key>" meta="one host" />
       </SettingsList>
-    </SettingsSection>
+    </SettingsFold>
 
     <SettingsSection title="Tokens" :count="tokens.length">
       <SettingsList :empty="!tokens.length" empty-text="No device has access yet.">
@@ -141,12 +146,7 @@ onMounted(load)
       </form>
     </SettingsSection>
 
-    <SettingsSection title="Webhooks" :count="hooks.length">
-      <p class="hint">
-        For servers like Home Assistant or n8n. On every state change vulnwatch POSTs JSON to each URL: <code>changes</code>
-        plus the full <code>states</code> as in <code>/api/health/states</code>. Signed with HMAC-SHA256 over
-        <code>timestamp.body</code> in <code>X-Vulnwatch-Signature</code>; failed calls are retried after 5 s, 30 s and 2 min.
-      </p>
+    <SettingsSection title="Webhooks" :count="hooks.length" hint="push for Home Assistant, n8n and other servers">
       <SettingsList :empty="!hooks.length" empty-text="No webhook yet.">
         <SettingsEntry v-for="w in hooks" :key="w.id" icon="link" :title="w.name" :meta="hookMeta(w)">
           <template #actions>
@@ -156,24 +156,36 @@ onMounted(load)
           </template>
         </SettingsEntry>
       </SettingsList>
-      <form class="hook-form" @submit.prevent="saveHook">
-        <div class="new-row">
-          <input v-model="hookName" required maxlength="60" placeholder="Name, e.g. Home Assistant" aria-label="Webhook name" class="hook-name" />
-          <input v-model="hookUrl" :required="!editing" type="url" maxlength="2000" aria-label="Webhook URL"
-                 :placeholder="editing ? `${editing.target}/… (empty keeps the URL)` : 'http://192.168.1.50/vulnwatch'" />
-        </div>
-        <div class="new-row options">
-          <label v-for="[key, label] in EVENTS" :key="key" class="check"><input v-model="hookEvents" type="checkbox" :value="key" />{{ label }}</label>
-          <input v-model="hookHosts" maxlength="2000" placeholder="Only hosts: nas, pve (empty: all)" aria-label="Only these hosts" class="hook-hosts" />
-          <label class="check">Heartbeat every <input v-model.number="hookBeat" type="number" min="0" max="1440" aria-label="Heartbeat minutes" class="beat" /> min</label>
-          <span class="spacer" />
-          <button v-if="editing" type="button" class="btn-sm" @click="resetHook">Cancel</button>
-          <button type="submit" class="btn-sm" :disabled="!hookName.trim() || (!editing && !hookUrl.trim())">
-            <Icon :name="editing ? 'check' : 'plus'" :size="14" />{{ editing ? 'Save webhook' : 'Add webhook' }}
-          </button>
-        </div>
-        <p class="hint">No event ticked means all of them. A heartbeat (0 = off) lets a receiver notice when vulnwatch itself is gone.</p>
-      </form>
+      <SettingsFold :title="editing ? `Edit ${editing.name}` : 'Add webhook'" hint="URL, events, hosts, heartbeat" :open="!!editing">
+        <form class="settings-form hook-form" @submit.prevent="saveHook">
+          <div class="hook-grid">
+            <label><span class="field-label">Name</span>
+              <input v-model="hookName" required maxlength="60" placeholder="Home Assistant" aria-label="Webhook name" /></label>
+            <label><span class="field-label">URL</span>
+              <input v-model="hookUrl" :required="!editing" type="url" maxlength="2000" aria-label="Webhook URL"
+                     :placeholder="editing ? `${editing.target}/… · leave empty to keep it` : 'http://homeassistant.lan:8123/api/webhook/…'" /></label>
+            <label><span class="field-label">Heartbeat</span>
+              <span class="with-unit"><input v-model.number="hookBeat" type="number" min="0" max="1440" aria-label="Heartbeat minutes" /><span>min · 0 = off</span></span></label>
+            <label><span class="field-label">Only these hosts</span>
+              <input v-model="hookHosts" maxlength="2000" placeholder="All hosts, or keys like nas, pve" aria-label="Only these hosts" /></label>
+          </div>
+          <fieldset class="events">
+            <legend class="field-label">Send on</legend>
+            <label v-for="[key, label] in EVENTS" :key="key" class="chk"><input v-model="hookEvents" type="checkbox" :value="key" />{{ label }}</label>
+          </fieldset>
+          <p class="subtext">
+            vulnwatch POSTs <code>changes</code> plus the full <code>states</code> as in <code>/api/health/states</code>, signed with
+            HMAC-SHA256 over <code>timestamp.body</code> in <code>X-Vulnwatch-Signature</code>. Failed calls are retried after 5 s,
+            30 s and 2 min. A heartbeat lets the receiver notice when vulnwatch itself is gone.
+          </p>
+          <div class="actions">
+            <button type="submit" class="primary" :disabled="!canSaveHook">
+              <Icon :name="editing ? 'check' : 'plus'" :size="15" />{{ editing ? 'Save webhook' : 'Add webhook' }}
+            </button>
+            <button v-if="editing" type="button" @click="resetHook">Cancel</button>
+          </div>
+        </form>
+      </SettingsFold>
     </SettingsSection>
 
     <div v-if="fresh" class="cmd-block">
@@ -190,16 +202,20 @@ onMounted(load)
 <style scoped>
 .new-row { display: flex; flex-direction: row; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .new-row input { flex: 1; min-width: 200px; }
-.new-row .hook-name { flex: 0 1 220px; }
 .new-row button { flex: none; }
-.hook-form { display: flex; flex-direction: column; gap: 0.5rem; }
-.options { font-size: 0.8125rem; color: var(--text-2); }
-.options .hook-hosts { flex: 1 1 200px; }
-.options .beat { width: 4.5rem; min-width: 0; flex: none; }
-.check { display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap; }
-.spacer { flex: 1; }
-.hint { margin: 0 0 0.5rem; font-size: 0.8125rem; color: var(--text-2); }
+.hook-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 1rem; }
+.with-unit { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); font-size: 0.75rem; white-space: nowrap; }
+.with-unit input { width: 5.5rem; font-variant-numeric: tabular-nums; }
+.events { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1.25rem; margin: 0; padding: 0; border: 0; min-width: 0; }
+.events legend { float: left; padding: 0; margin-right: 0.25rem; }
+.chk { display: inline-flex; flex-direction: row; align-items: center; gap: 0.5rem; font-size: 0.8125rem; color: var(--text-2); white-space: nowrap; cursor: pointer; }
+.chk input { margin: 0; }
+.hook-form .subtext { max-width: 72ch; margin: 0; line-height: 1.55; }
 .cmd-block { border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--ground); overflow: hidden; }
 .cmd-bar-top { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.25rem 0.5rem 0.25rem 0.75rem; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 0.75rem; }
 .cmd-text { margin: 0; padding: 0.75rem; overflow: auto; font: 0.75rem/1.55 var(--mono); color: var(--text-2); white-space: pre; }
+@media (max-width: 640px) {
+  .hook-grid { grid-template-columns: minmax(0, 1fr); }
+  .events legend { float: none; width: 100%; margin: 0 0 0.25rem; }
+}
 </style>
