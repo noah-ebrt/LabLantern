@@ -105,9 +105,33 @@ curl -s --cacert vulnwatch-ca.crt -H "Authorization: Bearer vwh_…" https://vul
 
 | Endpoint | Returns |
 | --- | --- |
-| `GET /api/health/states` | compact, for microcontrollers: `{"engine_ok": true, "generated_at": …, "states": {"nas": "up", …}, "critical": ["nas", …]}` |
-| `GET /api/health/status` | every host with state, `since`, warning, latency and each check with its state, latency, error and the age of its result; plus a summary and `critical_down` |
+| `GET /api/health/states` | compact, for microcontrollers (example below); `?hosts=1` adds name, critical flag and kind (`service` or `presence`) per host |
+| `GET /api/health/states?since=<rev>&wait=55` | long-poll: answers as soon as `rev` differs from `since`, otherwise `304` after `wait` seconds (at most 55) |
+| `GET /api/health/status` | every host with state, `since`, warning, latency and each check with its state, latency, error and the age of its result; plus a summary, `critical_down` and `rev`; takes `?since=&wait=` like `/states` (the rev is also in the `X-Vulnwatch-Rev` header) |
 | `GET /api/health/status/<key>` | one host |
+
+```json
+{"v": 1, "rev": 1793628191042, "server_time": "2026-11-02T14:03:11Z", "generated_at": 1793628191,
+ "engine_ok": true, "engine": {"ok": true, "last_cycle_at": "2026-11-02T14:03:10Z", "interval_s": 2.0},
+ "states": {"nas": "up", "wan": "down"}, "critical": ["nas"]}
+```
+
+`rev` goes up whenever a state, a host (added, removed, renamed, critical flag) or the check engine changes. Every
+way out (query, long-poll, webhook) carries the same `rev`, so a device can tell whether it missed something.
+Compare it for equality only: after a restart it starts from a new value. `v` is the format version.
+
+**Three ways to use it**, pick per device:
+
+- **Ask now and then.** A plain `GET` as before. Send `If-None-Match` with the last `ETag` (the `rev`) or
+  `?since=<rev>` and you get an empty `304` while nothing changed.
+- **Wait for the next change (long-poll).** Best for a status LED: only outgoing connections, no open port, no shared
+  secret, and changes arrive at once. Ask with `?since=<last rev>&wait=55` in a loop, with a read timeout of about
+  70 s. No answer within that time means vulnwatch or the network is gone.
+- **Get told (webhooks, below).** Best for servers such as Home Assistant or n8n.
+
+Each token may ask about once a second on average (60 requests per minute, short bursts allowed); more gets `429`
+with `Retry-After`. Use the long-poll instead of asking faster. The token list shows when and from which address
+each token was last used.
 
 States are `up`, `degraded`, `down`, `unknown` and `paused`. The key of a host (`nas`) is generated from its name and
 can be changed under "API key" in the generator. Devices use it, so changing it breaks their configuration.
@@ -121,24 +145,34 @@ device (`WiFiClientSecure::setCACert` on an ESP32).
 
 ### Webhooks
 
-Instead of asking every few seconds, a device can be told. Add a URL under **Health → Settings → API for other
-devices → Webhooks**. On every state change (and on pause or resume) vulnwatch sends a `POST` with JSON:
+Instead of asking, a server can be told. Add a URL under **Health → Settings → API for other devices → Webhooks**.
+vulnwatch sends a `POST` with the same JSON as `/api/health/states?hosts=1`, plus `event` and `changes`:
 
 ```json
-{"event": "health.changed", "ts": 1793000000, "engine_ok": true,
- "changes": [{"slug": "nas", "name": "NAS", "state": "down", "prev": "up", "critical": true}],
- "states": {"nas": "down", "pve": "up"}, "critical": ["nas"]}
+{"event": "state_changed", "v": 1, "rev": 1793628191043, "server_time": "2026-11-02T14:03:12Z", "engine_ok": true, …,
+ "states": {"nas": "down", "pve": "up"}, "critical": ["nas"], "hosts": {"nas": {"label": "NAS", …}},
+ "changes": [{"slug": "nas", "name": "NAS", "critical": true, "from": "up", "to": "down", "at": "2026-11-02T14:03:12Z"}]}
 ```
 
-`states` has the same shape as `/api/health/states`, so a device can use the same code for both. **Test** sends
-`"event": "test"` with no changes. The header `X-Vulnwatch-Signature: sha256=<hex>` is an HMAC-SHA256 of the raw body
-with the webhook's signing key, shown once when you add it; check it before acting on a call. Plain `http://` works
-for devices in your network, `https://` targets need a certificate the master trusts.
+| Event | When |
+| --- | --- |
+| `state_changed` | a host changed state, including pause and resume |
+| `engine_down` | the checks stopped running; every state is now `unknown` |
+| `engine_up` | the checks run again (also after every start of vulnwatch) |
+| `heartbeat` | every N minutes if set, so a receiver notices when vulnwatch itself is gone |
+| `test` | the **Test** button |
 
-A failed delivery is retried once after 5 seconds, then shown at the webhook. Redirects aren't followed. Calls can
-arrive out of order: use `ts`. A webhook only fires when something changes, so it can't tell a device that vulnwatch
-itself stopped. Read `/api/health/states` once at start and every few minutes as well, and show "no data" when that
-fails.
+Per webhook you can choose the events (none ticked means all) and limit it to some hosts by key; then `states` and
+`changes` only contain those hosts. A host added or removed shows up in `changes` with `from` or `to` set to `null`.
+
+Headers: `X-Vulnwatch-Event`, `X-Vulnwatch-Delivery` (a UUID, the same on retries, so receivers can drop
+duplicates), `X-Vulnwatch-Timestamp` (Unix seconds) and `X-Vulnwatch-Signature: sha256=<hex>`, an HMAC-SHA256 over
+`<timestamp>.<raw body>` with the webhook's signing key, shown once when you add it. Check the signature and reject
+timestamps older than five minutes before acting on a call. Plain `http://` works for devices in your network,
+`https://` targets need a certificate the master trusts.
+
+A failed delivery is retried after 5 s, 30 s and 2 minutes; the webhook shows the last event and error. Redirects
+aren't followed. Calls can arrive out of order: ignore one whose `rev` is lower than the last one you handled.
 
 Prometheus users get the same states as `vulnwatch_health_state{monitor="nas"}` (1 up, 0.5 degraded, 0 down,
 -1 unknown or paused).

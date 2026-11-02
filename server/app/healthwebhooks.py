@@ -1,25 +1,29 @@
-"""Webhooks der Gesundheitsüberwachung: bei jedem Zustandswechsel ein POST an die eingetragenen URLs.
+"""Webhooks der Gesundheitsüberwachung: POST an die eingetragenen URLs, Inhalt baut healthfeed.HealthFeed.
 
-Der Body ist JSON mit den Änderungen und dem vollständigen Stand im Format von /api/health/states, damit ein Gerät
-nicht nachfragen muss. Signiert mit HMAC-SHA256 über den rohen Body (Header X-Vulnwatch-Signature: sha256=<hex>),
-der Schlüssel wird beim Anlegen einmal angezeigt. Keine Weiterleitungen: ein Ziel, das umleitet, gilt als Fehler."""
+Ereignisse (Header X-Vulnwatch-Event): state_changed, engine_down, engine_up, heartbeat, test. Der Body ist JSON im
+Format von /api/health/states plus "event" und "changes". Signiert mit HMAC-SHA256 über "<Zeitstempel>.<Body>"
+(X-Vulnwatch-Timestamp, X-Vulnwatch-Signature: sha256=<hex>), so dass ein Empfänger alte Aufrufe verwerfen kann;
+X-Vulnwatch-Delivery bleibt bei Wiederholungen gleich. Der Schlüssel wird beim Anlegen einmal angezeigt.
+Keine Weiterleitungen: ein Ziel, das umleitet, gilt als Fehler. Fehlschläge werden nach BACKOFF wiederholt."""
 import hashlib
 import hmac
-import json
 import logging
-import time
+import threading
 import urllib.error
 import urllib.request
+import uuid
+from dataclasses import dataclass
 from urllib.parse import urlsplit
 
 from sqlalchemy import select
 
 from .context import Context
-from .models import HealthMonitor, HealthWebhook
+from .models import HealthWebhook
 
 log = logging.getLogger("vulnwatch.health")
 TIMEOUT = 5
-RETRY_AFTER = 5
+BACKOFF = (5, 30, 120)   # Sekunden bis zum 2., 3. und 4. Versuch
+EVENTS = ("state_changed", "engine_down", "engine_up")   # wählbar je Webhook; heartbeat über heartbeat_min
 
 
 def url_name(webhook_id: int) -> str:
@@ -41,8 +45,29 @@ def check_url(url: str) -> str:
     return f"{parts.scheme}://{parts.hostname}{port}"
 
 
-def sign(secret: str, body: bytes) -> str:
-    return "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+def split_list(value: str) -> list[str]:
+    return [x for x in (v.strip() for v in (value or "").split(",")) if x]
+
+
+@dataclass(frozen=True)
+class Target:
+    id: int
+    events: frozenset[str]    # leer: alle
+    only: frozenset[str]      # Host-Schlüssel; leer: alle
+    heartbeat_min: int
+
+    def wants(self, event: str) -> bool:
+        return not self.events or event in self.events
+
+
+def targets(ctx: Context) -> list[Target]:
+    with ctx.session_factory() as s:
+        return [Target(w.id, frozenset(split_list(w.events)), frozenset(split_list(w.monitors)), w.heartbeat_min or 0)
+                for w in s.scalars(select(HealthWebhook).order_by(HealthWebhook.id))]
+
+
+def sign(secret: str, ts: int, body: bytes) -> str:
+    return "sha256=" + hmac.new(secret.encode(), f"{ts}.".encode() + body, hashlib.sha256).hexdigest()
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -53,11 +78,12 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 _opener = urllib.request.build_opener(_NoRedirect)
 
 
-def post(url: str, secret: str, event: str, body: bytes) -> str:
+def post(url: str, secret: str, event: str, delivery: str, ts: int, body: bytes) -> str:
     """Ein Zustellversuch; zurück kommt "" bei 2xx, sonst der Fehler."""
     req = urllib.request.Request(url, data=body, method="POST", headers={
         "Content-Type": "application/json", "User-Agent": "vulnwatch-webhook",
-        "X-Vulnwatch-Event": event, "X-Vulnwatch-Signature": sign(secret, body)})
+        "X-Vulnwatch-Event": event, "X-Vulnwatch-Delivery": delivery, "X-Vulnwatch-Timestamp": str(ts),
+        "X-Vulnwatch-Signature": sign(secret, ts, body)})
     try:
         with _opener.open(req, timeout=TIMEOUT) as r:
             return "" if 200 <= r.status < 300 else f"HTTP {r.status}"
@@ -70,43 +96,31 @@ def post(url: str, secret: str, event: str, body: bytes) -> str:
         return str(e)[:200]
 
 
-def document(ctx: Context, event: str, changes: list[dict], engine_ok: bool) -> bytes:
-    with ctx.session_factory() as s:
-        monitors = s.scalars(select(HealthMonitor).order_by(HealthMonitor.name)).all()
-        doc = {"event": event, "ts": int(ctx.clock()), "changes": changes, "engine_ok": engine_ok,
-               "states": {m.slug: "paused" if m.paused else m.state if engine_ok else "unknown" for m in monitors},
-               "critical": [m.slug for m in monitors if m.critical]}
-    return json.dumps(doc, separators=(",", ":")).encode()
+def later(delay: float, fn, *args) -> None:
+    """Wiederholung ohne einen Thread des Zustell-Pools schlafen zu lassen (Tests ersetzen das)."""
+    t = threading.Timer(delay, fn, args)
+    t.daemon = True
+    t.start()
 
 
-def change(m: HealthMonitor, prev: str, state: str) -> dict:
-    return {"slug": m.slug, "name": m.name, "state": state, "prev": prev, "critical": bool(m.critical)}
-
-
-def deliver(ctx: Context, webhook_id: int, event: str, body: bytes, retry: bool = True) -> str:
+def deliver(ctx: Context, webhook_id: int, event: str, body: bytes, delivery: str = "", attempt: int = 0,
+            submit=None) -> str:
+    """Ein Versuch. Schlägt er fehl und ist `submit` (Executor.submit) gegeben, folgt der nächste nach BACKOFF."""
+    delivery = delivery or str(uuid.uuid4())
     url, secret = ctx.secrets.get(url_name(webhook_id)), ctx.secrets.get(key_name(webhook_id))
     if not url or not secret:
         return "URL or key missing, add the webhook again"
-    error = post(url, secret, event, body)
-    if error and retry:
-        time.sleep(RETRY_AFTER)
-        error = post(url, secret, event, body)
+    error = post(url, secret, event, delivery, int(ctx.clock()), body)
+    again = bool(error) and submit is not None and attempt < len(BACKOFF)
     with ctx.session_factory() as s:
         row = s.get(HealthWebhook, webhook_id)
-        if row is not None:
-            row.last_sent, row.last_error = ctx.clock(), error
-            s.commit()
-    if error:
-        log.warning("Health webhook %s not delivered: %s", webhook_id, error)
+        if row is None:
+            return error   # inzwischen entfernt: nicht weiter versuchen
+        row.last_sent, row.last_event = ctx.clock(), event
+        row.last_error = f"{error} · retry {attempt + 1} of {len(BACKOFF)} follows" if again else error
+        s.commit()
+    if again:
+        later(BACKOFF[attempt], submit, deliver, ctx, webhook_id, event, body, delivery, attempt + 1, submit)
+    elif error:
+        log.warning("Health webhook %s not delivered (%s): %s", webhook_id, event, error)
     return error
-
-
-def send_all(ctx: Context, executor, changes: list[dict], engine_ok: bool) -> None:
-    """Jeder Webhook im eigenen Auftrag, damit ein hängendes Ziel die anderen nicht aufhält."""
-    with ctx.session_factory() as s:
-        ids = s.scalars(select(HealthWebhook.id)).all()
-    if not ids:
-        return
-    body = document(ctx, "health.changed", changes, engine_ok)
-    for webhook_id in ids:
-        executor.submit(deliver, ctx, webhook_id, "health.changed", body)

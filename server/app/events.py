@@ -52,7 +52,7 @@ TOPICS_BY_TABLE = {
 IGNORED_COLUMNS = {"systems": {"last_contact"},
                    # jede Prüfung schreibt alle paar Sekunden Messwerte; gemeldet wird nur ein Zustandswechsel
                    "health_checks": {"fails", "last_checked", "last_ok", "latency_ms", "error"},
-                   "health_tokens": {"last_used"}}
+                   "health_tokens": {"last_used", "last_ip"}}
 IGNORED_SETTINGS = {"worker.last_seen"}
 
 

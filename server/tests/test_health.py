@@ -190,6 +190,90 @@ def test_api_needs_a_valid_token_or_session(hw):
     assert anon.get("/api/health/states", headers={"Authorization": f"Bearer {tok}"}).status_code == 401
 
 
+def test_states_keep_their_fields_and_add_rev_etag(hw):
+    env, client, h, engine, probes, sent = hw
+    mid = create(client, h)["id"]
+    run(env, engine)
+    auth = {"Authorization": f"Bearer {token(client, h)}"}
+    r = client.get("/api/health/states", headers=auth)
+    doc = r.json()
+    assert {"engine_ok", "generated_at", "states", "critical"} <= set(doc) and "hosts" not in doc   # wie bisher
+    assert doc["v"] == 1 and doc["engine"]["ok"] is True and doc["engine"]["interval_s"] == health.TICK
+    assert doc["server_time"].endswith("Z") and doc["engine"]["last_cycle_at"].endswith("Z")
+    rev = doc["rev"]
+    assert r.headers["ETag"] == f'"{rev}"'
+
+    assert client.get("/api/health/states", headers={**auth, "If-None-Match": f'"{rev}"'}).status_code == 304
+    assert client.get(f"/api/health/states?since={rev}", headers=auth).status_code == 304
+    run(env, engine)   # neue Messwerte, gleicher Stand: rev bleibt
+    assert client.get(f"/api/health/states?since={rev}", headers=auth).status_code == 304
+    assert client.get("/api/health/states?since=1", headers=auth).json()["rev"] == rev   # z. B. nach Neustart: sofort
+
+    client.put(f"/api/health/monitors/{mid}", json={"name": "TrueNAS", "host": "192.0.2.20", "critical": False,
+                                                     "checks": [{"kind": "ping"}]}, headers=h)
+    doc = client.get(f"/api/health/states?since={rev}&hosts=1", headers=auth).json()
+    assert doc["rev"] > rev and doc["critical"] == []
+    assert doc["hosts"] == {"nas": {"label": "TrueNAS", "critical": False, "kind": "service"}}
+    assert client.get("/api/health/status", headers=auth).json()["rev"] == doc["rev"]
+
+    env.clock.advance(health.ENGINE_STALE + 1)   # stehende Engine: neuer rev, alles unknown
+    stale = client.get("/api/health/states", headers=auth).json()
+    assert stale["rev"] > doc["rev"] and stale["engine_ok"] is False and stale["states"] == {"nas": "unknown"}
+
+
+def test_long_poll_waits_for_a_change(hw, monkeypatch):
+    import time
+    from app import health_api
+    env, client, h, engine, probes, sent = hw
+    mid = create(client, h)["id"]
+    run(env, engine)
+    auth = {"Authorization": f"Bearer {token(client, h)}"}
+    rev = client.get("/api/health/states", headers=auth).json()["rev"]
+
+    t0 = time.monotonic()
+    r = client.get(f"/api/health/states?since={rev}&wait=0.3", headers=auth)
+    assert r.status_code == 304 and time.monotonic() - t0 >= 0.3
+    monkeypatch.setattr(health_api, "MAX_WAIT", 0.2)
+    t0 = time.monotonic()
+    assert client.get(f"/api/health/states?since={rev}&wait=55", headers=auth).status_code == 304
+    assert time.monotonic() - t0 < 5   # auf MAX_WAIT gekappt
+    monkeypatch.setattr(health_api, "MAX_WAIT", 10.0)
+
+    def pause_soon():
+        time.sleep(0.3)
+        with env.app.state.ctx.session_factory() as s:
+            s.get(HealthMonitor, mid).paused = True
+            s.commit()
+        engine.feed.refresh()
+
+    threading.Thread(target=pause_soon).start()
+    t0 = time.monotonic()
+    r = client.get(f"/api/health/states?since={rev}&wait=10", headers=auth)
+    assert r.status_code == 200 and r.json()["states"] == {"nas": "paused"} and time.monotonic() - t0 < 5
+
+    # /status kann dasselbe, für Geräte, die Latenz und Alter mit anzeigen
+    r = client.get("/api/health/status", headers=auth)
+    rev = r.headers["X-Vulnwatch-Rev"]
+    assert rev == str(r.json()["rev"])
+    run(env, engine)   # neue Messwerte, kein Wechsel
+    assert client.get(f"/api/health/status?since={rev}&wait=0.2", headers=auth).status_code == 304
+    client.post(f"/api/health/monitors/{mid}/pause", json={"paused": False}, headers=h)
+    r = client.get(f"/api/health/status?since={rev}&wait=10", headers=auth)
+    assert r.status_code == 200 and r.json()["monitors"][0]["state"] == "unknown" and r.headers["X-Vulnwatch-Rev"] != rev
+
+
+def test_token_is_rate_limited_and_shows_last_ip(hw):
+    from app.health_api import TOKEN_RATE
+    env, client, h, engine, probes, sent = hw
+    auth = {"Authorization": f"Bearer {token(client, h)}"}
+    for _ in range(TOKEN_RATE[0]):
+        assert client.get("/api/health/states", headers=auth).status_code == 200
+    r = client.get("/api/health/states", headers=auth)
+    assert r.status_code == 429 and int(r.headers["Retry-After"]) > 0
+    assert client.get("/api/health/states").status_code == 200   # Sitzung: nicht begrenzt
+    assert client.get("/api/health/tokens").json()[0]["last_ip"] == "testclient"
+
+
 def test_agents_are_monitored_automatically(hw):
     env, client, h, engine, probes, sent = hw
     ctx = env.app.state.ctx
@@ -394,7 +478,7 @@ def receiver():
     srv.server_close()
 
 
-def test_webhook_gets_signed_state_changes(hw, receiver):
+def test_webhook_gets_signed_events(hw, receiver):
     import hashlib
     import hmac
     env, client, h, engine, probes, sent = hw
@@ -406,12 +490,16 @@ def test_webhook_gets_signed_state_changes(hw, receiver):
     listed = client.get("/api/health/webhooks").json()
     assert listed[0]["target"].startswith("http://127.0.0.1:") and "key=abc" not in json.dumps(listed)
 
-    run(env, engine)
+    run(env, engine)   # erste Runde: die Engine läuft an, alles von unknown auf up
     headers, body = got[-1]
     doc = json.loads(body)
-    assert doc["event"] == "health.changed" and doc["states"] == {"nas": "up"}
-    assert doc["changes"][0]["slug"] == "nas" and doc["changes"][0]["state"] == "up"
-    assert headers["X-Vulnwatch-Signature"] == "sha256=" + hmac.new(key.encode(), body, hashlib.sha256).hexdigest()
+    assert headers["X-Vulnwatch-Event"] == "engine_up" == doc["event"] and doc["states"] == {"nas": "up"}
+    assert doc["changes"][0] | {"at": None} == {"slug": "nas", "name": "NAS", "critical": True, "from": "unknown",
+                                                "to": "up", "at": None}
+    assert doc["v"] == 1 and doc["rev"] and doc["hosts"]["nas"] == {"label": "NAS", "critical": True, "kind": "service"}
+    signed = headers["X-Vulnwatch-Timestamp"].encode() + b"." + body
+    assert headers["X-Vulnwatch-Signature"] == "sha256=" + hmac.new(key.encode(), signed, hashlib.sha256).hexdigest()
+    assert len(headers["X-Vulnwatch-Delivery"]) == 36
 
     n = len(got)
     run(env, engine)   # kein Wechsel, kein Aufruf
@@ -419,16 +507,93 @@ def test_webhook_gets_signed_state_changes(hw, receiver):
 
     mid = client.get("/api/health/overview").json()["monitors"][0]["id"]
     client.post(f"/api/health/monitors/{mid}/pause", json={"paused": True}, headers=h)
-    assert json.loads(got[-1][1])["states"] == {"nas": "paused"}
+    doc = json.loads(got[-1][1])
+    assert doc["event"] == "state_changed" and doc["states"] == {"nas": "paused"}
+    assert [(c["from"], c["to"]) for c in doc["changes"]] == [("up", "paused")]
 
     wid = listed[0]["id"]
     r = client.post(f"/api/health/webhooks/{wid}/test", headers=h)
     assert r.json() == {"ok": True, "error": ""} and json.loads(got[-1][1])["event"] == "test"
-    assert client.get("/api/health/webhooks").json()[0]["last_error"] == ""
+    assert client.get("/api/health/webhooks").json()[0]["last_event"] == "test"
+
+    # Stillstand meldet der Wächter, nicht die (stehende) Engine
+    client.post(f"/api/health/monitors/{mid}/pause", json={"paused": False}, headers=h)
+    run(env, engine)
+    env.clock.advance(health.ENGINE_STALE + 1)
+    engine.feed.watch_once()
+    doc = json.loads(got[-1][1])
+    assert doc["event"] == "engine_down" and doc["engine_ok"] is False and doc["states"] == {"nas": "unknown"}
 
     assert client.delete(f"/api/health/webhooks/{wid}", headers=h).status_code == 200
     assert client.get("/api/health/webhooks").json() == []
     assert env.app.state.ctx.secrets.get(f"health.webhook.{wid}.url") is None
+
+
+def test_webhook_filters_by_event_and_host(hw, receiver):
+    env, client, h, engine, probes, sent = hw
+    url, got = receiver
+    create(client, h)
+    create(client, h, name="PVE", host="192.0.2.21", checks=[{"kind": "ping"}])
+    run(env, engine)
+    r = client.post("/api/health/webhooks", json={"name": "HA", "url": url, "events": ["state_changed"],
+                                                  "monitors": ["pve"], "heartbeat_min": 0}, headers=h)
+    wid = r.json()["id"]
+    assert client.get("/api/health/webhooks").json()[0] | {"last_sent": None} == {
+        "id": wid, "name": "HA", "target": url.split("/hook")[0], "created_at": env.clock.now, "events": ["state_changed"],
+        "monitors": ["pve"], "heartbeat_min": 0, "last_sent": None, "last_event": "", "last_error": ""}
+
+    probes.results["192.0.2.20"] = ProbeResult(False, error="timed out")   # nur NAS: nicht abonniert
+    run(env, engine, ticks=6, step=11)
+    assert got == []
+    probes.results["192.0.2.21"] = ProbeResult(False, error="timed out")
+    run(env, engine, ticks=6, step=11)
+    docs = [json.loads(b) for _, b in got]
+    assert docs and all(set(d["states"]) == {"pve"} and {c["slug"] for c in d["changes"]} == {"pve"} for d in docs)
+
+    env.clock.advance(health.ENGINE_STALE + 1)
+    engine.feed.watch_once()   # engine_down ist nicht abonniert
+    assert all(json.loads(b)["event"] == "state_changed" for _, b in got)
+
+    r = client.put(f"/api/health/webhooks/{wid}", json={"name": "HA", "events": ["nope"]}, headers=h)
+    assert r.status_code == 422
+    r = client.put(f"/api/health/webhooks/{wid}", json={"name": "HA 2", "events": [], "monitors": []}, headers=h)
+    assert r.status_code == 200
+    w = client.get("/api/health/webhooks").json()[0]
+    assert (w["name"], w["events"], w["monitors"], w["target"]) == ("HA 2", [], [], url.split("/hook")[0])
+
+
+def test_webhook_heartbeat_and_retries(hw, receiver, monkeypatch):
+    from app import healthwebhooks
+    env, client, h, engine, probes, sent = hw
+    url, got = receiver
+    create(client, h)
+    run(env, engine)
+    wid = client.post("/api/health/webhooks", json={"name": "n8n", "url": url, "events": ["state_changed"],
+                                                    "heartbeat_min": 5}, headers=h).json()["id"]
+    engine.feed.watch_once()
+    env.clock.advance(4 * 60)
+    engine.feed.watch_once()
+    assert got == []
+    env.clock.advance(60)
+    engine.feed.watch_once()
+    assert [json.loads(b)["event"] for _, b in got] == ["heartbeat"] and got[0][0]["X-Vulnwatch-Event"] == "heartbeat"
+
+    # Ziel weg: Wiederholungen nach BACKOFF, ohne zu schlafen; gleiche Delivery-ID
+    queued = []
+    monkeypatch.setattr(healthwebhooks, "later", lambda delay, fn, *args: queued.append((delay, fn, args)))
+    env.app.state.ctx.secrets.set(f"health.webhook.{wid}.url", "http://127.0.0.1:9/gone")
+    env.clock.advance(5 * 60)
+    engine.feed.watch_once()
+    assert [d for d, _, _ in queued] == [5]
+    assert "retry 1 of 3" in client.get("/api/health/webhooks").json()[0]["last_error"]
+    while len(queued) < 10:
+        delay, fn, args = queued[-1]
+        before = len(queued)
+        fn(*args)
+        if len(queued) == before:
+            break
+    assert [d for d, _, _ in queued] == [5, 30, 120] and len({a[5] for _, _, a in queued}) == 1
+    assert "retry" not in client.get("/api/health/webhooks").json()[0]["last_error"]
 
 
 def test_webhook_rejects_bad_urls(hw):

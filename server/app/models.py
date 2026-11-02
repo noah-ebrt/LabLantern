@@ -434,6 +434,7 @@ class HealthToken(Base):
     token_hash: Mapped[str] = mapped_column(String, unique=True)
     created_at: Mapped[float] = mapped_column(Float, default=0.0)
     last_used: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
+    last_ip: Mapped[str] = mapped_column(String, default="", server_default="")
 
 
 class HealthWebhook(Base):
@@ -448,3 +449,8 @@ class HealthWebhook(Base):
     created_at: Mapped[float] = mapped_column(Float, default=0.0)
     last_sent: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
     last_error: Mapped[str] = mapped_column(String, default="")
+    last_event: Mapped[str] = mapped_column(String, default="", server_default="")
+    # Filter: Ereignisse und Host-Schlüssel, je kommagetrennt; leer heißt alle
+    events: Mapped[str] = mapped_column(String, default="", server_default="")
+    monitors: Mapped[str] = mapped_column(String, default="", server_default="")
+    heartbeat_min: Mapped[int] = mapped_column(Integer, default=0, server_default="0")   # 0: kein Heartbeat

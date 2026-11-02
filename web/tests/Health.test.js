@@ -132,8 +132,33 @@ describe('HealthApiSettings', () => {
     await w.find('input[aria-label="Webhook URL"]').setValue('http://192.168.1.50/hook')
     await w.findAll('form')[1].trigger('submit')
     await flushPromises()
-    expect(calls.find((c) => c.url === '/api/health/webhooks' && c.method === 'POST').body).toEqual({ name: 'Shelf', url: 'http://192.168.1.50/hook' })
+    expect(calls.find((c) => c.url === '/api/health/webhooks' && c.method === 'POST').body).toEqual({
+      name: 'Shelf', url: 'http://192.168.1.50/hook', events: [], monitors: [], heartbeat_min: 0 })
     expect(w.find('.cmd-text').text()).toBe('vwhs_key')
     expect(w.text()).toContain('Signing key for Shelf')
+  })
+
+  it('edits a webhook’s filters without asking for the URL again', async () => {
+    const hook = { id: 7, name: 'HA', target: 'http://ha.lan:8123', created_at: 1800000000, events: ['state_changed'],
+      monitors: ['nas'], heartbeat_min: 5, last_sent: null, last_event: '', last_error: '' }
+    const base = fetch.getMockImplementation()
+    fetch.mockImplementation(async (url, init = {}) => {
+      if (url === '/api/health/webhooks' && (init.method || 'GET') === 'GET') { calls.push({ url, method: 'GET', body: null }); return json([hook]) }
+      if (url === '/api/health/webhooks/7') { calls.push({ url, method: init.method, body: JSON.parse(init.body) }); return json({ ok: true }) }
+      return base(url, init)
+    })
+    const w = mount(HealthApiSettings)
+    await flushPromises()
+    expect(w.text()).toContain('state changes · hosts nas · heartbeat every 5 min')
+
+    await w.findAll('button').find((b) => b.text() === 'Edit').trigger('click')
+    expect(w.find('input[aria-label="Only these hosts"]').element.value).toBe('nas')
+    await w.find('input[aria-label="Only these hosts"]').setValue('nas, pve')
+    await w.find('input[value="engine_down"]').setValue(true)
+    await w.find('form.hook-form').trigger('submit')
+    await flushPromises()
+    expect(calls.find((c) => c.method === 'PUT').body).toEqual({
+      name: 'HA', url: '', events: ['state_changed', 'engine_down'], monitors: ['nas', 'pve'], heartbeat_min: 5 })
+    expect(w.text()).toContain('HA saved.')
   })
 })

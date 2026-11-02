@@ -23,7 +23,7 @@ from sqlalchemy import delete, select
 from .context import Context
 from .fritzbox import tr064_url
 from .healthprobes import ACTIVE, FRITZ_KINDS, ProbeResult, ProbeSpec, clean_params, run_probe
-from .healthwebhooks import change, send_all
+from .healthfeed import HealthFeed
 from .models import HealthCheck, HealthEvent, HealthMonitor, HealthRollup, HealthSample, System, setting
 
 log = logging.getLogger("vulnwatch.health")
@@ -338,12 +338,15 @@ class HealthEngine:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
+        # Stand für API-Abnehmer und Webhooks, mit Änderungszähler (healthfeed.py)
+        self.feed = HealthFeed(self, TICK)
 
     # Lebenszyklus
     def start(self) -> None:
         self.started = self.ctx.clock()
         self._thread = threading.Thread(target=self._run, name="health-engine", daemon=True)
         self._thread.start()
+        self.feed.start(self._stop)
 
     def stop(self) -> None:
         self._stop.set()
@@ -387,7 +390,7 @@ class HealthEngine:
             self.publish(["health-metrics"])
         if transitions:
             self._alert(transitions)
-            send_all(self.ctx, self.hooks, [change(m, p, st) for m, p, st in transitions], self.ok())
+        self.feed.refresh()
 
     def _fritz(self) -> dict | None:
         with self.ctx.session_factory() as s:
