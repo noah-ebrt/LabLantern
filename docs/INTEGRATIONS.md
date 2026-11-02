@@ -308,8 +308,18 @@ images, operating systems and kernels, network-facing host packages from the age
 OpenSSL, Docker, containerd, sudo, glibc, systemd, Samba, CUPS, nginx, Apache, WireGuard, …) and products you add by
 hand under **Early warnings → Feeds & products**.
 
-**Feeds**, every 2 hours and with every full run. The defaults are global: The Hacker News, BleepingComputer,
-SecurityWeek, oss-security, Tailscale security bulletins, GitLab security releases, heise Security. Only entries from
+**Feeds**, every 2 hours and with every full run. The defaults are global:
+
+- News: The Hacker News, BleepingComputer, SecurityWeek, heise Security, Help Net Security, The Register, Security
+  Affairs, SANS Internet Storm Center
+- CERTs and agencies: BSI CERT-Bund (also covers vendors without a feed of their own, such as AVM, Synology, QNAP and
+  Ubiquiti), CISA advisories, CERT/CC vulnerability notes
+- Disclosures, exploits and research: oss-security, Full Disclosure, Zero Day Initiative, Exploit-DB, watchTowr Labs,
+  Socket (malicious npm and PyPI packages)
+- Vendors: Tailscale security bulletins, GitLab security releases, OPNsense announcements, Grafana security advisories
+
+A saved list that is one of the earlier defaults gets the new defaults automatically, and any feeds you added stay
+in it. Extra feeds cost little: each feed is downloaded, but only matching entries go to the AI. Only entries from
 the last 30 days that name one of your products go to the AI. Host packages and operating systems must appear in
 the title, because curl or Ubuntu are mentioned in passing all the time. On a vendor's own feed (the feed's domain is
 the product's name, e.g. `tailscale.com`) every entry counts.

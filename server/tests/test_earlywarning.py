@@ -738,6 +738,12 @@ def test_legacy_default_feeds_upgrade_to_the_global_list(ctx):
         put_setting(s, ew.FEEDS_KEY, ["https://about.gitlab.com/security-releases.xml",
                                       "https://www.heise.de/security/rss/news-atom.xml"])
         assert ew.configured_feeds(s) == ew.DEFAULT_FEEDS
+        put_setting(s, ew.FEEDS_KEY, ew.FORMER_DEFAULTS[1] + ["https://example.org/mine"])
+        assert ew.configured_feeds(s) == ew.DEFAULT_FEEDS + ["https://example.org/mine"]
+        # neue Feeds abgewählt, einer davon behalten: die Liste bleibt, wie sie ist
+        kept = ew.FORMER_DEFAULTS[1] + ["https://www.kb.cert.org/vuls/atomfeed"]
+        put_setting(s, ew.FEEDS_KEY, kept)
+        assert ew.configured_feeds(s) == kept
         put_setting(s, ew.FEEDS_KEY, ["https://example.org/mine"])
         assert ew.configured_feeds(s) == ["https://example.org/mine"]
 

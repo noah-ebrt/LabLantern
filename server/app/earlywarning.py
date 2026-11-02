@@ -52,15 +52,40 @@ RESEARCH_KEY = "earlywarning.research"     # {"enabled": bool (Recherche), "veri
 STATE_KEY = "ai.state"
 RESEARCH_STATE_KEY = "ai.research"
 DEFAULT_FEEDS = [
+    # Nachrichten
     "https://feeds.feedburner.com/TheHackersNews",
     "https://www.bleepingcomputer.com/feed/",
     "https://www.securityweek.com/feed/",
+    "https://www.heise.de/security/rss/news-atom.xml",
+    "https://www.helpnetsecurity.com/feed/",
+    "https://www.theregister.com/security/headlines.atom",
+    "https://securityaffairs.com/feed",
+    "https://isc.sans.edu/rssfeed_full.xml",
+    # Behörden und CERTs; CERT-Bund übernimmt auch Hersteller ohne eigenen Feed (AVM, Synology, QNAP, Ubiquiti)
+    "https://wid.cert-bund.de/content/public/securityAdvisory/rss",
+    "https://www.cisa.gov/cybersecurity-advisories/all.xml",
+    "https://www.kb.cert.org/vuls/atomfeed",
+    # Offenlegungen, Exploits, Forschung, Lieferkette (npm, PyPI)
     "https://seclists.org/rss/oss-sec.rss",
+    "https://seclists.org/rss/fulldisclosure.rss",
+    "https://www.zerodayinitiative.com/rss/published/",
+    "https://www.exploit-db.com/rss.xml",
+    "https://labs.watchtowr.com/rss/",
+    "https://socket.dev/api/blog/feed.atom",
+    # Hersteller: alle Einträge gelten für das Produkt aus der Domain (_vendor_feed)
     "https://tailscale.com/security-bulletins/index.xml",
     "https://about.gitlab.com/security-releases.xml",
-    "https://www.heise.de/security/rss/news-atom.xml",
+    "https://forum.opnsense.org/index.php?action=.xml;type=rss;board=11",
+    "https://grafana.com/security/security-advisories/index.xml",
 ]
-LEGACY_FEEDS = DEFAULT_FEEDS[-2:]   # die alte Vorgabe; gespeichert so wie sie war, gilt die neue
+# Frühere Vorgaben: gespeichert ist eine davon (das Speichern der Produkte speichert die Feeds mit), dann gilt die neue
+FORMER_DEFAULTS = [
+    ["https://about.gitlab.com/security-releases.xml", "https://www.heise.de/security/rss/news-atom.xml"],
+    ["https://feeds.feedburner.com/TheHackersNews", "https://www.bleepingcomputer.com/feed/",
+     "https://www.securityweek.com/feed/", "https://seclists.org/rss/oss-sec.rss",
+     "https://tailscale.com/security-bulletins/index.xml", "https://about.gitlab.com/security-releases.xml",
+     "https://www.heise.de/security/rss/news-atom.xml"],
+]
 MAX_FEED_BYTES = 10_000_000
 MAX_ITEM_DAYS = 30         # ältere Einträge (Feeds mit ganzer Historie) gehen nie an die KI
 MAX_ITEMS_PER_FEED = 200
@@ -320,8 +345,13 @@ def release_feeds(products: list[dict]) -> dict[str, list[str]]:
 
 
 def configured_feeds(s) -> list[str]:
+    """Enthält die gespeicherte Liste eine frühere Vorgabe ganz und noch keinen der neuen Feeds, stammt sie von vor der
+    Erweiterung: dann gilt die neue Vorgabe, eigene Feeds bleiben dahinter. Wer neue Feeds abwählt, behält seine Liste."""
     feeds = setting(s, FEEDS_KEY, DEFAULT_FEEDS)
-    return DEFAULT_FEEDS if feeds == LEGACY_FEEDS else feeds
+    for old in FORMER_DEFAULTS:
+        if set(old) <= set(feeds) and not set(feeds) & (set(DEFAULT_FEEDS) - set(old)):
+            return DEFAULT_FEEDS + [u for u in feeds if u not in old]
+    return feeds
 
 
 # ---------- 2. Inventar und Vorfilter ----------
