@@ -4,6 +4,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { setCsrf } from '../src/api.js'
 import HealthApiSettings from '../src/components/HealthApiSettings.vue'
 import HealthMonitorForm from '../src/components/HealthMonitorForm.vue'
+import HealthStatus from '../src/components/HealthStatus.vue'
 import PageTabs from '../src/components/PageTabs.vue'
 import HealthView from '../src/views/HealthView.vue'
 
@@ -93,6 +94,25 @@ describe('HealthView', () => {
     await flushPromises()
     expect(w.text()).toContain('Monitored hosts')
     expect(w.text()).toContain('API for other devices')
+  })
+})
+
+describe('HealthStatus', () => {
+  const data = (monitors) => ({ engine: { ok: true, last_tick: 1 }, summary: { up: 1, degraded: 0, down: 1, unknown: 0, paused: 0, total: 2 },
+    monitors, incidents: [], fritz: false })
+  const printer = { ...MON, id: 2, name: 'printer', slug: 'printer', critical: false, state: 'up' }
+
+  it('lists only critical hosts by default, all of them on request', async () => {
+    const w = mount(HealthStatus, { props: { data: data([MON, printer]) }, global: { plugins: [router()] } })
+    expect(w.find('.seg-btn.active').text()).toBe('Critical')
+    expect(w.findAll('.row .name').map((n) => n.text())).toEqual(['pve'])
+    await w.findAll('.seg-btn').find((b) => b.text() === 'All').trigger('click')
+    expect(w.findAll('.row .name').map((n) => n.text())).toEqual(['pve', 'printer'])
+  })
+
+  it('starts on All when no host is critical', () => {
+    const w = mount(HealthStatus, { props: { data: data([printer]) }, global: { plugins: [router()] } })
+    expect(w.find('.seg-btn.active').text()).toBe('All')
   })
 })
 
