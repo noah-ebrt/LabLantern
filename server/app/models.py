@@ -434,3 +434,17 @@ class HealthToken(Base):
     token_hash: Mapped[str] = mapped_column(String, unique=True)
     created_at: Mapped[float] = mapped_column(Float, default=0.0)
     last_used: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
+
+
+class HealthWebhook(Base):
+    """Ziel für Zustandswechsel (Push statt Abfragen). URL und Signaturschlüssel liegen verschlüsselt im SecretStore;
+    hier steht nur Schema://Host als Anzeige, weil der Pfad oft einen Schlüssel enthält."""
+
+    __tablename__ = "health_webhooks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String)
+    target: Mapped[str] = mapped_column(String, default="")
+    created_at: Mapped[float] = mapped_column(Float, default=0.0)
+    last_sent: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
+    last_error: Mapped[str] = mapped_column(String, default="")

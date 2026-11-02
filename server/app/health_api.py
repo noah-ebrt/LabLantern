@@ -19,7 +19,9 @@ from .guards import Guards, client_ip
 from .health import (KIND_LABELS, HealthEngine, beat, check_label, effective_state, params_of, secret_name,
                      state_durations, unique_slug, uptime_of, worst_of)
 from .healthprobes import FRITZ_KINDS, HOST_RE, KINDS, PASSIVE, ProbeSpec, clean_params, run_probe
-from .models import HealthCheck, HealthEvent, HealthMonitor, HealthRollup, HealthSample, HealthToken, System, setting
+from .healthwebhooks import change, check_url, deliver, document, key_name, send_all, url_name
+from .models import (HealthCheck, HealthEvent, HealthMonitor, HealthRollup, HealthSample, HealthToken, HealthWebhook, System,
+                     setting)
 
 MAX_CHECKS = 10
 RANGES = {"24h": (86400, 96), "7d": (7 * 86400, 84), "30d": (30 * 86400, 90), "90d": (90 * 86400, 90)}
@@ -53,6 +55,11 @@ class PauseIn(BaseModel):
 
 class TokenIn(BaseModel):
     name: str = Field(min_length=1, max_length=60)
+
+
+class WebhookIn(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    url: str = Field(min_length=8, max_length=2000)
 
 
 class TestIn(BaseModel):
@@ -427,13 +434,16 @@ def build_health_router(ctx: Context, guards: Guards, engine: HealthEngine) -> A
             m = s.get(HealthMonitor, monitor_id)
             if m is None:
                 raise HTTPException(404, "Unknown monitor")
+            before = monitor_state(m, engine.ok())
             m.paused = body.paused
             if not body.paused:
                 m.state, m.state_since = "unknown", ctx.clock()
+            moved = change(m, before, monitor_state(m, engine.ok()))
             s.add(HealthEvent(monitor_id=m.id, ts=ctx.clock(), state="paused" if body.paused else "unknown",
                               prev=m.state, detail="paused" if body.paused else "resumed"))
             ctx.audit(s, found[0].username, "health.monitor.paused" if body.paused else "health.monitor.resumed", m.name)
             s.commit()
+        send_all(ctx, engine.hooks, [moved], engine.ok())
         engine.poke()
         return {"ok": True}
 
@@ -519,6 +529,53 @@ def build_health_router(ctx: Context, guards: Guards, engine: HealthEngine) -> A
             s.delete(row)
             ctx.audit(s, found[0].username, "health.token.deleted", row.name)
             s.commit()
+        return {"ok": True}
+
+    # --- Webhooks: Push bei Zustandswechseln ---
+
+    @router.get("/webhooks", dependencies=[Depends(guards.require_session)])
+    def webhooks():
+        with ctx.session_factory() as s:
+            rows = s.scalars(select(HealthWebhook).order_by(HealthWebhook.id)).all()
+            return [{"id": w.id, "name": w.name, "target": w.target, "created_at": w.created_at,
+                     "last_sent": w.last_sent, "last_error": w.last_error} for w in rows]
+
+    @router.post("/webhooks")
+    def new_webhook(body: WebhookIn, found=Depends(guards.require_admin)):
+        try:
+            target = check_url(body.url)
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from None
+        key = "vwhs_" + secrets.token_urlsafe(32)
+        with ctx.session_factory() as s:
+            row = HealthWebhook(name=body.name.strip(), target=target, created_at=ctx.clock())
+            s.add(row)
+            ctx.audit(s, found[0].username, "health.webhook.created", f"{row.name} → {target}")
+            s.commit()
+            webhook_id = row.id
+        ctx.secrets.set(url_name(webhook_id), body.url.strip())
+        ctx.secrets.set(key_name(webhook_id), key)
+        return {"id": webhook_id, "secret": key}
+
+    @router.post("/webhooks/{webhook_id}/test")
+    def test_webhook(webhook_id: int, _found=Depends(guards.require_admin)):
+        with ctx.session_factory() as s:
+            if s.get(HealthWebhook, webhook_id) is None:
+                raise HTTPException(404, "Unknown webhook")
+        error = deliver(ctx, webhook_id, "test", document(ctx, "test", [], engine.ok()), retry=False)
+        return {"ok": not error, "error": error}
+
+    @router.delete("/webhooks/{webhook_id}")
+    def delete_webhook(webhook_id: int, found=Depends(guards.require_admin)):
+        with ctx.session_factory() as s:
+            row = s.get(HealthWebhook, webhook_id)
+            if row is None:
+                raise HTTPException(404, "Unknown webhook")
+            s.delete(row)
+            ctx.audit(s, found[0].username, "health.webhook.deleted", row.name)
+            s.commit()
+        ctx.secrets.delete(url_name(webhook_id))
+        ctx.secrets.delete(key_name(webhook_id))
         return {"ok": True}
 
     return router

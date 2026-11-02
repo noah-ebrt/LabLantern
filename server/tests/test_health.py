@@ -32,6 +32,7 @@ def hw(admin):
     engine = env.app.state.health
     probes = Probes()
     engine.executor, engine.probe = InlineExecutor(), probes
+    engine.hooks = InlineExecutor()
     sent = []
     env.app.state.ctx.notifier = lambda title, body, html=None, kind="report": sent.append((title, body, kind)) or (True, None)
     return env, client, h, engine, probes, sent
@@ -367,3 +368,70 @@ def test_dns_probe_against_local_udp_server():
         assert not r.ok and "does not exist" in r.error
     finally:
         sock.close()
+
+
+# --- Webhooks ---
+
+@pytest.fixture
+def receiver():
+    """Lokales Webhook-Ziel: merkt sich Body und Header jedes POST."""
+    got = []
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            body = self.rfile.read(int(self.headers["Content-Length"]))
+            got.append((dict(self.headers), body))
+            self.send_response(204)
+            self.end_headers()
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{srv.server_address[1]}/hook?key=abc", got
+    srv.shutdown()
+    srv.server_close()
+
+
+def test_webhook_gets_signed_state_changes(hw, receiver):
+    import hashlib
+    import hmac
+    env, client, h, engine, probes, sent = hw
+    url, got = receiver
+    create(client, h)
+    r = client.post("/api/health/webhooks", json={"name": "LED", "url": url}, headers=h)
+    assert r.status_code == 200, r.text
+    key = r.json()["secret"]
+    listed = client.get("/api/health/webhooks").json()
+    assert listed[0]["target"].startswith("http://127.0.0.1:") and "key=abc" not in json.dumps(listed)
+
+    run(env, engine)
+    headers, body = got[-1]
+    doc = json.loads(body)
+    assert doc["event"] == "health.changed" and doc["states"] == {"nas": "up"}
+    assert doc["changes"][0]["slug"] == "nas" and doc["changes"][0]["state"] == "up"
+    assert headers["X-Vulnwatch-Signature"] == "sha256=" + hmac.new(key.encode(), body, hashlib.sha256).hexdigest()
+
+    n = len(got)
+    run(env, engine)   # kein Wechsel, kein Aufruf
+    assert len(got) == n
+
+    mid = client.get("/api/health/overview").json()["monitors"][0]["id"]
+    client.post(f"/api/health/monitors/{mid}/pause", json={"paused": True}, headers=h)
+    assert json.loads(got[-1][1])["states"] == {"nas": "paused"}
+
+    wid = listed[0]["id"]
+    r = client.post(f"/api/health/webhooks/{wid}/test", headers=h)
+    assert r.json() == {"ok": True, "error": ""} and json.loads(got[-1][1])["event"] == "test"
+    assert client.get("/api/health/webhooks").json()[0]["last_error"] == ""
+
+    assert client.delete(f"/api/health/webhooks/{wid}", headers=h).status_code == 200
+    assert client.get("/api/health/webhooks").json() == []
+    assert env.app.state.ctx.secrets.get(f"health.webhook.{wid}.url") is None
+
+
+def test_webhook_rejects_bad_urls(hw):
+    env, client, h, *_ = hw
+    for url in ("ftp://example.org/x", "http:///nohost", "https://user:pw@example.org/x"):
+        assert client.post("/api/health/webhooks", json={"name": "x", "url": url}, headers=h).status_code == 422

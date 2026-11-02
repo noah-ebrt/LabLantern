@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { setCsrf } from '../src/api.js'
+import HealthApiSettings from '../src/components/HealthApiSettings.vue'
 import HealthMonitorForm from '../src/components/HealthMonitorForm.vue'
 import PageTabs from '../src/components/PageTabs.vue'
 import HealthView from '../src/views/HealthView.vue'
@@ -33,7 +34,10 @@ beforeEach(() => {
         monitors: [MON], incidents: [{ monitor_id: 1, name: 'pve', ts: 1800000000, detail: '' }], fritz: false })
     }
     if (url === '/api/health/options') return json(OPTIONS)
+    if (url === '/api/health/tokens' && init.method === 'POST') return json({ id: 1, token: 'vwh_secret' })
     if (url === '/api/health/tokens') return json([])
+    if (url === '/api/health/webhooks' && init.method === 'POST') return json({ id: 1, secret: 'vwhs_key' })
+    if (url === '/api/health/webhooks') return json([])
     if (url === '/api/health/monitors' && init.method === 'POST') return json({ id: 2, slug: 'nas', heartbeat_tokens: {} })
     return json({}, 404)
   }))
@@ -108,5 +112,28 @@ describe('HealthMonitorForm', () => {
     expect(post.body.name).toBe('NAS')
     expect(post.body.checks.map((c) => [c.kind, c.params.port ?? null])).toEqual([['ping', null], ['tcp', 445]])
     expect(w.emitted('saved')).toBeTruthy()
+  })
+})
+
+describe('HealthApiSettings', () => {
+  it('shows a new token and a new webhook key once, without examples', async () => {
+    const w = mount(HealthApiSettings)
+    await flushPromises()
+    expect(w.text()).not.toContain('ESP32')
+    expect(w.find('.cmd-block').exists()).toBe(false)
+
+    await w.find('input[aria-label="Token name"]').setValue('LED')
+    await w.findAll('form')[0].trigger('submit')
+    await flushPromises()
+    expect(w.find('.cmd-text').text()).toBe('vwh_secret')
+    expect(w.text()).toContain('Token for LED · shown only now')
+
+    await w.find('input[aria-label="Webhook name"]').setValue('Shelf')
+    await w.find('input[aria-label="Webhook URL"]').setValue('http://192.168.1.50/hook')
+    await w.findAll('form')[1].trigger('submit')
+    await flushPromises()
+    expect(calls.find((c) => c.url === '/api/health/webhooks' && c.method === 'POST').body).toEqual({ name: 'Shelf', url: 'http://192.168.1.50/hook' })
+    expect(w.find('.cmd-text').text()).toBe('vwhs_key')
+    expect(w.text()).toContain('Signing key for Shelf')
   })
 })

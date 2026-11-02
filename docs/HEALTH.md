@@ -117,7 +117,28 @@ or the check engine has not run for a minute, the API reports `unknown` and `"en
 should show "no data" in that case, the same as when it can't reach vulnwatch at all.
 
 The certificate comes from vulnwatch's own CA: download it from `https://<vulnwatch>/ca.crt` and give it to the
-device (`WiFiClientSecure::setCACert` on an ESP32). The settings tab shows a complete ESP32 example.
+device (`WiFiClientSecure::setCACert` on an ESP32).
+
+### Webhooks
+
+Instead of asking every few seconds, a device can be told. Add a URL under **Health → Settings → API for other
+devices → Webhooks**. On every state change (and on pause or resume) vulnwatch sends a `POST` with JSON:
+
+```json
+{"event": "health.changed", "ts": 1793000000, "engine_ok": true,
+ "changes": [{"slug": "nas", "name": "NAS", "state": "down", "prev": "up", "critical": true}],
+ "states": {"nas": "down", "pve": "up"}, "critical": ["nas"]}
+```
+
+`states` has the same shape as `/api/health/states`, so a device can use the same code for both. **Test** sends
+`"event": "test"` with no changes. The header `X-Vulnwatch-Signature: sha256=<hex>` is an HMAC-SHA256 of the raw body
+with the webhook's signing key, shown once when you add it; check it before acting on a call. Plain `http://` works
+for devices in your network, `https://` targets need a certificate the master trusts.
+
+A failed delivery is retried once after 5 seconds, then shown at the webhook. Redirects aren't followed. Calls can
+arrive out of order: use `ts`. A webhook only fires when something changes, so it can't tell a device that vulnwatch
+itself stopped. Read `/api/health/states` once at start and every few minutes as well, and show "no data" when that
+fails.
 
 Prometheus users get the same states as `vulnwatch_health_state{monitor="nas"}` (1 up, 0.5 degraded, 0 down,
 -1 unknown or paused).
@@ -128,4 +149,5 @@ The checks run inside the server container in their own thread pool; each has a 
 unprivileged ICMP sockets, so the container keeps all capabilities dropped; `deploy/compose.yaml` sets
 `net.ipv4.ping_group_range` for that. Results are kept for 7 days, hourly summaries for a year.
 
-Health checks only contact the hosts you configured (and the FRITZ!Box). Nothing leaves your network.
+Health checks only contact the hosts you configured (and the FRITZ!Box), webhooks only the URLs you added. Nothing
+else leaves your network.

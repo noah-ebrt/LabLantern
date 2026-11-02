@@ -56,4 +56,17 @@ describe('ConnectorDetailModal', () => {
     await w.find('button.sort').trigger('click')
     expect(w.text().indexOf('Sensor 0')).toBeLessThan(w.text().indexOf('Sensor 7'))
   })
+
+  it('liest das Gerät auf Knopfdruck neu und lädt die Ansicht', async () => {
+    const w = mount(ConnectorDetailModal, { props: { systemId: 7 }, global: { stubs: { RouterLink: true } } })
+    await flushPromises()
+    fetch.mockImplementationOnce(async () => new Response(JSON.stringify({ ok: true, findings: 2 }),
+      { status: 200, headers: { 'content-type': 'application/json' } }))
+    await w.find('[data-test="read-now"]').trigger('click')
+    await flushPromises()
+    const calls = fetch.mock.calls.map(([url, opts]) => [String(url), opts?.method || 'GET'])
+    expect(calls).toContainEqual(['/api/settings/appliances/7/test', 'POST'])
+    expect(calls.filter(([url]) => url === '/api/systems/7').length).toBe(2)
+    expect(w.text()).toContain('Read, 2 open update(s) or alert(s).')
+  })
 })

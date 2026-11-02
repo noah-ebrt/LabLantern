@@ -50,7 +50,7 @@ const tabs = computed(() => [
       </template>
       <template #settings>
         <HealthMonitorsSettings :monitors="data.monitors" :options="options" @changed="load" />
-        <HealthApiSettings :monitors="data.monitors" />
+        <HealthApiSettings />
       </template>
     </PageTabs>
   </div>

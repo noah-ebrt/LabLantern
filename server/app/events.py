@@ -45,6 +45,7 @@ TOPICS_BY_TABLE = {
     "health_checks": "health",
     "health_events": "health",
     "health_tokens": "health",
+    "health_webhooks": "health",
 }
 # Spalten, die sich ständig ändern, ohne dass die Anzeige es braucht (der Long-Poll schreibt jede Sekunde).
 # Ob ein Agent dadurch verbunden/getrennt wirkt, meldet der Wächter.

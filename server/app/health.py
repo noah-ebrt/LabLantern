@@ -23,6 +23,7 @@ from sqlalchemy import delete, select
 from .context import Context
 from .fritzbox import tr064_url
 from .healthprobes import ACTIVE, FRITZ_KINDS, ProbeResult, ProbeSpec, clean_params, run_probe
+from .healthwebhooks import change, send_all
 from .models import HealthCheck, HealthEvent, HealthMonitor, HealthRollup, HealthSample, System, setting
 
 log = logging.getLogger("vulnwatch.health")
@@ -320,6 +321,8 @@ class HealthEngine:
     def __init__(self, ctx: Context, executor=None, probe=run_probe):
         self.ctx = ctx
         self.executor = executor or ThreadPoolExecutor(WORKERS, thread_name_prefix="health")
+        # eigener Pool: ein langsames Webhook-Ziel darf keine Prüfung verzögern
+        self.hooks = executor or ThreadPoolExecutor(2, thread_name_prefix="health-webhook")
         self.probe = probe
         self.inflight: dict[int, tuple[Future, float]] = {}
         self.next_due: dict[int, float] = {}
@@ -345,6 +348,7 @@ class HealthEngine:
     def stop(self) -> None:
         self._stop.set()
         self.executor.shutdown(wait=False)
+        self.hooks.shutdown(wait=False)
 
     def _run(self) -> None:
         while not self._stop.is_set():
@@ -383,6 +387,7 @@ class HealthEngine:
             self.publish(["health-metrics"])
         if transitions:
             self._alert(transitions)
+            send_all(self.ctx, self.hooks, [change(m, p, st) for m, p, st in transitions], self.ok())
 
     def _fritz(self) -> dict | None:
         with self.ctx.session_factory() as s:
