@@ -74,13 +74,13 @@ describe('NotificationSettings', () => {
     await w.get('button[data-test=add-channel]').trigger('click')
     await w.get('select[name=provider]').setValue('icloud')
     expect(w.find('input[name=host]').exists()).toBe(false)
-    await w.get('input[name=from_addr]').setValue('REDACTED.com')
+    await w.get('input[name=from_addr]').setValue('name@icloud.com')
     await w.get('input[name=password]').setValue('abcd-efgh-ijkl-mnop')
-    await w.get('input[name=to_addr]').setValue('REDACTED.com')
+    await w.get('input[name=to_addr]').setValue('name@icloud.com')
     await w.find('form').trigger('submit')
     await flushPromises()
     const post = calls.find((c) => c.url === '/api/integrations/notifications/smtp')
-    expect(post.body).toMatchObject({ host: 'smtp.mail.me.com', port: 587, security: 'starttls', username: 'REDACTED.com', from_addr: 'REDACTED.com' })
+    expect(post.body).toMatchObject({ host: 'smtp.mail.me.com', port: 587, security: 'starttls', username: 'name@icloud.com', from_addr: 'name@icloud.com' })
   })
 
   it('entfernt einen Kanal per Index', async () => {
