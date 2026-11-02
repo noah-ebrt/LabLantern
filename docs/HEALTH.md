@@ -50,7 +50,7 @@ Pi-hole, AdGuard Home, DNS, certificate). The ports are the vendors' defaults; c
 | --- | --- | --- |
 | Ping (ICMP) | echo request | is the host there at all |
 | TCP port | connection to a port | SSH 22, SMB 445, RDP 3389, any service |
-| HTTP(S) | GET or HEAD; expected status (`2xx`, `200,301`, `200-399`), optional text the answer must contain, optional `Authorization` header, certificate check on or off | web UIs and APIs |
+| HTTP(S) | GET or HEAD; expected status (`2xx`, `200,301`, `200-399`), optional text the answer must contain, optional `Authorization` header, certificate check on or off; paste a whole URL as target and it is split into scheme, host, port and path | web UIs and APIs |
 | TLS certificate | days until the certificate expires; degraded below the warning days, down once expired | anything with HTTPS |
 | DNS server | A or AAAA query to the server | AdGuard Home, Pi-hole |
 | FRITZ!Box: device active | asks the FRITZ!Box whether it sees the device (by MAC or IP) | phones and laptops that ignore ping in Wi-Fi power save |

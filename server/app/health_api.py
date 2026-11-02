@@ -12,7 +12,7 @@ import time
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
 from .auth import RateLimiter, sha256_hex
@@ -22,7 +22,7 @@ from .guards import Guards, client_ip
 from .health import (KIND_LABELS, HealthEngine, beat, check_label, effective_state, params_of, secret_name,
                      state_durations, unique_slug, uptime_of, worst_of)
 from .healthfeed import MAX_WAIT, monitor_state
-from .healthprobes import FRITZ_KINDS, HOST_RE, KINDS, PASSIVE, ProbeSpec, clean_params, run_probe
+from .healthprobes import FRITZ_KINDS, HOST_RE, KINDS, PASSIVE, ProbeSpec, clean_params, host_of, run_probe
 from .healthwebhooks import EVENTS, check_url, deliver, key_name, split_list, url_name
 from .models import (HealthCheck, HealthEvent, HealthMonitor, HealthRollup, HealthSample, HealthToken, HealthWebhook, System,
                      setting)
@@ -48,10 +48,15 @@ class CheckIn(BaseModel):
 class MonitorIn(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     slug: str | None = Field(default=None, pattern=r"^[a-z0-9][a-z0-9-]{0,39}$")
-    host: str = Field(default="", max_length=253)
+    host: str = Field(default="", max_length=2000)   # IP, Name oder eingefügte URL (zählt mit ihrem Host)
     critical: bool = True
     paused: bool = False
     checks: list[CheckIn] = Field(default_factory=list, max_length=MAX_CHECKS)
+
+    @field_validator("host")
+    @classmethod
+    def _host(cls, v: str) -> str:
+        return host_of(v)
 
 
 class PauseIn(BaseModel):
@@ -71,8 +76,13 @@ class WebhookIn(BaseModel):
 
 
 class TestIn(BaseModel):
-    host: str = Field(default="", max_length=253)
+    host: str = Field(default="", max_length=2000)
     check: CheckIn
+
+    @field_validator("host")
+    @classmethod
+    def _host(cls, v: str) -> str:
+        return host_of(v)
 
 
 def fritz_available(ctx: Context) -> bool:

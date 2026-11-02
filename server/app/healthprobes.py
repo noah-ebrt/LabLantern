@@ -50,9 +50,40 @@ class ProbeSpec:
     fritz: dict | None = None    # {url, user, password} aus dem FRITZ!Box-Connector
 
 
+def split_url(value: str) -> dict | None:
+    """Eingefügte URL (http://drucker.lan:8080/index.html) in Schema, Host, Port und Pfad zerlegen; None ohne "://"."""
+    value = (value or "").strip()
+    if "://" not in value:
+        return None
+    parts = urllib.parse.urlsplit(value)
+    if parts.scheme.lower() not in ("http", "https") or not parts.hostname:
+        raise ValueError("URL must start with http:// or https:// and name a host")
+    try:
+        port = parts.port
+    except ValueError:
+        raise ValueError("Port in the URL must be 1–65535") from None
+    path = (parts.path or "/") + (f"?{parts.query}" if parts.query else "")
+    return {"scheme": parts.scheme.lower(), "host": parts.hostname, "port": port, "path": path}
+
+
+def host_of(value: str) -> str:
+    """Host-Feld: eine eingefügte URL zählt mit ihrem Host."""
+    url = split_url(value)
+    return url["host"] if url else (value or "").strip()
+
+
 def clean_params(kind: str, p: dict) -> dict:
-    """Erlaubte Felder je Art prüfen und normalisieren; ValueError mit lesbarer Meldung bei Unsinn."""
+    """Erlaubte Felder je Art prüfen und normalisieren; ValueError mit lesbarer Meldung bei Unsinn.
+    Als Ziel darf auch eine URL stehen: HTTP(S) übernimmt daraus Schema, Port und Pfad, die anderen den Host
+    (Zertifikat zusätzlich den Port)."""
     p = dict(p or {})
+    url = split_url(str(p.get("target") or ""))
+    if url:
+        p["target"] = url["host"]
+        if kind == "http":
+            p.update(scheme=url["scheme"], port=url["port"] or (443 if url["scheme"] == "https" else 80), path=url["path"])
+        elif kind == "tls" and url["port"]:
+            p["port"] = url["port"]
 
     def port(default):
         v = int(p.get("port") or default)
@@ -63,7 +94,7 @@ def clean_params(kind: str, p: dict) -> dict:
     def target():
         t = str(p.get("target") or "").strip()
         if t and not HOST_RE.match(t):
-            raise ValueError("Target must be an IP address or host name")
+            raise ValueError("Target must be an IP address, a host name or a URL")
         return t
 
     if kind == "ping":

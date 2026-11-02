@@ -113,6 +113,23 @@ describe('HealthMonitorForm', () => {
     expect(post.body.checks.map((c) => [c.kind, c.params.port ?? null])).toEqual([['ping', null], ['tcp', 445]])
     expect(w.emitted('saved')).toBeTruthy()
   })
+
+  it('splits a pasted URL into host, scheme, port and path', async () => {
+    const w = mount(HealthMonitorForm, { props: { options: OPTIONS }, global: { plugins: [router()] } })
+    await w.find('input[placeholder="REDACTED"]').setValue('http://REDACTED/index.html')
+    await w.find('input[placeholder="REDACTED"]').trigger('change')
+    expect(w.find('input[placeholder="REDACTED"]').element.value).toBe('REDACTED')
+
+    await w.findAll('.chip').find((b) => b.text() === 'HTTPS').trigger('click')
+    const target = w.find('input[placeholder="host above, or paste a URL"]')
+    await target.setValue('http://printer.lan:8080/status?x=1')
+    await target.trigger('change')
+    expect(target.element.value).toBe('printer.lan')
+    const fields = w.findAll('.check').at(-1)
+    expect(fields.find('select').element.value).toBe('http')
+    expect(fields.find('input[type="number"]').element.value).toBe('8080')
+    expect(fields.find('input[placeholder="/"]').element.value).toBe('/status?x=1')
+  })
 })
 
 describe('HealthApiSettings', () => {
