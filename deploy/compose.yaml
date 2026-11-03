@@ -87,6 +87,8 @@ services:
     # mDNS-Ankündigung für `lablantern-agent setup`. Host-Netz nötig (Multicast), sonst nichts:
     # keine Volumes, keine Rechte, nur lesend. Eine gefälschte Ankündigung scheitert am Pairing-Code.
     image: lablantern-server:${LABLANTERN_TAG:-dev}
+    # Image baut der Dienst server; ohne never versucht compose es vorher von Docker Hub zu ziehen
+    pull_policy: never
     command: ["python", "-m", "app.announce"]
     network_mode: host
     restart: unless-stopped
@@ -131,6 +133,7 @@ services:
   # ausführen (nur Standardbibliothek); der Server liest die fertigen Pakete nur.
   agent-key:
     <<: *agent-job
+    pull_policy: never   # Image baut agent-build
     command: ["ll-release", "init-key", "/key/release.key", "/releases/release.pub"]
     volumes:
       - agent_key:/key
@@ -152,6 +155,7 @@ services:
 
   agent-sign:
     <<: *agent-job
+    pull_policy: never   # Image baut agent-build
     command: ["ll-release", "publish", "/stage", "/releases", "/key/release.key"]
     volumes:
       - agent_key:/key:ro
