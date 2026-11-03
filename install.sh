@@ -60,6 +60,7 @@ say "Building and starting LabLantern; the first build takes a few minutes ..."
 docker compose up -d --build
 
 host=$(sed -n 's/^LABLANTERN_HOSTNAMES=\([^,]*\).*/\1/p' .env)
+ip=$(sed -n 's/^LABLANTERN_BIND_IP=\([0-9.]*\).*/\1/p' .env)
 port=$(sed -n 's/^LABLANTERN_PORT=\([0-9]*\).*/\1/p' .env)
 port=${port:-8443}
 
@@ -74,15 +75,39 @@ while [ $i -lt 60 ]; do
 done
 
 say ""
-say "lablantern is running: https://$host:$port"
+# Der Name ist frei gewählt; solange ihn kein DNS kennt, findet ihn auch der Browser nicht
+case $host in
+    *[!0-9.]*) named=1 ;;
+    *) named= ;;
+esac
+say "LabLantern is running."
+say "  By IP:   https://$ip:$port   (works right away)"
+[ -n "$named" ] && say "  By name: https://$host:$port   (needed for passkeys, once the name resolves)"
 if [ -n "$token" ]; then
-    say "Setup token:          $token"
+    say "Setup token: $token"
 else
     say "No setup token in the log (setup already done?): docker compose logs server"
 fi
+
+if [ -z "$named" ]; then
+    say ""
+    say "Note: no DNS name configured (LABLANTERN_HOSTNAMES starts with an IP). Passkeys only work on a name:"
+    say "  put one first in $root/deploy/.env, e.g. LABLANTERN_HOSTNAMES=lablantern.lan,$ip, then docker compose up -d"
+elif ! getent ahostsv4 "$host" 2>/dev/null | grep -q "^$ip[[:space:]]"; then
+    say ""
+    say "Note: $host does not resolve to $ip yet, so browsers won't find it. Add a DNS entry $host -> $ip:"
+    say "  - AdGuard Home: Filters -> DNS rewrites      - Pi-hole: Local DNS -> DNS Records"
+    say "  - your router's local DNS / host names       - or one PC only: the line \"$ip $host\" in its hosts file"
+    say "    (Windows: C:\\Windows\\System32\\drivers\\etc\\hosts, macOS/Linux: /etc/hosts)"
+    say "  If the name still doesn't open, turn off \"secure DNS\" (DNS over HTTPS) in the browser: it skips your local DNS."
+    say "  Until then, use https://$ip:$port for the setup."
+fi
+
 say ""
 say "Next:"
-say "  1. Point $host to this host in your router or DNS (or the hosts file of your PC)."
-say "  2. Trust the certificate authority: https://$host:$port/ca.crt (passkeys need it)."
-say "  3. Open https://$host:$port, enter the setup token, then add a passkey and your first host."
+say "  1. Open https://$ip:$port, enter the setup token, set a password and an authenticator app."
+say "  2. Trust the certificate authority: https://$ip:$port/ca.crt (import it as a trusted root; passkeys need it)."
+[ -n "$named" ] && say "  3. Switch to https://$host:$port and add a passkey: Settings -> System -> Passkeys." \
+    || say "  3. Set a DNS name (see the note above), then add a passkey: Settings -> System -> Passkeys."
+say "  4. Add your first host: Systems -> + Add host. Guide: https://github.com/noah-ebrt/LabLantern/blob/main/docs/INSTALL.md"
 say "Updates later: git pull && docker compose up -d --build --force-recreate in $root/deploy (not during a scan)"

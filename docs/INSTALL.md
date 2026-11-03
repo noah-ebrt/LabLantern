@@ -4,8 +4,17 @@
 
 - Linux with Docker Engine and the Compose plugin (`docker compose version`).
 - A fixed LAN IP. The master listens only on this address. Do not publish it through a public reverse proxy.
-- Optional but recommended: a DNS name for the master, e.g. `lablantern.lan`, set in your router or DNS server
-  (AdGuard, Pi-hole, …). Passkeys only work on a name. Agents can use either the name or the IP.
+- Recommended: a DNS name for the master, e.g. `lablantern.lan`. Passkeys only work on a name; agents can use either
+  the name or the IP. The name is your choice, so no DNS server knows it until you add it, and browsers show
+  "server IP address could not be found" (`ERR_NAME_NOT_RESOLVED`) until then. Add an entry `<name> → <LAN IP>`:
+  - AdGuard Home: **Filters → DNS rewrites**. Pi-hole: **Local DNS → DNS Records**. Routers: their local DNS or host
+    name settings (FRITZ!Box, OpenWrt, OPNsense, …).
+  - For a single PC: the line `<LAN IP> <name>` in its hosts file (Windows
+    `C:\Windows\System32\drivers\etc\hosts`, macOS and Linux `/etc/hosts`).
+  - If the name still doesn't open, the browser probably uses "secure DNS" (DNS over HTTPS), which bypasses your local
+    DNS server. Turn it off in the browser settings, or point it at your own DNS server.
+
+  Until the name resolves, `https://<LAN IP>:8443` works for everything except passkeys.
 
 ## 2. Configure and start
 
@@ -62,10 +71,12 @@ The services:
 
 ## 3. First login
 
-Open `https://<name>:8443`. The setup wizard needs the setup token from the log (it is new on every start until the
-setup is done), then an authenticator app (TOTP) and a password. Afterwards:
+Open `https://<name>:8443`, or `https://<LAN IP>:8443` while the name doesn't resolve yet. The setup wizard needs the
+setup token from the log (it is new on every start until the setup is done), then an authenticator app (TOTP) and a
+password. Afterwards:
 
-1. **Settings → System → Passkeys → Add passkey.**
+1. **Settings → System → Passkeys → Add passkey**, opened under the name, not the IP: browsers refuse passkeys on IP
+   addresses.
 2. Add hosts ([AGENTS.md](AGENTS.md)). The agent packages are built on the first start; until they are ready,
    **+ Add host → Linux server** says so. **Settings → System → Agent release** shows the version and the signing key.
 
