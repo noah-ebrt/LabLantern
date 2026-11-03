@@ -381,7 +381,7 @@ def test_heartbeat_and_announced_shutdown(hw):
 
 def test_fritz_checks_need_the_connector(hw):
     env, client, h, engine, probes, sent = hw
-    r = client.post("/api/health/monitors", json={"name": "Phone", "checks": [{"kind": "fritz_host", "params": {"target": "REDACTED"}}]}, headers=h)
+    r = client.post("/api/health/monitors", json={"name": "Phone", "checks": [{"kind": "fritz_host", "params": {"target": "00:00:5E:00:53:AF"}}]}, headers=h)
     assert r.status_code == 422
     kinds = {k["kind"]: k for k in client.get("/api/health/options").json()["kinds"]}
     assert kinds["fritz_host"]["available"] is False and "FRITZ!Box" in kinds["fritz_host"]["reason"]
@@ -391,11 +391,11 @@ def test_fritz_checks_need_the_connector(hw):
     with ctx.session_factory() as s:
         s.add(Setting(key="fritz.config", value='{"url": "http://192.0.2.1", "user": "vw"}'))
         s.commit()
-    create(client, h, name="Phone", host="", checks=[{"kind": "fritz_host", "params": {"target": "REDACTED"}}])
+    create(client, h, name="Phone", host="", checks=[{"kind": "fritz_host", "params": {"target": "00:00:5e:00:53:af"}}])
     create(client, h, name="Internet", host="", checks=[{"kind": "fritz_wan"}])
     run(env, engine)
     spec = next(c for c in probes.calls if c.kind == "fritz_host")
-    assert spec.host == "REDACTED" and spec.fritz["password"] == "pw"
+    assert spec.host == "00:00:5E:00:53:AF" and spec.fritz["password"] == "pw"
     assert any(c.kind == "fritz_wan" for c in probes.calls)   # läuft ohne Host
     assert spec.fritz["url"] == "http://192.0.2.1:49000"
 

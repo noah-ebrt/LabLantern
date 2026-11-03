@@ -151,7 +151,7 @@ const beatUrl = (t) => `${window.location.origin}/api/health/beat/${t}`
           <div class="fields">
             <label v-if="KINDS[c.kind].fields.includes('target')">{{ c.kind === 'http' ? 'Own target or URL' : 'Own target' }}
               <input v-model="c.params.target" :placeholder="c.kind === 'http' ? 'host above, or paste a URL' : 'host above'" spellcheck="false" @change="targetFromUrl(c)" /></label>
-            <label v-if="KINDS[c.kind].fields.includes('fritz_target')">Device (MAC or IP) <input v-model="c.params.target" placeholder="REDACTED" spellcheck="false" /></label>
+            <label v-if="KINDS[c.kind].fields.includes('fritz_target')">Device (MAC or IP) <input v-model="c.params.target" placeholder="AA:BB:CC:DD:EE:FF" spellcheck="false" /></label>
             <label v-if="KINDS[c.kind].fields.includes('scheme')">Scheme
               <select v-model="c.params.scheme" @change="onScheme(c)"><option value="http">http</option><option value="https">https</option></select>
             </label>

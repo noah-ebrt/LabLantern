@@ -16,7 +16,9 @@ own=$( { [ -f private/leak-patterns.txt ] && grep -v '^#' private/leak-patterns.
 
 regex=$(printf '%s\n%s\n' "$generic" "$own" | sed '/^$/d' | paste -sd'|' -)
 files=$(git ls-files -co --exclude-standard | grep -v '^scripts/check-leaks.sh$' | grep -v 'package-lock.json$' | grep -v 'go.sum$')
-if echo "$files" | tr '\n' '\0' | xargs -0 grep -nIP -- "$regex" 2>/dev/null; then
+# In CI nur Datei und Zeile: das Log eines öffentlichen Repos ist selbst öffentlich, der Fund darf nicht hinein
+show() { if [ -n "${CI:-}" ]; then cut -d: -f1,2; else cat; fi; }
+if echo "$files" | tr '\n' '\0' | xargs -0 grep -nIP -- "$regex" 2>/dev/null | show | grep .; then
     echo "Leak check failed: the lines above must not be published." >&2
     exit 1
 fi
