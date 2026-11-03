@@ -105,7 +105,7 @@ dialog. If the API fails, the last mapping stays and Cloudflare Tunnel shows as 
 
 ## Traefik (Docker labels, built in)
 
-Agents from 0.17 report the router labels of their containers (`traefik.enable`, `traefik.http.routers.*`,
+Agents report the router labels of their containers (`traefik.enable`, `traefik.http.routers.*`,
 `traefik.tcp.routers.*`), never middlewares or services, which often carry credentials. Each `Host()` or `HostSNI()`
 name goes through the same public DNS check as NPM, and the container is marked "via Traefik: app.example.com".
 In Settings › Exposure › Traefik you can mark an entrypoint such as `lan` as LAN only or always public; a name marked by hand
@@ -138,7 +138,7 @@ TrueNAS that comes from the pool topology (`disk.query`, `disk.temperatures`, `b
 `/nodes/{node}/disks/list` and `/disks/zfs` (PVEAuditor is enough), on Synology from `SYNO.Storage.CGI.Storage`
 (administrators only).
 
-Agent hosts (0.18 and newer) show the same in their details, but only on bare metal: in a VM or container the
+Agent hosts show the same in their details, but only on bare metal: in a VM or container the
 drives are virtual or belong to the host, so the agent skips them. Drives come from `lsblk`, ZFS pools from `zpool`,
 mdraid from `/proc/mdstat`. Health and temperature need `smartctl` (package `smartmontools`); without it every drive
 shows a dashed symbol. Sleeping disks are not woken (`smartctl -n standby`).
@@ -318,8 +318,7 @@ hand under **Early warnings → Feeds & products**.
   Socket (malicious npm and PyPI packages)
 - Vendors: Tailscale security bulletins, GitLab security releases, OPNsense announcements, Grafana security advisories
 
-A saved list that is one of the earlier defaults gets the new defaults automatically, and any feeds you added stay
-in it. Extra feeds cost little: each feed is downloaded, but only matching entries go to the AI. Only entries from
+Extra feeds cost little: each feed is downloaded, but only matching entries go to the AI. Only entries from
 the last 30 days that name one of your products go to the AI. Host packages and operating systems must appear in
 the title, because curl or Ubuntu are mentioned in passing all the time. On a vendor's own feed (the feed's domain is
 the product's name, e.g. `tailscale.com`) every entry counts.

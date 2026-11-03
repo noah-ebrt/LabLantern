@@ -12,7 +12,7 @@ No port is opened on the host. The master never holds a key to log in to your ho
 
 ## Add a host
 
-**Systems → Add Linux agent** shows a setup command with the master address and the CA fingerprint. Run it on the
+**Systems → + Add host → Linux server** shows a setup command with the master address and the CA fingerprint. Run it on the
 host. It downloads the package from the master, verifies its checksum, installs it and starts pairing:
 
 1. The agent finds the master (mDNS, or the address in the command) and pins its certificate authority.
@@ -29,8 +29,8 @@ approve the host in the list.
 - installed packages (dpkg, rpm, apk) as an SBOM, pending security updates, reboot required
 - Docker and Podman containers (also stopped ones) with runtime, image, image ID, registry digests, published ports
   and a safe subset of labels (`com.docker.compose.*`, `org.opencontainers.*`, `traefik.enable` and Traefik router
-  labels from 0.17). **Never** environment variables, Traefik middlewares or services, or other labels.
-- Podman (from 0.17): the agent asks the rootful socket `/run/podman/podman.sock` and every rootless socket
+  labels). **Never** environment variables, Traefik middlewares or services, or other labels.
+- Podman: the agent asks the rootful socket `/run/podman/podman.sock` and every rootless socket
   `/run/user/<uid>/podman/podman.sock` over the Docker-compatible API. If Podman is installed but no socket is active,
   the host shows a containers error. Enable it with `systemctl enable --now podman.socket`, or for rootless Podman
   as that user `systemctl --user enable --now podman.socket` plus `loginctl enable-linger <user>`. Podman images
@@ -48,8 +48,8 @@ master can neither reboot your hosts nor install anything on them.
 
 ## Updates
 
-When a newer signed release is available, **Systems** shows "Agent X is available" with **Update all**. Agents from
-0.13 on accept one passkey touch for all listed hosts. Older agents need one touch each, one after another. The agent
+When a newer signed release is available, **Systems** shows "Agent X is available" with **Update all**: one passkey
+touch for all listed hosts. The agent
 only installs a package signed by the release key and newer than itself. The same card has the manual command
 (copy button) for hosts that are not connected.
 

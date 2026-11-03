@@ -163,14 +163,14 @@ Then, in this order:
 1. **Settings → System → Passkeys:** add a passkey. It confirms reboots and agent updates and signs the list of keys
    your agents trust, so add it before the first host. Trust the CA first: browsers allow passkeys only with a
    trusted certificate.
-2. **Systems → Add Linux agent:** copy the setup command, run it on the host, compare the pairing code, approve.
+2. **Systems → + Add host → Linux server:** copy the setup command, run it on the host, compare the pairing code, approve.
 3. **Settings → Alerts & reports → Channels:** add a mail or push channel and send a test.
 4. Optional: offsite watchdog, exposure sources, appliances, AI provider, Prometheus metrics.
 
 The first full run starts at the scheduled time (default 03:00), or right away with **Scan now** on the overview.
 The first run also downloads the scanner databases; later runs reuse them.
 
-**Updating:** `git pull && docker compose up -d --build` in `deploy/`. When the agent changed, **Systems** offers the
+**Updating:** `git pull && docker compose up -d --build --force-recreate` in `deploy/`, not while a scan runs. When the agent changed, **Systems** offers the
 new version within a minute, and **Update all** installs it on every host with one passkey touch.
 
 ## Documentation
@@ -181,9 +181,10 @@ new version within a minute, and **Update all** installs it on every host with o
 | [docs/AGENTS.md](docs/AGENTS.md) | Adding hosts, what an agent collects, commands, updates, removal, changing the agent |
 | [docs/HEALTH.md](docs/HEALTH.md) | Health monitoring: checks, thresholds, alerts, router checks, heartbeat, API and webhooks |
 | [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) | Notifications, schedule, snooze and exclusions, watchdog, exposure sources, appliances, collectors, version check, AI early warning, configuration as JSON, Prometheus, what leaves your network |
-| [collectors/README.md](collectors/README.md) | Collector scripts for Unraid, Synology and OpenWrt, and the report format for your own |
+| [collectors/README.md](collectors/README.md) | Collector scripts for Unraid, UGREEN, Synology and OpenWrt, and the report format for your own |
 | [SECURITY.md](SECURITY.md) | Threat model and how to report a vulnerability |
-| [docs/INTERNALS.md](docs/INTERNALS.md) | Architecture and data flow for contributors |
+| [docs/INTERNALS.md](docs/INTERNALS.md) | Architecture and data flow of the master, for contributors |
+| [agent/docs/INTERNALS.md](agent/docs/INTERNALS.md) | The agent's roles, trust anchors and flows; [GO-GUIDE.md](agent/docs/GO-GUIDE.md) helps you read the Go code without knowing Go |
 
 ## Development
 

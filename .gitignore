@@ -28,6 +28,8 @@ dist/
 /.claude/
 /.trail/
 /.mcp.json
+/docs/superpowers/
+/web/PRODUCT.md
 /graft/
 /.playwright-mcp/
 /.superpowers/

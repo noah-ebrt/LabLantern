@@ -1,6 +1,6 @@
 # Design
 
-Dark, monochrome admin dashboard (structure after the owner's SaaS reference: grouped sidebar, breadcrumb top bar with search, KPI cards with mini bars, panels with small uppercase titles, pill statuses). Color carries meaning only.
+Dark, monochrome admin dashboard (grouped sidebar, breadcrumb top bar with search, KPI cards with mini bars, panels with small uppercase titles, pill statuses). Color carries meaning only.
 
 ## Tokens (src/style.css)
 

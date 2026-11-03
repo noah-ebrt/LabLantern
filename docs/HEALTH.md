@@ -15,7 +15,7 @@ Open **Health** in the sidebar. The page has two tabs:
 Every approved agent gets a monitor on its own, with two checks:
 
 - **Agent:** the agent's live connection to vulnwatch. The agent daemon holds a long-poll open, so vulnwatch
-  notices within about a minute when it stops. No agent update is needed.
+  notices within about a minute when it stops.
 - **Ping** to the address the agent enrolled with.
 
 A host's state combines what vulnwatch sees from outside with what the agent reports:
@@ -122,7 +122,7 @@ Compare it for equality only: after a restart it starts from a new value. `v` is
 
 **Three ways to use it**, pick per device:
 
-- **Ask now and then.** A plain `GET` as before. Send `If-None-Match` with the last `ETag` (the `rev`) or
+- **Ask now and then.** A plain `GET`. Send `If-None-Match` with the last `ETag` (the `rev`) or
   `?since=<rev>` and you get an empty `304` while nothing changed.
 - **Wait for the next change (long-poll).** Best for a status LED: only outgoing connections, no open port, no shared
   secret, and changes arrive at once. Ask with `?since=<last rev>&wait=55` in a loop, with a read timeout of about

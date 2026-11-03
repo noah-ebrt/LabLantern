@@ -24,7 +24,7 @@ services:
       VULNWATCH_BIND_IP: ${VULNWATCH_BIND_IP}
     ports:
       # Bewusst ohne Standardwert: Die Oberfläche gehört nur an die LAN-IP, nie an 0.0.0.0.
-      - "${VULNWATCH_BIND_IP:?in .env setzen: die LAN-IP dieses Hosts}:${VULNWATCH_PORT:-8443}:8443"
+      - "${VULNWATCH_BIND_IP:?set it in .env: the LAN IP of this host}:${VULNWATCH_PORT:-8443}:8443"
     networks:
       # Eigenes Netz nur mit dem Server und einer festen Adresse: Nur ihr glaubt der Server X-Forwarded-For.
       edge:
@@ -61,7 +61,7 @@ services:
       VULNWATCH_PORT: "8000"
       VULNWATCH_PUBLIC_PORT: ${VULNWATCH_PORT:-8443}
       # Namen und IPs, unter denen die Oberfläche erreichbar ist (Zertifikate werden nur dafür ausgestellt)
-      VULNWATCH_HOSTNAMES: ${VULNWATCH_HOSTNAMES:?in .env setzen, z. B. vulnwatch.lan,192.168.1.50}
+      VULNWATCH_HOSTNAMES: ${VULNWATCH_HOSTNAMES:?set it in .env, e.g. vulnwatch.lan,192.168.1.50}
       VULNWATCH_CA_URL: http://proxy:8081/ca.crt
       # Nur diese Adresse darf die echte Client-IP mitteilen (Worker und Docker-Host erreichen Port 8000 auch direkt)
       VULNWATCH_TRUSTED_PROXY: ${VULNWATCH_PROXY_IP:-10.89.254.2}

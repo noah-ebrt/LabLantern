@@ -67,7 +67,7 @@ setup is done), then an authenticator app (TOTP) and a password. Afterwards:
 
 1. **Settings → System → Passkeys → Add passkey.**
 2. Add hosts ([AGENTS.md](AGENTS.md)). The agent packages are built on the first start; until they are ready,
-   "Add Linux agent" says so. **Settings → System → Agent release** shows the version and the signing key.
+   **+ Add host → Linux server** says so. **Settings → System → Agent release** shows the version and the signing key.
 
 ### Trust the certificate authority
 
@@ -84,11 +84,11 @@ Agents do not need this. The setup command contains the CA fingerprint, and the 
 ```bash
 cd vulnwatch && git pull
 cd deploy
-docker compose build server worker
-docker compose up -d --force-recreate server announce worker
+docker compose up -d --build --force-recreate
 ```
 
-The database schema is extended automatically on start (columns are only added, never removed). Agents update
+Not while a scan runs (default 03:00, or the overview shows it): recreating the worker aborts the run. The same
+command rebuilds and signs the agent when `agent/` changed. The database schema is extended automatically on start (columns are only added, never removed). Agents update
 themselves from the UI (**Systems → Update all**, one passkey touch).
 
 ## 5. Backup and restore
@@ -122,7 +122,7 @@ Remove agents first (**Systems → Delete**, the agent uninstalls itself), then 
 
 | Symptom | Cause and fix |
 | --- | --- |
-| Stack does not start, "in .env setzen" | `VULNWATCH_BIND_IP` or `VULNWATCH_HOSTNAMES` missing in `.env` |
+| Stack does not start, "set it in .env" | `VULNWATCH_BIND_IP` or `VULNWATCH_HOSTNAMES` missing in `.env` |
 | Browser shows a certificate for the wrong name | the name is missing in `VULNWATCH_HOSTNAMES`; add it and recreate `server` |
 | Passkeys cannot be added | open the UI by name, not by IP; the name must be in `VULNWATCH_HOSTNAMES` |
 | Run fails with "Worker returned no result" | `docker compose logs worker`; the worker needs outbound HTTPS for its databases |
