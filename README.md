@@ -216,5 +216,9 @@ Nothing phones home. Everything that leaves your network is listed in
 ## License
 
 [PolyForm Noncommercial 1.0.0](LICENSE.md). Personal, homelab, research and non-profit use, modification and sharing
-are free. Commercial use requires a separate license from the author. This makes LabLantern source-available, not open
-source in the OSI sense.
+are free. This makes LabLantern source-available, not open source in the OSI sense.
+
+### Commercial use
+
+Using LabLantern in a company, for customers or as a service needs a separate commercial license. Ask at
+[lablantern.project@gmail.com](mailto:lablantern.project@gmail.com).
