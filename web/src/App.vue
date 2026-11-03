@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Icon from './components/Icon.vue'
+import Logo from './components/Logo.vue'
 import { logout, session } from './session.js'
 import { live, startLive, stopLive } from './live.js'
 
@@ -55,7 +56,7 @@ async function doLogout() {
   <div v-if="session.authenticated" class="shell" :class="{ 'nav-open': navOpen }">
     <aside class="sidebar">
       <div class="brand">
-        <span class="mark"><Icon name="shield" :size="18" /></span>
+        <Logo  class="mark" :size="32" />
         <div>
           <span class="brand-name">LabLantern</span>
           <span class="brand-sub">Homelab Fleet</span>
@@ -106,7 +107,7 @@ async function doLogout() {
     </div>
   </div>
   <main v-else class="auth">
-    <div class="auth-brand"><span class="mark"><Icon name="shield" :size="18" /></span>LabLantern</div>
+    <div class="auth-brand"><Logo class="mark" :size="56" />LabLantern</div>
     <RouterView />
   </main>
 </template>
@@ -121,10 +122,9 @@ async function doLogout() {
   display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem;
   border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface);
 }
-.mark {
-  display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--radius-sm);
-  background: var(--invert); color: var(--invert-text); flex: none;
-}
+.mark { flex: none; color: var(--text); 
+    border: 1px #4c4c4c solid;
+    border-radius: 5.4px;}
 .brand-name { display: block; font-weight: 600; letter-spacing: -0.01em; color: var(--text); }
 .brand-sub { display: block; font-size: 0.6875rem; color: var(--muted); }
 nav { flex: 1; overflow-y: auto; }
@@ -190,7 +190,7 @@ main { padding: 2rem; width: 100%; max-width: 1680px; margin: 0 auto; }
 .menu-btn, .scrim { display: none; }
 
 .auth { max-width: 440px; margin: 0 auto; padding: 4rem 1rem; }
-.auth-brand { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; font-size: 1.125rem; margin-bottom: 1.5rem; }
+.auth-brand { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; font-weight: 600; font-size: 1.25rem; margin-bottom: 1.5rem; }
 
 @media (max-width: 900px) {
   .shell { grid-template-columns: minmax(0, 1fr); }

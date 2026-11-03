@@ -1,3 +1,5 @@
+<img src="docs/media/lablantern-icon.svg" alt="" width="72">
+
 # LabLantern
 
 [![CI](https://github.com/noah-ebrt/LabLantern/actions/workflows/ci.yml/badge.svg)](https://github.com/noah-ebrt/LabLantern/actions/workflows/ci.yml)
