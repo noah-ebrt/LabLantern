@@ -5,6 +5,12 @@
 
 **Self-hosted vulnerability monitoring for your homelab or small network.**
 
+![vulnwatch: findings matched to host and container, early warnings, and a fix list that turns the status green](docs/media/vulnwatch-demo.gif)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/noah-ebrt/vulnwatch/main/install.sh | sh
+```
+
 vulnwatch keeps track of every Linux host, container and appliance in your network, checks them for known security
 vulnerabilities every day, and tells you clearly what needs your attention: what is critical, what is merely
 outdated, what is reachable from the internet, and which check could not run. It runs entirely on your own hardware
@@ -134,11 +140,19 @@ The full threat model, including what a compromised master or agent could and co
 ## Quick start
 
 ```bash
-git clone https://github.com/noah-ebrt/vulnwatch.git vulnwatch && cd vulnwatch/deploy
-cp .env.example .env              # set VULNWATCH_BIND_IP and VULNWATCH_HOSTNAMES
-docker compose up -d --build      # the first build takes a few minutes (it also builds and signs the agent)
-docker compose logs server | grep "Setup token"
+curl -fsSL https://raw.githubusercontent.com/noah-ebrt/vulnwatch/main/install.sh | sh
 ```
+
+The script clones the repository to `./vulnwatch`, asks for the LAN IP (detected) and a DNS name (`vulnwatch.lan`),
+writes `deploy/.env`, runs `docker compose up -d --build` and prints the setup token. The first build takes a few
+minutes, because it also builds and signs the agent. To read the script before it runs:
+
+```bash
+git clone https://github.com/noah-ebrt/vulnwatch.git vulnwatch && cd vulnwatch
+less install.sh && ./install.sh
+```
+
+Manual setup without the script: [docs/INSTALL.md](docs/INSTALL.md#2-configure-and-start).
 
 Open `https://<name or IP>:8443` and accept the certificate warning once (or trust the CA, see
 [docs/INSTALL.md](docs/INSTALL.md#trust-the-certificate-authority)). The setup wizard asks for the setup token from

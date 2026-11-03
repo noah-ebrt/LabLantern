@@ -9,6 +9,9 @@
 
 ## 2. Configure and start
 
+`./install.sh` in the repository root does the steps of this section in one go (see the README's quick start). By
+hand:
+
 ```bash
 git clone https://github.com/noah-ebrt/vulnwatch.git vulnwatch
 cd vulnwatch/deploy
