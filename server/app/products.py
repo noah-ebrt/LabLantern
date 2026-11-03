@@ -19,7 +19,7 @@ from .guards import Guards
 from .models import Finding, System, put_setting, setting
 from .rules import classify_product, is_patch_step
 
-log = logging.getLogger("vulnwatch.products")
+log = logging.getLogger("lablantern.products")
 
 STATE_KEY = "registry.state"
 SOURCES = ("registry", "eol")
@@ -56,7 +56,7 @@ def _eol_finding(db, product: str, version: str, target: str, component: str) ->
     if not rel or not rel.get("isEol"):
         return None
     since = rel.get("eolFrom") or "?"
-    return {"target": target, "cve_id": "VW-EOL", "severity": classify_product("eol"), "component": component,
+    return {"target": target, "cve_id": "LL-EOL", "severity": classify_product("eol"), "component": component,
             "installed_version": version, "fixed_version": db.newest_maintained(product),
             "title": f"{db.label(product)} {rel['name']} is end of life since {since}: no more security updates"}
 
@@ -99,14 +99,14 @@ def check_system(system: System, registry: Registry, cache: dict, db) -> dict:
         elif status == "pending":
             pending.append(row["ref"])
         elif status == "outdated":
-            findings.append({"target": target, "cve_id": "VW-IMAGE-OUTDATED", "severity": classify_product("outdated"),
+            findings.append({"target": target, "cve_id": "LL-IMAGE-OUTDATED", "severity": classify_product("outdated"),
                              "component": row["ref"], "installed_version": running or row["image_id"][7:19],
                              "fixed_version": newer or "newer image",
                              "title": f"Newer image for {row['ref']} in the registry: pull and recreate "
                                       f"{', '.join(row['containers'])}"})
         elif status == "newer-version":
             patch = is_patch_step(running, newer)
-            findings.append({"target": target, "cve_id": "VW-IMAGE-NEWER",
+            findings.append({"target": target, "cve_id": "LL-IMAGE-NEWER",
                              "severity": classify_product("newer", patch_only=patch),
                              "component": row["ref"], "installed_version": running, "fixed_version": newer,
                              "title": f"{'Newer patch' if patch else 'Newer version'} {newer} available "
@@ -138,7 +138,7 @@ def sync_findings(s, system_id: int, desired: list[dict], now: datetime) -> tupl
         if key in seen:
             continue
         seen.add(key)
-        source = "eol" if d["cve_id"] == "VW-EOL" else "registry"
+        source = "eol" if d["cve_id"] == "LL-EOL" else "registry"
         f = existing.get(key)
         if f is None:
             s.add(Finding(system_id=system_id, status="open", source=source, **d))
@@ -219,12 +219,12 @@ def versions_check(state: dict | None, system: System, open_by_kind: dict[str, i
     if state.get("eol_error"):
         return "fehler", state["eol_error"]
     parts = []
-    if open_by_kind.get("VW-IMAGE-OUTDATED"):
-        parts.append(f"{open_by_kind['VW-IMAGE-OUTDATED']} outdated")
-    if open_by_kind.get("VW-IMAGE-NEWER"):
-        parts.append(f"{open_by_kind['VW-IMAGE-NEWER']} newer version")
-    if open_by_kind.get("VW-EOL"):
-        parts.append(f"{open_by_kind['VW-EOL']} end of life")
+    if open_by_kind.get("LL-IMAGE-OUTDATED"):
+        parts.append(f"{open_by_kind['LL-IMAGE-OUTDATED']} outdated")
+    if open_by_kind.get("LL-IMAGE-NEWER"):
+        parts.append(f"{open_by_kind['LL-IMAGE-NEWER']} newer version")
+    if open_by_kind.get("LL-EOL"):
+        parts.append(f"{open_by_kind['LL-EOL']} end of life")
     if parts:
         return "fund", ", ".join(parts)
     if entry["pending"]:

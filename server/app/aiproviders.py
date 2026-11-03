@@ -21,7 +21,7 @@ from .guards import Guards
 from .models import Setting, put_setting, setting
 from .openai_client import OPENAI_BASE, OpenAIProvider, make_openai_client, openai_web
 
-log = logging.getLogger("vulnwatch.ai")
+log = logging.getLogger("lablantern.ai")
 
 CLAUDE_SECRET = "claude.api_key"          # Name unverändert: bestehende Installationen behalten ihren Schlüssel
 OPENAI_SECRET = "openai.api_key"

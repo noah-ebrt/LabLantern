@@ -178,9 +178,9 @@ def test_refresh_creates_resolves_and_feeds_coverage(ctx, versions):
     with ctx.session_factory() as s:
         got = {(f.cve_id, f.target, f.severity, f.source) for f in s.scalars(select(Finding))}
         cov = calculate_coverage_matrix(s)["systems"][0]["checks"]["versionen"]
-    assert got == {("VW-IMAGE-OUTDATED", "image:img/app:latest", "hoch", "registry"),
-                   ("VW-EOL", "image:mariadb:10.6", "hoch", "eol"),
-                   ("VW-EOL", "host", "hoch", "eol")}
+    assert got == {("LL-IMAGE-OUTDATED", "image:img/app:latest", "hoch", "registry"),
+                   ("LL-EOL", "image:mariadb:10.6", "hoch", "eol"),
+                   ("LL-EOL", "host", "hoch", "eol")}
     assert cov["status"] == "fund" and "1 outdated" in cov["detail"] and "2 end of life" in cov["detail"]
     # Image aktualisiert, OS aktualisiert: Funde werden behoben
     fixed = _containers()
@@ -189,7 +189,7 @@ def test_refresh_creates_resolves_and_feeds_coverage(ctx, versions):
     products.refresh_versions(ctx)
     with ctx.session_factory() as s:
         open_ = {f.cve_id + f.target for f in s.scalars(select(Finding).where(Finding.status == "open"))}
-    assert open_ == {"VW-EOLimage:mariadb:10.6"}
+    assert open_ == {"LL-EOLimage:mariadb:10.6"}
 
 
 def test_scanner_results_never_resolve_product_findings(ctx, versions):

@@ -18,8 +18,8 @@ import (
 	"testing"
 	"time"
 
-	"vulnwatch/agent/internal/collector"
-	"vulnwatch/agent/internal/config"
+	"lablantern/agent/internal/collector"
+	"lablantern/agent/internal/config"
 )
 
 type pki struct {

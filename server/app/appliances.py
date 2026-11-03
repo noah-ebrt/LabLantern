@@ -32,7 +32,7 @@ from .secrets_store import kept_secret_error
 from .rules import (BATTERY_LOW_PERCENT, SCRUB_GRACE_DAYS, classify_appliance_alert, classify_backup_age,
                     classify_disk, classify_product, classify_task_age, classify_update)
 
-log = logging.getLogger("vulnwatch.appliances")
+log = logging.getLogger("lablantern.appliances")
 
 CONFIG_KEY = "appliances.config"   # {System-ID: {"kind", "url", "fingerprint"}}
 STATE_KEY = "appliances.state"     # {System-ID: letzter Abruf}
@@ -478,16 +478,16 @@ HARDENING = {   # Schalter: (Stufe, Titel, Abhilfe)
 def _pool_findings(pools: list[dict], now: float) -> list[dict]:
     out = []
     for p in pools:
-        base = {"cve_id": "VW-POOL", "component": f"Pool {p['name']}"}
+        base = {"cve_id": "LL-POOL", "component": f"Pool {p['name']}"}
         if not p["healthy"]:
             out.append({**base, "target": f"pool:{p['name']}", "severity": "hoch", "installed_version": p["status"],
                         "fixed_version": "replace the failed disk",
                         "title": f"Pool {p['name']} is {p['status']}: {p['detail'] or 'not healthy'}"[:500]})
         if p["percent"] is not None and (sev := classify_disk(p["percent"])):
-            out.append({**base, "cve_id": "VW-DISK", "target": f"disk:{p['name']}", "severity": sev,
+            out.append({**base, "cve_id": "LL-DISK", "target": f"disk:{p['name']}", "severity": sev,
                         "installed_version": f"{p['percent']:.0f} %", "fixed_version": "free space",
                         "title": f"Pool {p['name']} is {p['percent']:.0f} % full"})
-        scrub = {**base, "cve_id": "VW-SCRUB", "target": f"scrub:{p['name']}"}
+        scrub = {**base, "cve_id": "LL-SCRUB", "target": f"scrub:{p['name']}"}
         if p["scrub_errors"]:
             out.append({**scrub, "severity": "hoch", "installed_version": f"{p['scrub_errors']} errors",
                         "fixed_version": "check the disks (zpool status)",
@@ -511,7 +511,7 @@ def _task_findings(tasks: list[dict], now: float) -> list[dict]:
     out = []
     for t in tasks:
         label = TASK_LABELS.get(t["kind"], t["kind"])
-        base = {"target": f"task:{t['kind']}:{t['name']}"[:300], "cve_id": "VW-BACKUP",
+        base = {"target": f"task:{t['kind']}:{t['name']}"[:300], "cve_id": "LL-BACKUP",
                 "component": f"{label} {t['name']}"[:200]}
         if t["failed"]:
             out.append({**base, "severity": "mittel", "installed_version": "failed", "fixed_version": "check the task log",
@@ -524,19 +524,19 @@ def _task_findings(tasks: list[dict], now: float) -> list[dict]:
                             "fixed_version": "check the task",
                             "title": f"{label} '{t['name']}' last succeeded {days:.0f} days ago"[:500]})
     if not any(t["kind"] != "snapshot" for t in tasks):
-        out.append({"target": "backup", "cve_id": "VW-BACKUP", "component": "TrueNAS backup", "severity": "mittel",
+        out.append({"target": "backup", "cve_id": "LL-BACKUP", "component": "TrueNAS backup", "severity": "mittel",
                     "installed_version": "not set up", "fixed_version": "Data Protection → Replication or Cloud Sync",
                     "title": "No replication, cloud sync or rsync task on TrueNAS: its data has no copy elsewhere"})
     return out
 
 
 def _hardening_findings(hardening: dict) -> list[dict]:
-    out = [{"target": f"config:{key}", "cve_id": "VW-CONFIG", "component": "TrueNAS", "severity": sev,
+    out = [{"target": f"config:{key}", "cve_id": "LL-CONFIG", "component": "TrueNAS", "severity": sev,
             "installed_version": "on" if key != "twofa_off" else "off", "fixed_version": fix, "title": title}
            for key, (sev, title, fix) in HARDENING.items() if hardening.get(key)]
     if hardening.get("admins_without_2fa") and not hardening.get("twofa_off"):
         names = ", ".join(hardening["admins_without_2fa"])
-        out.append({"target": "config:admins_without_2fa", "cve_id": "VW-CONFIG", "component": "TrueNAS",
+        out.append({"target": "config:admins_without_2fa", "cve_id": "LL-CONFIG", "component": "TrueNAS",
                     "severity": "mittel", "installed_version": names[:100], "fixed_version": "set up 2FA for them",
                     "title": f"TrueNAS administrators without two-factor authentication: {names}"[:500]})
     return out
@@ -546,26 +546,26 @@ def truenas_findings(data: dict, now: float | None = None) -> list[dict]:
     now = time.time() if now is None else now
     out = []
     if data["new_version"]:
-        out.append({"target": "host", "cve_id": "VW-UPDATE", "component": "TrueNAS",
+        out.append({"target": "host", "cve_id": "LL-UPDATE", "component": "TrueNAS",
                     "severity": classify_update(data["version"], data["new_version"]),
                     "installed_version": data["version"], "fixed_version": data["new_version"],
                     "title": f"TrueNAS {data['new_version']} is available (installed {data['version']})"})
     for a in data["apps"]:
         if a["upgrade"]:
             latest = a["latest"] or "newer version"
-            out.append({"target": f"app:{a['name']}", "cve_id": "VW-UPDATE", "component": a["name"],
+            out.append({"target": f"app:{a['name']}", "cve_id": "LL-UPDATE", "component": a["name"],
                         "severity": classify_update(a.get("chart", a["version"]), a["latest"]),
                         "installed_version": a["version"], "fixed_version": latest,
                         "title": (f"App {a['name']} {a['version']}: update available (app package "
                                   f"{a.get('chart') or '?'} → {latest})")[:500]})
         elif a["image_updates"]:
-            out.append({"target": f"app:{a['name']}", "cve_id": "VW-UPDATE", "component": a["name"],
+            out.append({"target": f"app:{a['name']}", "cve_id": "LL-UPDATE", "component": a["name"],
                         "severity": classify_product("outdated"), "installed_version": a["version"],
                         "fixed_version": "newer image", "title": f"App {a['name']}: newer image available"[:500]})
     for a in data["alerts"]:
         sev = classify_appliance_alert(a["level"])
         if sev:
-            out.append({"target": f"alert:{a['uuid'] or a['klass']}", "cve_id": "VW-ALERT", "component": a["klass"],
+            out.append({"target": f"alert:{a['uuid'] or a['klass']}", "cve_id": "LL-ALERT", "component": a["klass"],
                         "severity": sev, "installed_version": a["level"], "fixed_version": "",
                         "title": f"TrueNAS alert: {a['text']}"[:500]})
     if data.get("pools") is not None:
@@ -605,7 +605,7 @@ HA_DEVICE_CLASSES = frozenset("""
 
 
 def _ha_get(conn, path: str, token: str):
-    conn.request("GET", path, headers={"Authorization": f"Bearer {token}", "User-Agent": "vulnwatch"})
+    conn.request("GET", path, headers={"Authorization": f"Bearer {token}", "User-Agent": "lablantern"})
     r = conn.getresponse()
     body = r.read(MAX_MESSAGE)
     if r.status == 401:
@@ -693,14 +693,14 @@ def homeassistant_findings(data: dict, now: datetime) -> list[dict]:
     from .connectors import _expires
 
     # state „on“ = Update verfügbar; übersprungene Versionen meldet HA als „off“
-    out = [{"target": f"update:{u['entity_id']}", "cve_id": "VW-UPDATE", "component": u["name"],
+    out = [{"target": f"update:{u['entity_id']}", "cve_id": "LL-UPDATE", "component": u["name"],
             "severity": classify_update(u["version"], u["latest"]),
             "installed_version": u["version"], "fixed_version": u["latest"],
             "title": f"{u['name']}: update {u['version']} → {u['latest']} available"[:500]}
            for u in data["updates"] if u["state"] == "on"]
     if data.get("recovery_mode") or data.get("safe_mode"):
         mode = "recovery mode" if data.get("recovery_mode") else "safe mode"
-        out.append({"target": "host", "cve_id": "VW-HA-MODE", "component": "Home Assistant", "severity": "hoch",
+        out.append({"target": "host", "cve_id": "LL-HA-MODE", "component": "Home Assistant", "severity": "hoch",
                     "installed_version": data.get("version", ""), "fixed_version": "restart normally",
                     "title": f"Home Assistant runs in {mode}: integrations and automations are not loaded"})
     backup = data.get("backup") or {}
@@ -711,30 +711,30 @@ def homeassistant_findings(data: dict, now: datetime) -> list[dict]:
         days = round((now - past[0]).total_seconds() / 86400, 1) if past else None
         sev = classify_backup_age(days)
         if sev:
-            out.append({"target": "backup", "cve_id": "VW-BACKUP", "component": "Home Assistant backup", "severity": sev,
+            out.append({"target": "backup", "cve_id": "LL-BACKUP", "component": "Home Assistant backup", "severity": sev,
                         "installed_version": past[0].date().isoformat() if past else "never",
                         "fixed_version": "run a backup",
                         "title": ("No successful automatic backup of Home Assistant" if days is None else
                                   f"Last successful Home Assistant backup is {days:.0f} days old")})
         elif len(past) > 1 and (past[-1] - past[0]).total_seconds() > 3600:
-            out.append({"target": "backup", "cve_id": "VW-BACKUP", "component": "Home Assistant backup",
+            out.append({"target": "backup", "cve_id": "LL-BACKUP", "component": "Home Assistant backup",
                         "severity": "mittel", "installed_version": past[0].date().isoformat(),
                         "fixed_version": "check the backup log",
                         "title": "The last automatic Home Assistant backup failed; the last good one is older"})
     else:
-        out.append({"target": "backup", "cve_id": "VW-BACKUP", "component": "Home Assistant backup", "severity": "mittel",
+        out.append({"target": "backup", "cve_id": "LL-BACKUP", "component": "Home Assistant backup", "severity": "mittel",
                     "installed_version": "not set up", "fixed_version": "Settings → System → Backups",
                     "title": "No automatic backups configured in Home Assistant"})
     for d in data.get("disks") or []:
         sev = classify_disk(d["percent"])
         if sev:
-            out.append({"target": f"disk:{d['entity_id']}", "cve_id": "VW-DISK", "component": d["name"], "severity": sev,
+            out.append({"target": f"disk:{d['entity_id']}", "cve_id": "LL-DISK", "component": d["name"], "severity": sev,
                         "installed_version": f"{d['percent']:.0f} %", "fixed_version": "free space",
                         "title": f"Disk almost full on Home Assistant: {d['name']} at {d['percent']:.0f} %"[:500]})
     for b in data.get("batteries") or []:
         if b["low"] or (b["level"] is not None and b["level"] < BATTERY_LOW_PERCENT):
             level = "low" if b["level"] is None else f"{b['level']:.0f} %"
-            out.append({"target": f"battery:{b['entity_id']}", "cve_id": "VW-BATTERY", "component": b["name"],
+            out.append({"target": f"battery:{b['entity_id']}", "cve_id": "LL-BATTERY", "component": b["name"],
                         "severity": "info", "installed_version": level, "fixed_version": "replace the battery",
                         "title": f"Battery {level}: {b['name']}"[:500]})
     return out

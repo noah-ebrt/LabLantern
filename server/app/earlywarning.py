@@ -44,7 +44,7 @@ from .mailtpl import early_warning_html
 from .models import EarlyWarning, Finding, System, put_setting, setting
 from .rules import classify_early_warning
 
-log = logging.getLogger("vulnwatch.earlywarning")
+log = logging.getLogger("lablantern.earlywarning")
 
 FEEDS_KEY = "earlywarning.feeds"
 PRODUCTS_KEY = "earlywarning.products"     # von Hand: [{"name": "TrueNAS", "version": "25.04.2"}]
@@ -292,7 +292,7 @@ def parse_feed(data: bytes) -> list[dict]:
 def fetch_feed(url: str) -> list[dict]:
     if not url.startswith("https://"):
         raise FeedError("only https feeds")
-    req = urllib.request.Request(url, headers={"User-Agent": "vulnwatch", "Accept": "application/rss+xml, application/atom+xml, */*"})
+    req = urllib.request.Request(url, headers={"User-Agent": "lablantern", "Accept": "application/rss+xml, application/atom+xml, */*"})
     try:
         with urllib.request.urlopen(req, timeout=30) as r:  # noqa: S310 (vom Admin hinterlegte https-URL)
             data = r.read(MAX_FEED_BYTES + 1)
@@ -750,7 +750,7 @@ def recommend(ai: dict, hits: list[dict]) -> list[dict]:
 def _ai_finding(s, w: EarlyWarning, ai: dict, affected: list[dict]) -> None:
     """Ein offener Fund je Host, Produkt und Version: dasselbe Problem kommt oft aus mehreren Quellen (Tailworm siebenmal).
     Eine spätere Meldung ergänzt nur die gefixte Version, wenn der Fund noch keine hat."""
-    cve = ai["cves"][0] if ai["cves"] else f"VW-ADVISORY-{w.item_key[:12]}"
+    cve = ai["cves"][0] if ai["cves"] else f"LL-ADVISORY-{w.item_key[:12]}"
     fixed = ", ".join(x for prod in ai["products"] for x in prod["fixed_versions"])[:300]
     for p in affected:
         if p["system_id"] is None:
@@ -969,7 +969,7 @@ def fetch_nvd(cve: str) -> dict:
     if wait > 0:
         time.sleep(wait)
     _nvd_last = time.monotonic()
-    req = urllib.request.Request(NVD_URL + cve, headers={"User-Agent": "vulnwatch", "Accept": "application/json"})
+    req = urllib.request.Request(NVD_URL + cve, headers={"User-Agent": "lablantern", "Accept": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=30) as r:  # noqa: S310 (feste https-URL)
             return nvd_facts(json.loads(r.read(MAX_FEED_BYTES)))
@@ -1314,7 +1314,7 @@ def update_health(ctx: Context, s, state: dict, outcomes: dict, now: float | Non
     if cfg["health_alerts"] and ctx.notifier is not None and (new or resolved):
         lines = ([f"- {p['text']}" for p in new] + (["", "Resolved:"] if new and resolved else [])
                  + [f"- {p['text']}" for p in resolved])
-        title = ("vulnwatch: early warning has a problem" if new else "vulnwatch: early warning works again")
+        title = ("LabLantern: early warning has a problem" if new else "LabLantern: early warning works again")
         ok, _ = ctx.notifier(title, "\n".join(lines) + "\n\nDetails under Early warnings.", None, kind="alert")
         if ok:
             for p in new:
@@ -1337,7 +1337,7 @@ def fetch_ghsa(since: str) -> list[dict]:
     out: list[dict] = []
     for page in range(1, MAX_GHSA_PAGES + 1):
         req = urllib.request.Request(GHSA_URL.format(since=since, page=page), headers={
-            "User-Agent": "vulnwatch", "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"})
+            "User-Agent": "lablantern", "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"})
         try:
             with urllib.request.urlopen(req, timeout=30) as r:  # noqa: S310 (feste https-URL)
                 items = json.loads(r.read(MAX_FEED_BYTES))
@@ -1463,7 +1463,7 @@ def run_miss_check(ctx: Context, fetch=fetch_feed, advisories=fetch_ghsa) -> dic
         if possible:
             lines += ["", "GitHub advisories (high/critical) for packages named like your products, not seen:"]
             lines += [f"- {a['id']} {a['cve']} {', '.join(a['products'])}: {a['summary']}" for a in possible[:20]]
-        ctx.notifier("vulnwatch: early warning coverage check", "\n".join(lines), None, kind="report")
+        ctx.notifier("LabLantern: early warning coverage check", "\n".join(lines), None, kind="report")
     return result
 
 

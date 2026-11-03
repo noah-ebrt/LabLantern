@@ -52,8 +52,8 @@ def _create_ca(cert_path: Path, key_path: Path) -> None:
     now = datetime.now(timezone.utc)
     cert = (
         x509.CertificateBuilder()
-        .subject_name(_name("vulnwatch CA"))
-        .issuer_name(_name("vulnwatch CA"))
+        .subject_name(_name("lablantern CA"))
+        .issuer_name(_name("lablantern CA"))
         .public_key(key.public_key())
         .serial_number(x509.random_serial_number())
         .not_valid_before(now - timedelta(minutes=5))

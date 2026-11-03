@@ -5,7 +5,7 @@ from tests.conftest import SMTP_PASS, SMTP_USER
 
 def smtp_body(_port, **over):
     body = {"host": "127.0.0.1", "port": _port, "security": "none", "username": SMTP_USER,
-            "from_addr": "vulnwatch@example.org", "to_addr": "noah@example.org",
+            "from_addr": "lablantern@example.org", "to_addr": "noah@example.org",
             "password": SMTP_PASS}
     body.update(over)
     return body
@@ -65,8 +65,8 @@ def test_connection_test_sends_a_real_mail(admin, smtp_server):
     r = client.post("/api/integrations/smtp/test", headers=h)
     assert r.json() == {"ok": True}
     sender, rcpts, msg = smtp_server.messages[0]
-    assert sender == "vulnwatch@example.org" and rcpts == ["noah@example.org"]
-    assert "vulnwatch" in msg["Subject"].lower()
+    assert sender == "lablantern@example.org" and rcpts == ["noah@example.org"]
+    assert "lablantern" in msg["Subject"].lower()
     assert SMTP_PASS not in msg.as_string()
 
 
@@ -108,7 +108,7 @@ def test_reader_may_view_but_not_change(admin, smtp_server):
                          expires_at=ctx.clock() + 3600))
         s.commit()
     reader = env.new_client()
-    reader.cookies.set("vw_session", raw)
+    reader.cookies.set("ll_session", raw)
     assert reader.get("/api/integrations/smtp").status_code == 200
     r = reader.put("/api/integrations/smtp", json=smtp_body(smtp_server.port), headers={"X-CSRF-Token": csrf})
     assert r.status_code == 403

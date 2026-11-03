@@ -1,6 +1,6 @@
 """Golden-File-Test (PLAN Abschnitt 6): feste Scanner-Ausgaben ergeben immer dieselben bewerteten Funde.
 Ändert sich golden/expected.json, hat sich die Bewertung geändert: absichtlich prüfen, dann neu erzeugen mit
-`VULNWATCH_UPDATE_GOLDEN=1 pytest tests/test_golden.py`."""
+`LABLANTERN_UPDATE_GOLDEN=1 pytest tests/test_golden.py`."""
 import json
 import os
 from pathlib import Path
@@ -26,7 +26,7 @@ def rate(exposed: bool) -> list[dict]:
 def test_rating_matches_the_golden_file():
     got = {"internal": rate(False), "internet_exposed": rate(True)}
     path = HERE / "expected.json"
-    if os.environ.get("VULNWATCH_UPDATE_GOLDEN"):
+    if os.environ.get("LABLANTERN_UPDATE_GOLDEN"):
         path.write_text(json.dumps(got, indent=1, sort_keys=True) + "\n")
     assert got == json.loads(path.read_text())
 

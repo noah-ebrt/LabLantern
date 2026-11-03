@@ -10,7 +10,7 @@ def test_state_before_setup(env):
 
 def test_setup_token_is_logged_at_first_start_but_stored_only_as_hash(env):
     assert env.setup_token and len(env.setup_token) >= 24
-    db_bytes = b"".join(p.read_bytes() for p in env.data_dir.glob("vulnwatch.db*"))
+    db_bytes = b"".join(p.read_bytes() for p in env.data_dir.glob("lablantern.db*"))
     assert env.setup_token.encode() not in db_bytes
     assert hashlib.sha256(env.setup_token.encode()).hexdigest().encode() in db_bytes
 

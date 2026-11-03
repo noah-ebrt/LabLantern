@@ -1,14 +1,14 @@
 # Netzseitiger Teil: hält die Verbindung zum Master, ohne root, ohne Capabilities, ohne offenen Port.
-# Daten erhebt er nicht selbst, sondern legt einen Auftrag für vulnwatch-collect.service ab.
+# Daten erhebt er nicht selbst, sondern legt einen Auftrag für lablantern-collect.service ab.
 [Unit]
-Description=vulnwatch agent (talks to the master, unprivileged)
+Description=lablantern agent (talks to the master, unprivileged)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-User=vulnwatch
-Group=vulnwatch
-ExecStart=/usr/bin/vulnwatch-agent daemon
+User=lablantern
+Group=lablantern
+ExecStart=/usr/bin/lablantern-agent daemon
 Restart=always
 RestartSec=30
 UMask=0027
@@ -16,7 +16,7 @@ NoNewPrivileges=yes
 CapabilityBoundingSet=
 AmbientCapabilities=
 ProtectSystem=strict
-ReadWritePaths=/run/vulnwatch
+ReadWritePaths=/run/lablantern
 ProtectHome=yes
 PrivateTmp=yes
 PrivateDevices=yes

@@ -1,7 +1,7 @@
 # Collector scripts
 
-For devices where the vulnwatch agent can't run. A small script on the device sends its OS version, packages and
-running containers to vulnwatch on a schedule. vulnwatch only receives: the answer is always `{"ok": true}`, never a
+For devices where the LabLantern agent can't run. A small script on the device sends its OS version, packages and
+running containers to LabLantern on a schedule. LabLantern only receives: the answer is always `{"ok": true}`, never a
 command or an update.
 
 | Script | Device | Reports |
@@ -15,25 +15,25 @@ Each script is POSIX `sh` and needs `curl`. On OpenWrt install it first (`opkg i
 
 ## Setup
 
-1. In vulnwatch: **Systems → + Add host → Other device (collector script)**, enter a name. vulnwatch shows a command
+1. In lablantern: **Systems → + Add host → Other device (collector script)**, enter a name. LabLantern shows a command
    with the device's token, once.
-2. Run that command on the device as root. It downloads vulnwatch's root certificate, checks its fingerprint and
-   stores the address, the token and the certificate in `/etc/vulnwatch-collector`. On Unraid, `/etc` is lost on
-   reboot: run `export VW_DIR=/boot/config/vulnwatch` first (the Unraid script uses that directory by default). On a
-   UGREEN NAS a firmware update may reset the system disk: use `export VW_DIR=/volume1/vulnwatch`.
+2. Run that command on the device as root. It downloads lablantern's root certificate, checks its fingerprint and
+   stores the address, the token and the certificate in `/etc/lablantern-collector`. On Unraid, `/etc` is lost on
+   reboot: run `export LL_DIR=/boot/config/lablantern` first (the Unraid script uses that directory by default). On a
+   UGREEN NAS a firmware update may reset the system disk: use `export LL_DIR=/volume1/lablantern`.
 3. Copy the script to the device and add the schedule from its header (cron, Unraid User Scripts, or the DSM Task
    Scheduler). Hourly is a good interval.
 
 Lost the token? **New token** in the device's row issues a new one; the old one stops working at once.
 
-## What vulnwatch rates
+## What LabLantern rates
 
 Only what the report provides. The rest shows as **n/a** in the coverage matrix:
 
 - **Package CVEs:** checked for deb (Debian, Ubuntu; also UGREEN's UGOS Pro, which is Debian-based), rpm (RHEL family, SUSE, Fedora), apk (Alpine, Wolfi) and
   language packages (npm, pypi, golang, cargo, gem, nuget, composer). There's no vulnerability database for opkg,
   Slackware or Synology packages: they're recorded, and the check shows n/a with that reason.
-- **Containers and images:** with `syft` on the device, the scripts send a CycloneDX SBOM per image and vulnwatch scans
+- **Containers and images:** with `syft` on the device, the scripts send a CycloneDX SBOM per image and LabLantern scans
   it like an agent's. Without it the image scan is n/a ("install syft on the device to scan images"), never ok.
 - **Security updates and reboot:** not reported, n/a.
 - **No report for more than 24 hours** is an error.

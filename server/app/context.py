@@ -8,7 +8,7 @@ from .auth import RateLimiter
 from .config import Settings
 from .secrets_store import SecretStore
 
-log = logging.getLogger("vulnwatch")
+log = logging.getLogger("lablantern")
 
 
 @dataclass

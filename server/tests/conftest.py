@@ -6,7 +6,7 @@ from app.db import make_engine, init_db
 
 @pytest.fixture
 def session_factory(tmp_path):
-    engine = make_engine(tmp_path / "vulnwatch.db")
+    engine = make_engine(tmp_path / "lablantern.db")
     init_db(engine)
     return sessionmaker(engine, expire_on_commit=False)
 
@@ -60,9 +60,9 @@ def ca_server(tmp_path_factory):
     srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     # per Umgebungsvariable, weil einige Tests `tests.conftest` als zweites Modul importieren
-    os.environ["VW_TEST_CA_URL"] = f"http://127.0.0.1:{srv.server_address[1]}/ca.crt"
-    os.environ["VW_TEST_CA_FP"] = fingerprint_sha256(pki.ca_cert)
-    os.environ["VW_TEST_CA_PEM"] = str(pki.ca_cert)
+    os.environ["LL_TEST_CA_URL"] = f"http://127.0.0.1:{srv.server_address[1]}/ca.crt"
+    os.environ["LL_TEST_CA_FP"] = fingerprint_sha256(pki.ca_cert)
+    os.environ["LL_TEST_CA_PEM"] = str(pki.ca_cert)
     yield
     srv.shutdown()
     srv.server_close()
@@ -77,12 +77,12 @@ class Env:
         self.agent_dir = tmp_path / "agent-bin"
         self.agent_dir.mkdir(parents=True, exist_ok=True)
         for arch in ("amd64", "arm64"):
-            (self.agent_dir / f"vulnwatch-agent-linux-{arch}").write_bytes(f"fake-agent-{arch}".encode())
+            (self.agent_dir / f"lablantern-agent-linux-{arch}").write_bytes(f"fake-agent-{arch}".encode())
             for pkg in ("deb", "rpm"):
-                (self.agent_dir / f"vulnwatch-agent-linux-{arch}.{pkg}").write_bytes(f"fake-{arch}.{pkg}".encode())
-        defaults = dict(data_dir=self.data_dir, hostnames=["vulnwatch.lan", "192.0.2.10", "localhost"],
-                        ca_url=os.environ["VW_TEST_CA_URL"], agent_dir=self.agent_dir)
-        with caplog.at_level(logging.INFO, logger="vulnwatch"):
+                (self.agent_dir / f"lablantern-agent-linux-{arch}.{pkg}").write_bytes(f"fake-{arch}.{pkg}".encode())
+        defaults = dict(data_dir=self.data_dir, hostnames=["lablantern.lan", "192.0.2.10", "localhost"],
+                        ca_url=os.environ["LL_TEST_CA_URL"], agent_dir=self.agent_dir)
+        with caplog.at_level(logging.INFO, logger="lablantern"):
             self.app = create_app(Settings(**{**defaults, **settings_kw}), clock=self.clock)
         self.log_text = caplog.text
         m = re.search(r"Setup token: (\S+)", self.log_text)

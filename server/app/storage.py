@@ -72,7 +72,7 @@ def drive_findings(st: dict, hint: str) -> list[dict]:
     out = []
     for d in st.get("disks") or []:
         if d["state"] in ("bad", "warn"):
-            out.append({"target": f"drive:{d['name']}", "cve_id": "VW-DRIVE", "component": f"{d['name']} {d['model']}".strip(),
+            out.append({"target": f"drive:{d['name']}", "cve_id": "LL-DRIVE", "component": f"{d['name']} {d['model']}".strip(),
                         "severity": "hoch" if d["state"] == "bad" else "mittel", "installed_version": d["status"] or "?",
                         "fixed_version": hint, "title": f"{d['name']} ({d['model'] or 'drive'}) reports {d['status']}"[:500]})
     return out

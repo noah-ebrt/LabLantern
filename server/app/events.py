@@ -25,9 +25,9 @@ from .context import Context
 from .guards import Guards
 from .models import SessionRow
 
-log = logging.getLogger("vulnwatch")
+log = logging.getLogger("lablantern")
 
-_PENDING = "vw_live_topics"
+_PENDING = "ll_live_topics"
 RESYNC = "*"   # Client lädt alles neu (z. B. wenn seine Warteschlange übergelaufen ist)
 
 TOPICS_BY_TABLE = {

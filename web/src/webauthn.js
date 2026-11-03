@@ -8,7 +8,7 @@ export const passkeysSupported = () => typeof window !== 'undefined' && !!window
 
 function explain(e) {
   if (e?.name === 'NotAllowedError') return new Error('Passkey request was cancelled or timed out.')
-  if (e?.name === 'SecurityError') return new Error('Passkeys only work when the UI is opened under its hostname with a trusted certificate (e.g. https://vulnwatch.lan:8443).')
+  if (e?.name === 'SecurityError') return new Error('Passkeys only work when the UI is opened under its hostname with a trusted certificate (e.g. https://lablantern.lan:8443).')
   if (e?.name === 'InvalidStateError') return new Error('This passkey is already registered.')
   return e
 }

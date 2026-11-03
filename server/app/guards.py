@@ -7,7 +7,7 @@ from . import auth
 from .context import Context
 from .models import AdminUser, SessionRow
 
-SESSION_COOKIE = "vw_session"
+SESSION_COOKIE = "ll_session"
 
 
 def client_ip(request: Request) -> str:

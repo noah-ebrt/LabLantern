@@ -32,7 +32,7 @@ from .guards import Guards
 from .models import put_setting, setting
 from .secrets_store import kept_secret_error
 
-log = logging.getLogger("vulnwatch.routerforwards")
+log = logging.getLogger("lablantern.routerforwards")
 
 MAX_BYTES = 5_000_000
 MAX_FORWARDS = 500
@@ -45,7 +45,7 @@ def _get(url: str, fingerprint: str, path: str, headers: dict, label: str, hints
     try:
         conn.connect()
         _check_pin(conn.sock, fingerprint)
-        conn.request("GET", path, headers={**headers, "User-Agent": "vulnwatch", "Accept": "application/json"})
+        conn.request("GET", path, headers={**headers, "User-Agent": "lablantern", "Accept": "application/json"})
         r = conn.getresponse()
         status, body = r.status, r.read(MAX_BYTES)
     except (OSError, ssl.SSLError, http.client.HTTPException) as e:

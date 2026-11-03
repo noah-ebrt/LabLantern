@@ -5,7 +5,7 @@
 # - der Agent wird nur gebaut und signiert, wenn sich agent/ geändert hat; ein Fehler dort hält den Rest nicht auf.
 # - der Worker nur, wenn sich sein Code geändert hat, und nie während eines Laufs: Neuerstellen bricht den Lauf ab.
 #   Auch gebaut wird er erst dann: jeder Build bekommt neue Attestierungen und damit eine neue Image-ID, der Tag
-#   zöge dem laufenden Worker davon, und vulnwatch meldet „runs an image whose tag now points to a newer build“.
+#   zöge dem laufenden Worker davon, und LabLantern meldet „runs an image whose tag now points to a newer build“.
 # - die Einmal-Container des Agent-Builds werden nach Erfolg entfernt: sonst bleibt das 5,5 GB große Build-Image an
 #   einem gestoppten Container hängen, wird mitgescannt (grype braucht dafür ~30 GB RAM, der Kernel beendet es) und
 #   läuft nach dem nächsten Build ebenfalls auf einem „newer build“.
@@ -36,7 +36,7 @@ fi
 
 active=$(docker compose exec -T server python -c "
 import sqlite3
-c = sqlite3.connect('file:/data/vulnwatch.db?mode=ro', uri=True)
+c = sqlite3.connect('file:/data/lablantern.db?mode=ro', uri=True)
 print(c.execute(\"select count(*) from scan_runs where status in ('collecting', 'queued', 'running')\").fetchone()[0])" </dev/null)
 if [ "$active" != "0" ]; then
     echo "A scan run is active: the worker was NOT recreated (it would abort the run)." >&2

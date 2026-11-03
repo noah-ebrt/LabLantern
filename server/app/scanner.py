@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-log = logging.getLogger("vulnwatch.scanner")
+log = logging.getLogger("lablantern.scanner")
 
 MAX_DB_AGE_HOURS = 36.0
 

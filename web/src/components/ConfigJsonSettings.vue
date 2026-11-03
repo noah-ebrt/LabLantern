@@ -47,7 +47,7 @@ async function save() {
 
 function download() {
   const url = URL.createObjectURL(new Blob([text.value], { type: 'application/json' }))
-  const a = Object.assign(document.createElement('a'), { href: url, download: 'vulnwatch-config.json' })
+  const a = Object.assign(document.createElement('a'), { href: url, download: 'lablantern-config.json' })
   a.click()
   URL.revokeObjectURL(url)
 }

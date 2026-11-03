@@ -4,7 +4,7 @@
 
 - Linux with Docker Engine and the Compose plugin (`docker compose version`).
 - A fixed LAN IP. The master listens only on this address. Do not publish it through a public reverse proxy.
-- Optional but recommended: a DNS name for the master, e.g. `vulnwatch.lan`, set in your router or DNS server
+- Optional but recommended: a DNS name for the master, e.g. `lablantern.lan`, set in your router or DNS server
   (AdGuard, Pi-hole, …). Passkeys only work on a name. Agents can use either the name or the IP.
 
 ## 2. Configure and start
@@ -13,8 +13,8 @@
 hand:
 
 ```bash
-git clone https://github.com/noah-ebrt/vulnwatch.git vulnwatch
-cd vulnwatch/deploy
+git clone https://github.com/noah-ebrt/LabLantern.git lablantern
+cd lablantern/deploy
 cp .env.example .env
 ```
 
@@ -22,12 +22,12 @@ Edit `.env`:
 
 | Variable | Required | Meaning |
 | --- | --- | --- |
-| `VULNWATCH_BIND_IP` | yes | LAN IP of this host. The stack refuses to start without it. |
-| `VULNWATCH_HOSTNAMES` | yes | Comma-separated names and IPs under which browsers and agents reach the master. Certificates are issued only for these. |
-| `VULNWATCH_PORT` | no | HTTPS port, default `8443`. |
-| `VULNWATCH_SCANNERS` | no | `grype+osv` (default): two scanners. `grype`: light mode, OSV is switched off and loads no databases. Reports show OSV as "off (light mode)", not as an error. Findings only OSV reported are closed without counting as resolved, and come back as new when OSV is switched on again. |
-| `VULNWATCH_TAG` | no | Image tag. Set it when you run a second stack on the same host, so the two do not overwrite each other's images. |
-| `VULNWATCH_EDGE_SUBNET`, `_PROXY_IP`, `_SERVER_IP` | no | Internal network between proxy and server. Change only on a collision. |
+| `LABLANTERN_BIND_IP` | yes | LAN IP of this host. The stack refuses to start without it. |
+| `LABLANTERN_HOSTNAMES` | yes | Comma-separated names and IPs under which browsers and agents reach the master. Certificates are issued only for these. |
+| `LABLANTERN_PORT` | no | HTTPS port, default `8443`. |
+| `LABLANTERN_SCANNERS` | no | `grype+osv` (default): two scanners. `grype`: light mode, OSV is switched off and loads no databases. Reports show OSV as "off (light mode)", not as an error. Findings only OSV reported are closed without counting as resolved, and come back as new when OSV is switched on again. |
+| `LABLANTERN_TAG` | no | Image tag. Set it when you run a second stack on the same host, so the two do not overwrite each other's images. |
+| `LABLANTERN_EDGE_SUBNET`, `_PROXY_IP`, `_SERVER_IP` | no | Internal network between proxy and server. Change only on a collision. |
 
 **Memory.** Measured on 31 Oct 2026 on a homelab with 4 hosts and 53 running images (57 SBOMs), each mode scanning
 all of them once against the current databases:
@@ -57,7 +57,7 @@ The services:
 | `proxy` | Caddy: HTTPS with its own local certificate authority, the only published port |
 | `server` | web UI, API for agents, rules, reports, encrypted secret store, scheduler |
 | `worker` | runs Grype and OSV-Scanner on SBOMs; has no database, no secrets, only a job API |
-| `announce` | announces the master via mDNS (`_vulnwatch._tcp`) so `vulnwatch-agent setup` finds it; host network, no rights |
+| `announce` | announces the master via mDNS (`_lablantern._tcp`) so `lablantern-agent setup` finds it; host network, no rights |
 | `agent-key`, `agent-build`, `agent-sign` | one-shot jobs on every start: build the agent packages from `agent/` when the code changed and sign them with this install's key; no network. The first build takes a few minutes |
 
 ## 3. First login
@@ -82,7 +82,7 @@ Agents do not need this. The setup command contains the CA fingerprint, and the 
 ## 4. Updates
 
 ```bash
-cd vulnwatch && git pull
+cd lablantern && git pull
 cd deploy
 docker compose up -d --build --force-recreate
 ```
@@ -108,7 +108,7 @@ Back up `data`, `keys`, `caddy_data` and `agent_key`. Keep a copy of the master 
 a backup of `data` without it is worth little. For a consistent database copy while the stack runs:
 
 ```bash
-docker compose exec server python -c "import sqlite3; s=sqlite3.connect('/data/vulnwatch.db'); d=sqlite3.connect('/data/backup.db'); s.backup(d)"
+docker compose exec server python -c "import sqlite3; s=sqlite3.connect('/data/lablantern.db'); d=sqlite3.connect('/data/backup.db'); s.backup(d)"
 ```
 
 Restore: stop the stack, copy the volumes back, start it. To move to another host, restore the same volumes there
@@ -122,9 +122,9 @@ Remove agents first (**Systems → Delete**, the agent uninstalls itself), then 
 
 | Symptom | Cause and fix |
 | --- | --- |
-| Stack does not start, "set it in .env" | `VULNWATCH_BIND_IP` or `VULNWATCH_HOSTNAMES` missing in `.env` |
-| Browser shows a certificate for the wrong name | the name is missing in `VULNWATCH_HOSTNAMES`; add it and recreate `server` |
-| Passkeys cannot be added | open the UI by name, not by IP; the name must be in `VULNWATCH_HOSTNAMES` |
+| Stack does not start, "set it in .env" | `LABLANTERN_BIND_IP` or `LABLANTERN_HOSTNAMES` missing in `.env` |
+| Browser shows a certificate for the wrong name | the name is missing in `LABLANTERN_HOSTNAMES`; add it and recreate `server` |
+| Passkeys cannot be added | open the UI by name, not by IP; the name must be in `LABLANTERN_HOSTNAMES` |
 | Run fails with "Worker returned no result" | `docker compose logs worker`; the worker needs outbound HTTPS for its databases |
 | Coverage shows "Container images: error" after an update | the worker runs an old image: `docker compose up -d --force-recreate worker` |
-| Second stack on the same host breaks the first | give it its own `VULNWATCH_TAG`, `VULNWATCH_PORT`, edge subnet and project name (`docker compose -p name`) |
+| Second stack on the same host breaks the first | give it its own `LABLANTERN_TAG`, `LABLANTERN_PORT`, edge subnet and project name (`docker compose -p name`) |

@@ -163,7 +163,7 @@ def build_collector_router(ctx: Context, guards: Guards) -> APIRouter:
         fp = ca_fingerprint(ctx.settings)
         sha = fp.replace(":", "").lower() if fp else ""
         # Wurzelzertifikat einmal holen und am Fingerabdruck prüfen (geht auch mit BusyBox); danach nur noch --cacert
-        cmd = (f'D=${{VW_DIR:-/etc/vulnwatch-collector}} && mkdir -p "$D" && '
+        cmd = (f'D=${{LL_DIR:-/etc/lablantern-collector}} && mkdir -p "$D" && '
                f'curl -fsSk {base}/ca.crt -o "$D/ca.crt" && '
                f'[ "$(sed \'/-----/d\' "$D/ca.crt" | base64 -d | sha256sum | cut -c1-64)" = "{sha}" ] && '
                f'echo {base} > "$D/url" && (umask 077 && echo {token} > "$D/token") && echo ok') if sha else None

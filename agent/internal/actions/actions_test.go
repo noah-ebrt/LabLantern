@@ -13,12 +13,12 @@ import (
 	"testing"
 	"time"
 
-	"vulnwatch/agent/internal/passkey"
-	"vulnwatch/agent/internal/passkey/passkeytest"
-	"vulnwatch/agent/internal/release"
+	"lablantern/agent/internal/passkey"
+	"lablantern/agent/internal/passkey/passkeytest"
+	"lablantern/agent/internal/release"
 )
 
-const origin = "https://vulnwatch.lan:8443"
+const origin = "https://lablantern.lan:8443"
 
 type fixture struct {
 	env  Env
@@ -50,7 +50,7 @@ func (f *fixture) trustEnvelope(rev int, keys ...*passkeytest.SoftKey) string {
 	for _, k := range keys {
 		ks = append(ks, k.Key())
 	}
-	b, _ := json.Marshal(passkey.TrustSet{Kind: "passkeys", Rev: rev, RPID: "vulnwatch.lan", Keys: ks})
+	b, _ := json.Marshal(passkey.TrustSet{Kind: "passkeys", Rev: rev, RPID: "lablantern.lan", Keys: ks})
 	return string(b)
 }
 
@@ -71,7 +71,7 @@ func (f *fixture) run(t *testing.T, req Request) Result {
 }
 
 func sign(k *passkeytest.SoftKey, envelope string) string {
-	b, _ := json.Marshal(k.Sign(envelope, "vulnwatch.lan", origin, 0x05))
+	b, _ := json.Marshal(k.Sign(envelope, "lablantern.lan", origin, 0x05))
 	return string(b)
 }
 
@@ -160,7 +160,7 @@ func TestRebootOnlyWithValidFreshUniqueCommandAndRateLimited(t *testing.T) {
 func (f *fixture) stage(t *testing.T, version string, pkg []byte, tamper bool) {
 	dir := t.TempDir()
 	name := PackageName("amd64", "deb")
-	os.WriteFile(filepath.Join(dir, "vulnwatch-agent-linux-amd64.deb"), pkg, 0o644)
+	os.WriteFile(filepath.Join(dir, "lablantern-agent-linux-amd64.deb"), pkg, 0o644)
 	m, _ := release.BuildManifest(dir, version)
 	data, sig := release.Sign(m, f.relK)
 	os.WriteFile(filepath.Join(f.env.StageDir, "manifest.json"), data, 0o644)
@@ -250,7 +250,7 @@ func TestUninstallNeedsAPasskeyAndRunsDetached(t *testing.T) {
 		t.Fatalf("unsigned uninstall: %+v %v", r, f.ran)
 	}
 	if r := f.run(t, Request{Kind: "command", Envelope: env, Assertion: sign(f.key, env)}); r.Status != "done" ||
-		len(f.ran) != 1 || !strings.Contains(f.ran[0], "systemd-run --on-active=10") || !strings.HasSuffix(f.ran[0], "dpkg --purge vulnwatch-agent") {
+		len(f.ran) != 1 || !strings.Contains(f.ran[0], "systemd-run --on-active=10") || !strings.HasSuffix(f.ran[0], "dpkg --purge lablantern-agent") {
 		t.Fatalf("uninstall: %+v %v", r, f.ran)
 	}
 }

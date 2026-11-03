@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"vulnwatch/agent/internal/collector"
+	"lablantern/agent/internal/collector"
 )
 
 func TestSbomSourceByRuntime(t *testing.T) {

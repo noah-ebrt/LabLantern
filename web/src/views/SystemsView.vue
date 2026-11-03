@@ -109,7 +109,7 @@ async function reportFinished(before) {
   }
 }
 
-// Neue Hosts per `vulnwatch-agent setup`: Code vergleichen, dann mit Passkey freigeben
+// Neue Hosts per `lablantern-agent setup`: Code vergleichen, dann mit Passkey freigeben
 const pairings = ref([])
 
 async function loadPairings() {
@@ -313,7 +313,7 @@ async function deleteSystem(id) {
     await loadSystems()
     return
   }
-  if (!confirm(`${sys?.name || 'This system'} is not connected, so vulnwatch can only delete its data here.\nOn the host, remove the agent yourself: sudo apt purge vulnwatch-agent (or sudo rpm -e vulnwatch-agent).\n\nDelete the data now?`)) return
+  if (!confirm(`${sys?.name || 'This system'} is not connected, so LabLantern can only delete its data here.\nOn the host, remove the agent yourself: sudo apt purge lablantern-agent (or sudo rpm -e lablantern-agent).\n\nDelete the data now?`)) return
   try {
     await api.del(`/api/systems/${id}`)
     await loadSystems()
@@ -499,7 +499,7 @@ onMounted(() => {
       <button v-if="!collector.data" type="button" class="link back" @click="addKind = null">← Other kind of host</button>
       <h2>Add a device with a collector script</h2>
       <p class="subtitle">For devices where the agent can't run. A cron script on the device sends its OS version, packages
-        and containers to vulnwatch. vulnwatch never sends anything back: no commands, no updates.
+        and containers to LabLantern. LabLantern never sends anything back: no commands, no updates.
         Examples for Unraid, Synology and OpenWrt are in <code>collectors/</code> in the repository; the format is
         <code>docs/collector-schema.json</code>.</p>
       <form v-if="!collector.data" class="collector-form" data-test="collector-form" @submit.prevent="createCollector">
@@ -512,7 +512,7 @@ onMounted(() => {
           <div class="step-head">
             <strong>Run this once on {{ collector.data.name }}</strong>
             <span class="subtext">Fetches the root certificate, checks its fingerprint and stores address and token in
-              <code>/etc/vulnwatch-collector</code> (Unraid: set <code>VW_DIR=/boot/config/vulnwatch</code> first, /etc is lost on reboot).
+              <code>/etc/lablantern-collector</code> (Unraid: set <code>LL_DIR=/boot/config/lablantern</code> first, /etc is lost on reboot).
               The token is shown only now.</span>
           </div>
           <div v-if="collector.data.setup_cmd" class="cmd-block">
@@ -539,7 +539,7 @@ onMounted(() => {
     <template v-else-if="addKind !== 'linux'">
       <button v-if="!editEntry" type="button" class="link back" @click="addKind = null">← Other kind of host</button>
       <h2>{{ editEntry ? `Edit ${editEntry.name}` : `Add ${APPLIANCE_KINDS[addKind]}` }}</h2>
-      <p class="subtitle">No agent: vulnwatch reads the device through its own API, with a read-only account.</p>
+      <p class="subtitle">No agent: LabLantern reads the device through its own API, with a read-only account.</p>
       <ApplianceGuide :kind="addKind" :entry="editEntry" @saved="applianceSaved" />
     </template>
 

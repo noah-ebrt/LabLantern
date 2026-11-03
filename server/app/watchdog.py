@@ -1,10 +1,10 @@
-"""Offsite-Wächter: vulnwatch pingt eine Healthchecks-Instanz außer Haus (PLAN Abschnitt 9).
+"""Offsite-Wächter: LabLantern pingt eine Healthchecks-Instanz außer Haus (PLAN Abschnitt 9).
 
 Bleiben die Pings aus (Master aus, Strom oder Internet weg, Lauf hängt), alarmiert Healthchecks von dort aus.
 Zwei Checks, angelegt vom Admin in Healthchecks, ihre Ping-URLs hier hinterlegt:
 - Herzschlag alle 5 min, solange Master und Worker leben (sonst /fail mit Grund);
 - täglicher Lauf: /start beim Beginn, danach Erfolg oder /fail mit Grund.
-Die Management-API von Healthchecks bleibt bewusst zu; vulnwatch braucht nur die Ping-URLs. Die URLs liegen im
+Die Management-API von Healthchecks bleibt bewusst zu; LabLantern braucht nur die Ping-URLs. Die URLs liegen im
 Geheimnisspeicher, weil man mit ihnen Erfolg vortäuschen und so einen Ausfall verdecken könnte.
 """
 import logging
@@ -21,7 +21,7 @@ from .context import Context
 from .guards import Guards
 from .models import put_setting, setting
 
-log = logging.getLogger("vulnwatch")
+log = logging.getLogger("lablantern")
 
 SECRETS = {"heartbeat": "watchdog.heartbeat_url", "run": "watchdog.run_url", "short": "watchdog.short_url"}
 STATUS_KEY = "watchdog.last"
@@ -49,7 +49,7 @@ def ping(url: str, suffix: str = "", body: str = "", timeout: float = 10, method
     """Sendet einen Ping. Liefert None oder den Fehler; wirft nie (der Wächter darf nichts aufhalten)."""
     data = body[:MAX_BODY].encode() if method == "POST" else None
     req = urllib.request.Request(url + suffix, data=data, method=method,
-                                 headers={"Content-Type": "text/plain; charset=utf-8", "User-Agent": "vulnwatch"})
+                                 headers={"Content-Type": "text/plain; charset=utf-8", "User-Agent": "lablantern"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 (URL geprüft, vom Admin hinterlegt)
             return None if 200 <= r.status < 300 else f"HTTP {r.status}"
@@ -106,10 +106,10 @@ def heartbeat(ctx: Context) -> None:
     # nach JOB_TIMEOUT mit eigenem Alarm, danach gilt wieder WORKER_SILENT.
     if age is None or age > (JOB_TIMEOUT if busy else WORKER_SILENT):
         since = "never" if age is None else f"{age // 60} min ago"
-        _send(ctx, "heartbeat", "/fail", f"vulnwatch master is up, but the scan worker was last seen {since}.", "fail")
+        _send(ctx, "heartbeat", "/fail", f"lablantern master is up, but the scan worker was last seen {since}.", "fail")
     else:
         doing = ", busy with a scan job" if busy else ""
-        _send(ctx, "heartbeat", "", f"vulnwatch master up, worker seen {age} s ago{doing}.", "success")
+        _send(ctx, "heartbeat", "", f"lablantern master up, worker seen {age} s ago{doing}.", "success")
 
 
 def _run_kind(trigger: str) -> str:
@@ -202,7 +202,7 @@ def build_watchdog_router(ctx: Context, guards: Guards) -> APIRouter:
         out = {}
         for kind in SECRETS:
             if ctx.secrets.get(SECRETS[kind]):
-                err = _send(ctx, kind, "", f"Test ping from vulnwatch ({found[0].username}).", "test")
+                err = _send(ctx, kind, "", f"Test ping from LabLantern ({found[0].username}).", "test")
                 out[kind] = {"ok": err is None, "error": err}
         if not out:
             raise HTTPException(409, "No ping URL configured yet")

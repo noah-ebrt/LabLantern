@@ -1,4 +1,4 @@
-# vulnwatch agent: internals
+# LabLantern agent: internals
 
 How the agent is built, what runs where with which rights, and how every flow works. New to Go? Read
 [GO-GUIDE.md](GO-GUIDE.md) first. The threat model is in [SECURITY.md](../../SECURITY.md).
@@ -9,27 +9,27 @@ State: agent 0.11.x (2026-10-25).
 
 ## 1. The big picture: one binary, three roles
 
-The package installs a single binary, `/usr/bin/vulnwatch-agent`. systemd runs it in three different roles with
+The package installs a single binary, `/usr/bin/lablantern-agent`. systemd runs it in three different roles with
 very different rights:
 
 ```
                       HTTPS (pinned CA), outgoing only
-   vulnwatch master  ◄──────────────────────────────────┐
+   LabLantern master  ◄──────────────────────────────────┐
                                                         │
  ┌──────────────────────────────────────────────────────┴───────────┐
- │ vulnwatch-agentd.service   "daemon"                              │
- │ user vulnwatch, no capabilities, network: yes                    │
+ │ lablantern-agentd.service   "daemon"                              │
+ │ user lablantern, no capabilities, network: yes                    │
  │ long-poll, send reports, receive commands                        │
  └───────┬───────────────────────────────▲─────────────────┬────────┘
          │ writes request files          │ reads results    │ writes request
-         ▼ /run/vulnwatch/*.request      │ /run/vulnwatch-out
+         ▼ /run/lablantern/*.request      │ /run/lablantern-out
  ┌────────────────────────────────────┐  │   ┌───────────────────────────────────┐
- │ vulnwatch-collect.service          │──┘   │ vulnwatch-action.service          │
+ │ lablantern-collect.service          │──┘   │ lablantern-action.service          │
  │ "collect-job", root, NO network    │      │ "action-job", root, NO network    │
  │ dpkg/rpm, apt, Docker socket, Syft │      │ verifies passkey signature, then  │
  │ fixed queries                      │      │ reboot / update / uninstall,      │
- │ started by vulnwatch-collect.path  │      │ keeps the trusted passkey list    │
- └────────────────────────────────────┘      │ started by vulnwatch-action.path  │
+ │ started by lablantern-collect.path  │      │ keeps the trusted passkey list    │
+ └────────────────────────────────────┘      │ started by lablantern-action.path  │
                                              └───────────────────────────────────┘
 ```
 
@@ -38,23 +38,23 @@ with root rights have no network and treat everything the daemon gives them as u
 
 | Role | Sub-command | User | Network | What it may do |
 |---|---|---|---|---|
-| Daemon | `daemon` | `vulnwatch` | yes (IPv4/6 only) | write only `/run/vulnwatch`, read `/etc/vulnwatch` (group) |
-| Collector | `collect-job` | root (only `CAP_DAC_READ_SEARCH`, `CAP_DAC_OVERRIDE`) | **no** (`PrivateNetwork`, only `AF_UNIX`) | read the system and the Docker socket; write `/run/vulnwatch-out` |
-| Action handler | `action-job` | root (full) | **no** | reboot, `dpkg`/`rpm`, write `/etc/vulnwatch/passkeys.json`, `/var/lib/vulnwatch-action` |
+| Daemon | `daemon` | `lablantern` | yes (IPv4/6 only) | write only `/run/lablantern`, read `/etc/lablantern` (group) |
+| Collector | `collect-job` | root (only `CAP_DAC_READ_SEARCH`, `CAP_DAC_OVERRIDE`) | **no** (`PrivateNetwork`, only `AF_UNIX`) | read the system and the Docker socket; write `/run/lablantern-out` |
+| Action handler | `action-job` | root (full) | **no** | reboot, `dpkg`/`rpm`, write `/etc/lablantern/passkeys.json`, `/var/lib/lablantern-action` |
 | Admin CLI | `setup`, `enroll`, `scan` | root (run by hand) | yes | write the configuration |
 
 ## 2. Files and directories
 
 | Path | Owner / mode | Written by | Content |
 |---|---|---|---|
-| `/etc/vulnwatch/agent.json` | root:vulnwatch 0640 | `setup`/`enroll` | server URL, agent token, CA fingerprint, CA file path, system ID, optional `passkeys_sha256` |
-| `/etc/vulnwatch/ca.pem` | 0644 | `setup`/`enroll` | pinned root certificate of the master |
-| `/etc/vulnwatch/passkeys.json` | root 0644 | action handler | trusted passkey list (signed envelope) |
-| `/run/vulnwatch/` | vulnwatch 0750 | daemon | `collect.request`, `action.request`, `update/` (staged update files) |
-| `/run/vulnwatch-out/` | root:vulnwatch 0750 | collector, action handler | `result.json`, `sbom-N.json`, `action-result.json` |
-| `/var/lib/vulnwatch-action/` | root 0700 | action handler | `nonces.json` (replay protection), `last-reboot` |
+| `/etc/lablantern/agent.json` | root:lablantern 0640 | `setup`/`enroll` | server URL, agent token, CA fingerprint, CA file path, system ID, optional `passkeys_sha256` |
+| `/etc/lablantern/ca.pem` | 0644 | `setup`/`enroll` | pinned root certificate of the master |
+| `/etc/lablantern/passkeys.json` | root 0644 | action handler | trusted passkey list (signed envelope) |
+| `/run/lablantern/` | LabLantern 0750 | daemon | `collect.request`, `action.request`, `update/` (staged update files) |
+| `/run/lablantern-out/` | root:lablantern 0750 | collector, action handler | `result.json`, `sbom-N.json`, `action-result.json` |
+| `/var/lib/lablantern-action/` | root 0700 | action handler | `nonces.json` (replay protection), `last-reboot` |
 
-The directories under `/run` come from `packaging/tmpfiles.conf`. `/var/lib/vulnwatch-action` comes from
+The directories under `/run` come from `packaging/tmpfiles.conf`. `/var/lib/lablantern-action` comes from
 `StateDirectory=` in the action unit.
 
 ## 3. Packages (`internal/…`)
@@ -71,9 +71,9 @@ The directories under `/run` come from `packaging/tmpfiles.conf`. `/var/lib/vuln
 | `actions` | root side of `reboot`, `update_agent`, `uninstall`, and of the passkey list update | action handler (+ daemon helpers `Submit`/`Wait`) |
 | `release` | signed manifest (version + SHA-256 per file), Ed25519 verify, `Newer` (no downgrades) | action handler, CI |
 | `pairing` | pairing code and secret for `setup` | CLI |
-| `discover` | mDNS search for `_vulnwatch._tcp` | CLI |
+| `discover` | mDNS search for `_lablantern._tcp` | CLI |
 
-`cmd/vulnwatch-agent/main.go` glues these together. `cmd/vw-release` is the tool that creates the signing key, plans and signs
+`cmd/lablantern-agent/main.go` glues these together. `cmd/ll-release` is the tool that creates the signing key, plans and signs
 releases.
 
 ## 4. Trust anchors (what the agent believes, and why)
@@ -82,8 +82,8 @@ releases.
 |---|---|---|---|
 | Master's root CA (pinned) | `ca.pem` + fingerprint in `agent.json` | `enroll` (checked against a fingerprint from the UI) or `setup` (trust on first use + pairing code) | someone impersonating the master |
 | Agent token | `agent.json` | master, at enroll/pairing | someone impersonating this agent |
-| Passkey trust list | `/etc/vulnwatch/passkeys.json` | first list: only the one whose SHA-256 came with the setup command (`--passkeys-sha256`), otherwise trust on first use; later lists must be signed by a passkey already in it | a hijacked master issuing reboots/updates |
-| Release public key | compiled in (`release.publicKeyB64`, set by `-ldflags -X` in `packaging/build-agent.sh`) | `vw-release init-key` in the `agent-key` container | a hijacked master serving a forged agent |
+| Passkey trust list | `/etc/lablantern/passkeys.json` | first list: only the one whose SHA-256 came with the setup command (`--passkeys-sha256`), otherwise trust on first use; later lists must be signed by a passkey already in it | a hijacked master issuing reboots/updates |
+| Release public key | compiled in (`release.publicKeyB64`, set by `-ldflags -X` in `packaging/build-agent.sh`) | `ll-release init-key` in the `agent-key` container | a hijacked master serving a forged agent |
 
 ## 5. Flows
 
@@ -93,8 +93,8 @@ The UI shows a one-liner. It detects the architecture, downloads the `.deb`/`.rp
 (`curl -k`, because the CA is not trusted yet), **checks the SHA-256 that is embedded in the command**, installs
 it, and then runs `enroll` or `setup`.
 
-`postinst.sh` creates the user and group `vulnwatch`, fixes the permissions on `/etc/vulnwatch`, creates the
-`/run` directories and enables `vulnwatch-agentd.service` plus both `.path` units.
+`postinst.sh` creates the user and group `lablantern`, fixes the permissions on `/etc/lablantern`, creates the
+`/run` directories and enables `lablantern-agentd.service` plus both `.path` units.
 
 ### 5.2 `enroll` (token from the UI)
 
@@ -104,7 +104,7 @@ it, and then runs `enroll` or `setup`.
    equals `--ca-fingerprint`**. Nothing secret is sent before this.
 2. `client.New(..., caPEM)`: from now on only that CA is trusted, with full hostname checks.
 3. `POST /api/agent/enroll` with the one-time token, which returns the agent token.
-4. `config.SaveConfig` writes `agent.json` (0600, then 0640 root:vulnwatch) and `ca.pem`, then restarts the
+4. `config.SaveConfig` writes `agent.json` (0600, then 0640 root:lablantern) and `ca.pem`, then restarts the
    daemon.
 5. The admin approves the host in the UI. Until then the master answers `403 waiting for approval`.
 
@@ -150,8 +150,8 @@ The agent opens **no listening port**. Every connection goes out from the host.
 
 `deliver(cl, viaCollector(p))`:
 
-1. The daemon writes `{"nonce": …}` to `/run/vulnwatch/collect.request`.
-2. `vulnwatch-collect.path` notices the file and starts `vulnwatch-collect.service` as root.
+1. The daemon writes `{"nonce": …}` to `/run/lablantern/collect.request`.
+2. `lablantern-collect.path` notices the file and starts `lablantern-collect.service` as root.
 3. `Paths.Take` reads the request with `ReadNoFollow` (no symlinks, only regular files, at most 64 KiB) and
    deletes it. `collector.Collect` gathers the inventory. `Execute` writes `result.json` atomically.
 4. The daemon polls for `result.json` with **its** nonce and sends the report to `/api/agent/report`.
@@ -178,8 +178,8 @@ Admin UI ─ prepare ─► master builds envelope {"kind":"command","system_id"
                       "issued_at","expires_at"(+5 min),"nonce"} and asks the browser for a passkey
                       signature with challenge = SHA-256(envelope)
 Admin touches passkey ─ confirm ─► master stores envelope + assertion as the command's params
-Daemon gets it via long-poll ─► runSigned ─► /run/vulnwatch/action.request
-vulnwatch-action.service (root, no network) ─► actions.Env.command():
+Daemon gets it via long-poll ─► runSigned ─► /run/lablantern/action.request
+lablantern-action.service (root, no network) ─► actions.Env.command():
     1. passkey.Verify(trust list, envelope, assertion)
          - credential ID is in the trusted list
          - clientDataJSON.type == "webauthn.get"
@@ -197,7 +197,7 @@ vulnwatch-action.service (root, no network) ─► actions.Env.command():
 |---|---|
 | `reboot` | refuses if the last reboot was < 30 min ago; `systemd-run --on-active=<10…600 s> systemctl reboot` |
 | `update_agent` | §5.9 |
-| `uninstall` | `systemd-run --on-active=10 dpkg --purge vulnwatch-agent` (or `rpm -e`). `postrm` deletes config, token, passkey list and user |
+| `uninstall` | `systemd-run --on-active=10 dpkg --purge lablantern-agent` (or `rpm -e`). `postrm` deletes config, token, passkey list and user |
 
 ### 5.8 Passkey trust list
 
@@ -211,7 +211,7 @@ vulnwatch-action.service (root, no network) ─► actions.Env.command():
 ### 5.9 Agent update
 
 1. The daemon (`stageUpdate`) downloads `manifest.json`, `manifest.json.sig` and the right package into
-   `/run/vulnwatch/update/`.
+   `/run/lablantern/update/`.
 2. The action handler copies those three files with `ReadNoFollow` into a fresh root-only temp dir. All checks
    run against **that copy**, so the daemon can't swap files after the check (TOCTOU).
 3. `release.Verify`: Ed25519 signature with the compiled-in key, manifest version == the version in the signed
@@ -224,13 +224,13 @@ vulnwatch-action.service (root, no network) ─► actions.Env.command():
 Every install builds its own agents (`deploy/compose.yaml`, image `deploy/Dockerfile.agent`). The image build
 downloads the modules and nfpm, then runs `go vet` and `go test`; the containers run without network:
 
-1. `agent-key`: `vw-release init-key` creates the Ed25519 key in the volume `agent_key` on the first start and writes
+1. `agent-key`: `ll-release init-key` creates the Ed25519 key in the volume `agent_key` on the first start and writes
    the public key to `agent_releases/release.pub`.
-2. `agent-build` (no key): `packaging/build-agent.sh` asks `vw-release plan` whether anything changed (SHA-256 over
+2. `agent-build` (no key): `packaging/build-agent.sh` asks `ll-release plan` whether anything changed (SHA-256 over
    the sources without `_test.go`, plus the public key, against `latest.json`). If so, it builds amd64 and arm64
    binaries with the version and public key as `-ldflags -X`, packages them with nfpm and leaves them in
    `agent_stage`.
-3. `agent-sign`: `vw-release publish` (standard library only) signs the manifest, verifies it, moves the release to
+3. `agent-sign`: `ll-release publish` (standard library only) signs the manifest, verifies it, moves the release to
    `agent_releases/<version>/` and updates `latest.json`.
 
 The server mounts `agent_releases` read-only, checks every minute, verifies signature and checksums and serves the
@@ -246,10 +246,10 @@ and **Report now** on a host to see data from the new version.
 
 | Setting | agentd | collect | action |
 |---|---|---|---|
-| User | vulnwatch | root | root |
+| User | LabLantern | root | root |
 | Capabilities | none | `DAC_READ_SEARCH`, `DAC_OVERRIDE` | all |
 | Network | AF_INET/6 | none (`PrivateNetwork`) | none (`PrivateNetwork`) |
-| File system | `ProtectSystem=strict`, writes `/run/vulnwatch` | `strict`, writes `/run/vulnwatch*` | writable (dpkg needs it) |
+| File system | `ProtectSystem=strict`, writes `/run/lablantern` | `strict`, writes `/run/lablantern*` | writable (dpkg needs it) |
 | `NoNewPrivileges`, `PrivateTmp`, `Protect*`, `SystemCallFilter` | yes | yes | most |
 
 ## 7. Tests

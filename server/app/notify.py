@@ -5,7 +5,7 @@ from apprise import NotifyFormat
 
 from .context import Context
 
-log = logging.getLogger("vulnwatch.notify")
+log = logging.getLogger("lablantern.notify")
 NOTIFY_SECRET_KEY = "notifications.urls"
 MAIL_SCHEMES = ("mailto", "mailtos")
 # Was ein Kanal bekommt: den regelmäßigen Bericht, Alarme (Sofort-Alarm, Alarm, Fehler, Frühwarnung) oder beides

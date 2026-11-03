@@ -251,7 +251,7 @@ HEALTH = {
     "user.query": [{"username": "root", "roles": ["FULL_ADMIN"], "password_disabled": False, "twofactor_auth_configured": True},
                    {"username": "admin", "roles": ["FULL_ADMIN"], "password_disabled": False,
                     "twofactor_auth_configured": False},
-                   {"username": "vulnwatch", "roles": ["READONLY_ADMIN"], "password_disabled": True,
+                   {"username": "lablantern", "roles": ["READONLY_ADMIN"], "password_disabled": True,
                     "twofactor_auth_configured": False}],
 }
 
@@ -399,7 +399,7 @@ def test_homeassistant_connector_end_to_end(admin, hass):
         FakeHomeAssistant.states = old
     with ctx.session_factory() as s:
         assert {f.status for f in s.scalars(select(Finding).where(Finding.system_id == sid,
-                                                                  Finding.cve_id == "VW-UPDATE"))} == {"resolved"}
+                                                                  Finding.cve_id == "LL-UPDATE"))} == {"resolved"}
 
     # falscher Token: Fehler in der Abdeckung statt stiller Lücke
     assert client.put(f"/api/settings/appliances/{sid}", headers=h, json={**body, "token": "wrong-token"}).json()["ok"] is False
@@ -433,8 +433,8 @@ def test_homeassistant_backup_failure_missing_backups_and_recovery_mode():
                       ts("sensor.backup_b", "2026-10-26T03:00:00+00:00"),   # letzter Versuch heute
                       ts("sensor.backup_c", "2026-10-27T03:00:00+00:00")]   # nächster geplanter
     found = appliances.homeassistant_findings(appliances.parse_homeassistant(ok_then_failed, {}), now)
-    assert [(f["cve_id"], f["severity"]) for f in found] == [("VW-BACKUP", "mittel")] and "failed" in found[0]["title"]
+    assert [(f["cve_id"], f["severity"]) for f in found] == [("LL-BACKUP", "mittel")] and "failed" in found[0]["title"]
 
     found = appliances.homeassistant_findings(appliances.parse_homeassistant([], {"recovery_mode": True}), now)
-    assert {f["cve_id"]: f["severity"] for f in found} == {"VW-HA-MODE": "hoch", "VW-BACKUP": "mittel"}
-    assert "No automatic backups configured" in next(f for f in found if f["cve_id"] == "VW-BACKUP")["title"]
+    assert {f["cve_id"]: f["severity"] for f in found} == {"LL-HA-MODE": "hoch", "LL-BACKUP": "mittel"}
+    assert "No automatic backups configured" in next(f for f in found if f["cve_id"] == "LL-BACKUP")["title"]

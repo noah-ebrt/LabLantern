@@ -177,7 +177,7 @@ def agent_packages(ctx: Context) -> dict[str, str | None]:
     """SHA-256 der Agent-Pakete, die dieser Server ausliefert (None = nicht vorhanden)."""
     out: dict[str, str | None] = {}
     for name in PACKAGES:
-        path = ctx.agent_dir() / f"vulnwatch-agent-linux-{name}" if ctx.agent_dir() else None
+        path = ctx.agent_dir() / f"lablantern-agent-linux-{name}" if ctx.agent_dir() else None
         out[name] = hashlib.sha256(path.read_bytes()).hexdigest() if path and path.is_file() else None
     return out
 
@@ -194,7 +194,7 @@ def _public_endpoint(ctx: Context, host_header: str) -> str:
 
 def _agent_endpoint(ctx: Context, host_header: str) -> str:
     """Adresse für Agenten: bevorzugt eine konfigurierte IP. Neue Hosts nutzen oft nicht den DNS, der
-    Namen wie vulnwatch.lan kennt; Agenten brauchen den Namen nicht (der ist nur für Passkeys im Browser)."""
+    Namen wie lablantern.lan kennt; Agenten brauchen den Namen nicht (der ist nur für Passkeys im Browser)."""
     for h in ctx.settings.hostnames:
         try:
             ipaddress.ip_address(h.strip("[]"))
@@ -225,7 +225,7 @@ def _install_cmd(base: str, token: str, fp: str, sums: dict[str, str | None], pi
     if part is None:
         return None
     # enroll startet den Daemon neu, danach meldet er sofort
-    return f"{part} && sudo vulnwatch-agent enroll --server {base} --token {token} --ca-fingerprint {fp}{pin}"
+    return f"{part} && sudo lablantern-agent enroll --server {base} --token {token} --ca-fingerprint {fp}{pin}"
 
 
 class ImageSbomIn(BaseModel):
@@ -240,7 +240,7 @@ def _version(v: str) -> tuple:
 
 def _package_part(base: str, sums: dict[str, str | None]) -> str | None:
     """Lädt das passende Paket, prüft die Prüfsumme und installiert es. Das Paket legt den Benutzer
-    vulnwatch und die systemd-Units an und räumt eine alte Handinstallation (bis 0.5.x) weg."""
+    LabLantern und die systemd-Units an und räumt eine alte Handinstallation (bis 0.5.x) weg."""
     available = {n: s for n, s in sums.items() if s}
     if not available:
         return None
@@ -250,10 +250,10 @@ def _package_part(base: str, sums: dict[str, str | None]) -> str | None:
         "if command -v dpkg >/dev/null; then PKG=deb; else PKG=rpm; fi && "
         f"case \"$ARCH.$PKG\" in {cases} *) echo \"no agent package for $ARCH.$PKG\" >&2; exit 1;; esac && "
         "T=$(mktemp -d) && "
-        f"curl -fsSLk \"{base}/api/agent/download/$ARCH.$PKG\" -o \"$T/vulnwatch-agent.$PKG\" && "
-        "echo \"$SUM  $T/vulnwatch-agent.$PKG\" | sha256sum -c - && "
-        "if [ \"$PKG\" = deb ]; then sudo dpkg -i \"$T/vulnwatch-agent.deb\"; "
-        "else sudo rpm -U --replacepkgs \"$T/vulnwatch-agent.rpm\"; fi && "
+        f"curl -fsSLk \"{base}/api/agent/download/$ARCH.$PKG\" -o \"$T/lablantern-agent.$PKG\" && "
+        "echo \"$SUM  $T/lablantern-agent.$PKG\" | sha256sum -c - && "
+        "if [ \"$PKG\" = deb ]; then sudo dpkg -i \"$T/lablantern-agent.deb\"; "
+        "else sudo rpm -U --replacepkgs \"$T/lablantern-agent.rpm\"; fi && "
         "rm -rf \"$T\""
     )
 
@@ -323,10 +323,10 @@ def build_agent_router(ctx: Context, guards: Guards) -> APIRouter:
             "expires_at": expires_at,
             "server_url": base,
             "ca_fingerprint": fp,
-            "enroll_cmd": f"vulnwatch-agent enroll --server {base} --token {raw_token} --ca-fingerprint {fp}{pin}",
+            "enroll_cmd": f"lablantern-agent enroll --server {base} --token {raw_token} --ca-fingerprint {fp}{pin}",
             "install_cmd": _install_cmd(base, raw_token, fp, agent_packages(ctx), pin),
             # ohne Token, mit Pairing-Code; der Fingerabdruck im Befehl macht einen falschen Master sofort sichtbar
-            "setup_cmd": (f"{part} && sudo vulnwatch-agent setup --master {base} --ca-fingerprint {fp}{pin}"
+            "setup_cmd": (f"{part} && sudo lablantern-agent setup --master {base} --ca-fingerprint {fp}{pin}"
                           if part and _version(version) >= SECURE_SETUP_VERSION else None),
         }
 
@@ -464,12 +464,12 @@ def build_agent_router(ctx: Context, guards: Guards) -> APIRouter:
     def download(name: str):
         if name not in DOWNLOADS or not ctx.agent_dir():
             raise HTTPException(404, "Unknown architecture or package type")
-        path = ctx.agent_dir() / f"vulnwatch-agent-linux-{name}"
+        path = ctx.agent_dir() / f"lablantern-agent-linux-{name}"
         if not path.is_file():
             raise HTTPException(404, "Agent file not available")
         suffix = name.partition(".")[2]
         return FileResponse(path, media_type="application/octet-stream",
-                            filename=f"vulnwatch-agent.{suffix}" if suffix else "vulnwatch-agent")
+                            filename=f"lablantern-agent.{suffix}" if suffix else "lablantern-agent")
 
     @router.get("/agent/release/{name}")
     def release_manifest(name: str):

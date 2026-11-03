@@ -9,7 +9,7 @@ generic='-----BEGIN [A-Z ]*PRIVATE KEY-----
 \bgh[pousr]_[A-Za-z0-9]{36}\b
 \bglpat-[A-Za-z0-9_-]{20}\b
 \bsk-ant-api[0-9]{2}-[A-Za-z0-9_-]{80,}
-/home/(?!user/|vulnwatch/)[a-z][a-z0-9_-]*/'
+/home/(?!user/|lablantern/)[a-z][a-z0-9_-]*/'
 own=$( { [ -f private/leak-patterns.txt ] && grep -v '^#' private/leak-patterns.txt; printf '%s\n' "${LEAK_PATTERNS:-}"; } \
     | sed '/^[[:space:]]*$/d')
 [ -n "$own" ] || echo "note: no own patterns (private/leak-patterns.txt or LEAK_PATTERNS), generic checks only" >&2

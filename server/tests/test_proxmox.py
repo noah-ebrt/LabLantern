@@ -17,7 +17,7 @@ from tests.test_appliances import make_cert
 
 FIX = Path(__file__).parent / "fixtures"
 UNTIL = (date.today() + timedelta(days=30)).isoformat()
-TOKEN = "vulnwatch@pve!vw=0b7a3e1c-1111-2222-3333-444455556666"
+TOKEN = "lablantern@pve!vw=0b7a3e1c-1111-2222-3333-444455556666"
 
 
 def fixture(name):
@@ -155,7 +155,7 @@ def test_pve_update_rating(admin, pve):
     ctx = env.app.state.ctx
     sid = connect(admin, pve)
     with ctx.session_factory() as s:
-        f = s.scalar(select(Finding).where(Finding.system_id == sid, Finding.cve_id == "VW-UPDATE"))
+        f = s.scalar(select(Finding).where(Finding.system_id == sid, Finding.cve_id == "LL-UPDATE"))
         assert (f.severity, f.installed_version, f.fixed_version, f.source) == ("hoch", "8.2.4", "8.2.7", "proxmox")
         assert "pve1" in f.title
         row = next(x for x in calculate_coverage_matrix(s)["systems"] if x["system_id"] == sid)
@@ -164,7 +164,7 @@ def test_pve_update_rating(admin, pve):
 
 
 def test_apt_update_forbidden_is_na_not_ok(admin, pve):
-    """Ältere PVE verlangen für /apt/update Sys.Modify. vulnwatch bleibt lesend: die Prüfung ist n/a mit Grund."""
+    """Ältere PVE verlangen für /apt/update Sys.Modify. LabLantern bleibt lesend: die Prüfung ist n/a mit Grund."""
     env, _, _ = admin
     FakePve.apt_status = 403
     try:

@@ -1,5 +1,5 @@
 // Package actions führt die gefährlichen Befehle aus (Neustart, Agent-Update) und pflegt die Liste der
-// vertrauten Passkeys. Es läuft als root ohne Netz (vulnwatch-action.service) und glaubt dem Daemon nichts:
+// vertrauten Passkeys. Es läuft als root ohne Netz (lablantern-action.service) und glaubt dem Daemon nichts:
 // Jeder Befehl braucht eine gültige Passkey-Signatur über genau diesen Umschlag, passend zu diesem Host,
 // noch nicht abgelaufen und noch nie benutzt. Updates müssen zusätzlich mit dem Release-Schlüssel signiert sein.
 package actions
@@ -18,9 +18,9 @@ import (
 	"strings"
 	"time"
 
-	"vulnwatch/agent/internal/jobs"
-	"vulnwatch/agent/internal/passkey"
-	"vulnwatch/agent/internal/release"
+	"lablantern/agent/internal/jobs"
+	"lablantern/agent/internal/passkey"
+	"lablantern/agent/internal/release"
 )
 
 const (
@@ -44,16 +44,16 @@ type Result struct {
 }
 
 type Paths struct {
-	RequestFile string // Daemon schreibt (/run/vulnwatch)
-	ResultFile  string // nur root schreibt (/run/vulnwatch-out)
-	TrustFile   string // nur root schreibt (/etc/vulnwatch)
-	StateDir    string // nur root (/var/lib/vulnwatch-action)
+	RequestFile string // Daemon schreibt (/run/lablantern)
+	ResultFile  string // nur root schreibt (/run/lablantern-out)
+	TrustFile   string // nur root schreibt (/etc/lablantern)
+	StateDir    string // nur root (/var/lib/lablantern-action)
 	StageDir    string // Daemon legt hier heruntergeladene Update-Dateien ab
 }
 
 func DefaultPaths() Paths {
-	return Paths{RequestFile: "/run/vulnwatch/action.request", ResultFile: "/run/vulnwatch-out/action-result.json",
-		TrustFile: "/etc/vulnwatch/passkeys.json", StateDir: "/var/lib/vulnwatch-action", StageDir: "/run/vulnwatch/update"}
+	return Paths{RequestFile: "/run/lablantern/action.request", ResultFile: "/run/lablantern-out/action-result.json",
+		TrustFile: "/etc/lablantern/passkeys.json", StateDir: "/var/lib/lablantern-action", StageDir: "/run/lablantern/update"}
 }
 
 // Env ist die Umgebung der root-Seite; austauschbar für Tests.
@@ -85,7 +85,7 @@ func DefaultEnv(systemID int, agentVersion string) Env {
 
 // PackageName ist der Dateiname des passenden Pakets im Release.
 func PackageName(arch, pkg string) string {
-	return fmt.Sprintf("vulnwatch-agent-linux-%s.%s", arch, pkg)
+	return fmt.Sprintf("lablantern-agent-linux-%s.%s", arch, pkg)
 }
 
 // --- Daemon-Seite ---
@@ -109,7 +109,7 @@ func (p Paths) Wait(nonce string, timeout, interval time.Duration) (*Result, err
 			}
 		}
 		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("action handler did not answer within %s (journalctl -u vulnwatch-action.service)", timeout)
+			return nil, fmt.Errorf("action handler did not answer within %s (journalctl -u lablantern-action.service)", timeout)
 		}
 		time.Sleep(interval)
 	}
@@ -227,7 +227,7 @@ type command struct {
 func (e Env) command(req *Request) Result {
 	set, err := e.loadTrust()
 	if err != nil || set == nil {
-		return rejected("no trusted passkeys yet: register one in the vulnwatch UI first")
+		return rejected("no trusted passkeys yet: register one in the LabLantern UI first")
 	}
 	a, err := passkey.ParseAssertion(req.Assertion)
 	if err != nil {
@@ -314,8 +314,8 @@ func (e Env) reboot(c command) Result {
 	if d, ok := c.Params["delay"].(float64); ok {
 		delay = min(max(int(d), 10), 600)
 	}
-	out, err := e.Run("systemd-run", fmt.Sprintf("--on-active=%d", delay), "--timer-property=AccuracySec=1s", "--unit=vulnwatch-reboot",
-		"--description=vulnwatch reboot (passkey confirmed)", "/usr/bin/systemctl", "reboot")
+	out, err := e.Run("systemd-run", fmt.Sprintf("--on-active=%d", delay), "--timer-property=AccuracySec=1s", "--unit=lablantern-reboot",
+		"--description=lablantern reboot (passkey confirmed)", "/usr/bin/systemctl", "reboot")
 	if err != nil {
 		return Result{Status: "failed", Output: strings.TrimSpace(out + "\n" + err.Error())}
 	}
@@ -326,12 +326,12 @@ func (e Env) reboot(c command) Result {
 // uninstall entfernt das Paket samt Konfiguration, Token und Passkey-Liste. Es läuft in einer eigenen
 // transienten Unit, weil das Entfernen die Agent-Dienste (auch diesen) beendet.
 func (e Env) uninstall() Result {
-	tool, args := "/usr/bin/dpkg", []string{"--purge", "vulnwatch-agent"}
+	tool, args := "/usr/bin/dpkg", []string{"--purge", "lablantern-agent"}
 	if e.PkgType == "rpm" {
-		tool, args = "/usr/bin/rpm", []string{"-e", "vulnwatch-agent"}
+		tool, args = "/usr/bin/rpm", []string{"-e", "lablantern-agent"}
 	}
-	run := append([]string{"--on-active=10", "--timer-property=AccuracySec=1s", "--unit=vulnwatch-uninstall",
-		"--description=vulnwatch uninstall (passkey confirmed)", tool}, args...)
+	run := append([]string{"--on-active=10", "--timer-property=AccuracySec=1s", "--unit=lablantern-uninstall",
+		"--description=lablantern uninstall (passkey confirmed)", tool}, args...)
 	if out, err := e.Run("systemd-run", run...); err != nil {
 		return Result{Status: "failed", Output: strings.TrimSpace(out + "\n" + err.Error())}
 	}

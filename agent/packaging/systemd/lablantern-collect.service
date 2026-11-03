@@ -1,12 +1,12 @@
 # Root-Teil: liest Paketdatenbanken und den Docker-Socket, hat aber kein Netz (nur Unix-Sockets) und
 # kann außer seinem Ausgabeverzeichnis nichts schreiben.
 [Unit]
-Description=vulnwatch collector (root, no network)
+Description=lablantern collector (root, no network)
 After=docker.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/vulnwatch-agent collect-job
+ExecStart=/usr/bin/lablantern-agent collect-job
 TimeoutStartSec=30min
 Nice=10
 IOSchedulingClass=idle
@@ -14,7 +14,7 @@ NoNewPrivileges=yes
 PrivateNetwork=yes
 RestrictAddressFamilies=AF_UNIX
 ProtectSystem=strict
-ReadWritePaths=/run/vulnwatch /run/vulnwatch-out
+ReadWritePaths=/run/lablantern /run/lablantern-out
 ProtectHome=read-only
 PrivateTmp=yes
 PrivateDevices=yes

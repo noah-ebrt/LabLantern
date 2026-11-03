@@ -23,7 +23,7 @@ export const KINDS = {
   fritz_host: { label: 'FRITZ!Box: device active', hint: 'Asks the router whether it sees the device. Catches phones and laptops in Wi-Fi power save that ignore ping.', fields: ['fritz_target'], defaults: { target: '' } },
   fritz_wan: { label: 'FRITZ!Box: internet', hint: 'Is the internet connection actually up (DSL, cable or fibre)?', fields: [], defaults: {} },
   heartbeat: { label: 'Heartbeat (push)', hint: 'The device calls a URL regularly. Silence means down; “?state=down” reports a shutdown instantly.', fields: ['grace_s'], defaults: { grace_s: 30 } },
-  agent: { label: 'vulnwatch agent', hint: 'The agent’s live connection to vulnwatch. Added automatically on agent hosts.', fields: [], defaults: {} },
+  agent: { label: 'LabLantern agent', hint: 'The agent’s live connection to LabLantern. Added automatically on agent hosts.', fields: [], defaults: {} },
 }
 
 // Schnellwahl im Generator: häufige Dienste mit passenden Einstellungen

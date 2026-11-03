@@ -8,7 +8,7 @@ from cryptography import x509
 from .config import Settings
 from .pki import fingerprint_pem
 
-log = logging.getLogger("vulnwatch.trust")
+log = logging.getLogger("lablantern.trust")
 
 
 def ca_pem(settings: Settings) -> bytes | None:

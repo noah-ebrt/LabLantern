@@ -57,7 +57,7 @@ async function doLogout() {
       <div class="brand">
         <span class="mark"><Icon name="shield" :size="18" /></span>
         <div>
-          <span class="brand-name">vulnwatch</span>
+          <span class="brand-name">LabLantern</span>
           <span class="brand-sub">Homelab Fleet</span>
         </div>
       </div>
@@ -106,7 +106,7 @@ async function doLogout() {
     </div>
   </div>
   <main v-else class="auth">
-    <div class="auth-brand"><span class="mark"><Icon name="shield" :size="18" /></span>vulnwatch</div>
+    <div class="auth-brand"><span class="mark"><Icon name="shield" :size="18" /></span>LabLantern</div>
     <RouterView />
   </main>
 </template>

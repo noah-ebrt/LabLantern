@@ -1,9 +1,9 @@
 """Webhooks der Gesundheitsüberwachung: POST an die eingetragenen URLs, Inhalt baut healthfeed.HealthFeed.
 
-Ereignisse (Header X-Vulnwatch-Event): state_changed, engine_down, engine_up, heartbeat, test. Der Body ist JSON im
+Ereignisse (Header X-Lablantern-Event): state_changed, engine_down, engine_up, heartbeat, test. Der Body ist JSON im
 Format von /api/health/states plus "event" und "changes". Signiert mit HMAC-SHA256 über "<Zeitstempel>.<Body>"
-(X-Vulnwatch-Timestamp, X-Vulnwatch-Signature: sha256=<hex>), so dass ein Empfänger alte Aufrufe verwerfen kann;
-X-Vulnwatch-Delivery bleibt bei Wiederholungen gleich. Der Schlüssel wird beim Anlegen einmal angezeigt.
+(X-Lablantern-Timestamp, X-Lablantern-Signature: sha256=<hex>), so dass ein Empfänger alte Aufrufe verwerfen kann;
+X-Lablantern-Delivery bleibt bei Wiederholungen gleich. Der Schlüssel wird beim Anlegen einmal angezeigt.
 Keine Weiterleitungen: ein Ziel, das umleitet, gilt als Fehler. Fehlschläge werden nach BACKOFF wiederholt."""
 import hashlib
 import hmac
@@ -20,7 +20,7 @@ from sqlalchemy import select
 from .context import Context
 from .models import HealthWebhook
 
-log = logging.getLogger("vulnwatch.health")
+log = logging.getLogger("lablantern.health")
 TIMEOUT = 5
 BACKOFF = (5, 30, 120)   # Sekunden bis zum 2., 3. und 4. Versuch
 EVENTS = ("state_changed", "engine_down", "engine_up")   # wählbar je Webhook; heartbeat über heartbeat_min
@@ -81,9 +81,9 @@ _opener = urllib.request.build_opener(_NoRedirect)
 def post(url: str, secret: str, event: str, delivery: str, ts: int, body: bytes) -> str:
     """Ein Zustellversuch; zurück kommt "" bei 2xx, sonst der Fehler."""
     req = urllib.request.Request(url, data=body, method="POST", headers={
-        "Content-Type": "application/json", "User-Agent": "vulnwatch-webhook",
-        "X-Vulnwatch-Event": event, "X-Vulnwatch-Delivery": delivery, "X-Vulnwatch-Timestamp": str(ts),
-        "X-Vulnwatch-Signature": sign(secret, ts, body)})
+        "Content-Type": "application/json", "User-Agent": "lablantern-webhook",
+        "X-Lablantern-Event": event, "X-Lablantern-Delivery": delivery, "X-Lablantern-Timestamp": str(ts),
+        "X-Lablantern-Signature": sign(secret, ts, body)})
     try:
         with _opener.open(req, timeout=TIMEOUT) as r:
             return "" if 200 <= r.status < 300 else f"HTTP {r.status}"

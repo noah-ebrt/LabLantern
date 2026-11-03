@@ -18,7 +18,7 @@ dist/
 /deploy/.worker-deployed
 
 # Agent build output
-/agent/vulnwatch-agent
+/agent/lablantern-agent
 /agent/dist/
 /agent/build/
 

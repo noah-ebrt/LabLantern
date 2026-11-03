@@ -108,8 +108,8 @@ def test_logout_without_session_is_401(ready):
 def test_session_token_is_stored_only_as_hash(ready):
     env, secret = ready
     env.login(env.client, secret)
-    raw = env.client.cookies.get("vw_session")
-    db_bytes = b"".join(p.read_bytes() for p in env.data_dir.glob("vulnwatch.db*"))
+    raw = env.client.cookies.get("ll_session")
+    db_bytes = b"".join(p.read_bytes() for p in env.data_dir.glob("lablantern.db*"))
     assert raw.encode() not in db_bytes
 
 

@@ -4,7 +4,7 @@
 	auto_https disable_redirects
 	# Wer per IP verbindet, sendet keinen Servernamen (SNI). Ohne diese Angabe nähme Caddy die Docker-interne
 	# Adresse des Containers und stellte dafür ein Zertifikat aus, das kein Client je akzeptieren kann.
-	default_sni {$VULNWATCH_BIND_IP}
+	default_sni {$LABLANTERN_BIND_IP}
 	# Zertifikate nur für Namen ausstellen, die der Server als seine eigenen kennt.
 	on_demand_tls {
 		ask http://server:8000/api/internal/tls-allowed

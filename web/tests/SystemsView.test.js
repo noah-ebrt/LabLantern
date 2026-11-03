@@ -59,7 +59,7 @@ beforeEach(() => {
         expires_at: 1800000000,
         server_url: 'https://192.0.2.10:8443',
         ca_fingerprint: 'AA:BB:CC:DD',
-        enroll_cmd: 'vulnwatch-agent enroll --server https://192.0.2.10:8443 --token test-token-123',
+        enroll_cmd: 'lablantern-agent enroll --server https://192.0.2.10:8443 --token test-token-123',
       })
     }
     if (url === '/api/systems/2/approve' && init.method === 'POST') {
@@ -112,7 +112,7 @@ describe('SystemsView', () => {
     expect(w.text()).toContain('Add a Linux host')
     expect(w.text()).toContain('test-token-123')
     expect(w.text()).toContain('AA:BB:CC:DD')
-    expect(w.text()).toContain('vulnwatch-agent enroll')
+    expect(w.text()).toContain('lablantern-agent enroll')
   })
 
   it('zeigt für TrueNAS Felder, Vorbereitung und API-Beschreibung statt eines Agent-Befehls', async () => {
@@ -127,7 +127,7 @@ describe('SystemsView', () => {
     expect(w.find('input[name="appliance_url"]').exists()).toBe(true)
     expect(w.text()).toContain('auth.login_with_api_key')
     expect(w.text()).toContain('docs/INTEGRATIONS.md')
-    expect(w.text()).not.toContain('vulnwatch-agent enroll')
+    expect(w.text()).not.toContain('lablantern-agent enroll')
   })
 
   it('ganze Zeile öffnet die Details wie in der Übersicht, Knöpfe darin nicht', async () => {

@@ -242,7 +242,7 @@ useLive(['findings', 'settings'], load, 3000)
         <p v-if="coverage" class="subtext">
           Exploited issues (CISA KEV) for your products in the last {{ coverage.window_days }} days · checked {{ timeAgo(new Date(coverage.at * 1000).toISOString()) }}
         </p>
-        <p v-else class="subtext">Not run yet. Once a week vulnwatch checks whether the early warning caught every actively exploited issue for your products.</p>
+        <p v-else class="subtext">Not run yet. Once a week LabLantern checks whether the early warning caught every actively exploited issue for your products.</p>
         <p v-for="(e, src) in coverage?.errors || {}" :key="src" class="subtext text-danger">{{ e }}</p>
       </div>
       <button class="secondary btn-sm" :disabled="coverageBusy" data-test="coverage-now" @click="checkCoverage">

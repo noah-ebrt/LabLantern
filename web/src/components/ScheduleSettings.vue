@@ -48,7 +48,7 @@ onMounted(load)
 </script>
 
 <template>
-  <SettingsCard icon="clock" title="Scan schedule" subtitle="When vulnwatch scans every host and container on its own"
+  <SettingsCard icon="clock" title="Scan schedule" subtitle="When LabLantern scans every host and container on its own"
                 :status="form.enabled ? { tone: 'ok', text: 'Active' } : { tone: 'neutral', text: 'Disabled', target: 'set-daily' }">
     <form class="settings-form" @submit.prevent="save">
       <SettingsList label="Automatic runs">
@@ -73,7 +73,7 @@ onMounted(load)
           <span class="subtext">A quick rescan of the latest agent data (at most about {{ short.agent_report_minutes }} min old) against a fresh vulnerability database.
             It only notifies about new critical or high findings and failed checks.</span>
         </SettingsEntry>
-        <SettingsEntry id="set-timezone" icon="clock" title="Time zone" meta="For the daily run and every time shown in vulnwatch">
+        <SettingsEntry id="set-timezone" icon="clock" title="Time zone" meta="For the daily run and every time shown in lablantern">
           <template #actions>
             <select v-model="form.timezone" name="timezone" class="interval tz-select" aria-label="System time zone">
               <option v-for="z in zones" :key="z" :value="z">{{ z }}</option>

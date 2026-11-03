@@ -1,11 +1,11 @@
 #!/bin/sh
 # shellcheck disable=SC2154 # Variablen aus der Versionsdatei des Systems
-# vulnwatch collector for OpenWrt: release and installed packages (opkg, or apk from 24.10 on).
+# LabLantern collector for OpenWrt: release and installed packages (opkg, or apk from 24.10 on).
 # Needs curl (opkg install curl, or apk add curl). Setup: the command from "+ Add host → Other device".
 # Cron (crontab -e, then /etc/init.d/cron restart):
-#   23 * * * * /usr/bin/vulnwatch-openwrt.sh
+#   23 * * * * /usr/bin/lablantern-openwrt.sh
 set -eu
-D=${VW_DIR:-/etc/vulnwatch-collector}
+D=${LL_DIR:-/etc/lablantern-collector}
 # shellcheck source=/dev/null # setzt DISTRIB_RELEASE
 . /etc/openwrt_release
 

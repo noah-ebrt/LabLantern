@@ -50,7 +50,7 @@ def recommend(f, sys) -> dict:
     inv = _inventory(sys)
     no_fix = not f.fixed_version
     urgent = "Actively exploited (CISA KEV): do this first. " if f.kev else ""
-    if f.source in ("truenas", "homeassistant", "proxmox", "synology", "opnsense") and f.cve_id != "VW-EOL":
+    if f.source in ("truenas", "homeassistant", "proxmox", "synology", "opnsense") and f.cve_id != "LL-EOL":
         kind = f.target.split(":", 1)[0]
         return {"text": APPLIANCE_TEXT.get((f.source, kind), "Check the device."), "command": ""}
     if f.source == "npm":
@@ -58,7 +58,7 @@ def recommend(f, sys) -> dict:
                         "the domain still points to NPM (HTTP challenge) or that the DNS credentials are valid.", "command": ""}
     if f.source == "ai":
         return {"text": "Follow the steps of the early warning: Early warnings → this report.", "command": ""}
-    if f.source == "eol" or f.cve_id == "VW-EOL":
+    if f.source == "eol" or f.cve_id == "LL-EOL":
         return {"text": f"{f.component} {f.installed_version} no longer gets security fixes. Plan the move to a supported "
                         "release line" + (f" ({f.fixed_version})" if f.fixed_version else "") + ".", "command": ""}
 
@@ -70,9 +70,9 @@ def recommend(f, sys) -> dict:
             return {"text": urgent + f"The image {ref} is built locally. Rebuild it on a current base image and redeploy.",
                     "command": "docker compose build --pull" + (f" {service}" if service else "")}
         pull = f"docker compose pull {service} && docker compose up -d {service}" if service else f"docker pull {ref}"
-        if f.cve_id == "VW-IMAGE-OUTDATED":   # gleicher Tag, neueres Image in der Registry
+        if f.cve_id == "LL-IMAGE-OUTDATED":   # gleicher Tag, neueres Image in der Registry
             return {"text": "The registry has a newer image for this tag. Pull it and recreate the container.", "command": pull}
-        if f.cve_id == "VW-IMAGE-NEWER":
+        if f.cve_id == "LL-IMAGE-NEWER":
             return {"text": f"Version {f.fixed_version} is available. Read its release notes, change the image tag, then "
                             "recreate the container.", "command": ""}
         if no_fix:

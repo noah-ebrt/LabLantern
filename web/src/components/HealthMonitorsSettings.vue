@@ -49,14 +49,14 @@ const fritzStatus = computed(() => (props.options.fritz ? { tone: 'ok', text: 'C
 </script>
 
 <template>
-  <SettingsCard icon="systems" title="Monitored hosts" subtitle="What vulnwatch checks, how often, and when a host counts as down"
+  <SettingsCard icon="systems" title="Monitored hosts" subtitle="What LabLantern checks, how often, and when a host counts as down"
                 :status="{ tone: 'neutral', text: `${monitors.length} hosts` }">
     <template #actions>
       <button type="button" class="btn-sm" @click="editing = null"><Icon name="plus" :size="14" />Add host</button>
     </template>
     <template #intro>
       Everything under Systems is watched automatically. Agents: their live connection plus a ping. Devices without an agent
-      (TrueNAS, Home Assistant and other connectors): a ping plus the address vulnwatch reads them from. If an agent goes silent
+      (TrueNAS, Home Assistant and other connectors): a ping plus the address LabLantern reads them from. If an agent goes silent
       while the ping still answers, the host stays up with a warning. Add other devices (router, printers, phones) with their own checks.
     </template>
 
@@ -104,7 +104,7 @@ const fritzStatus = computed(() => (props.options.fritz ? { tone: 'ok', text: 'C
     </p>
     <p class="text">
       <RouterLink to="/einstellungen?tab=exposure#set-fritz">{{ options.fritz ? 'Change the connector' : 'Set up the connector' }} under Settings → Exposure</RouterLink>.
-      Use a separate FRITZ!Box user with the right “FRITZ!Box settings”; vulnwatch only reads.
+      Use a separate FRITZ!Box user with the right “FRITZ!Box settings”; LabLantern only reads.
     </p>
   </SettingsCard>
 

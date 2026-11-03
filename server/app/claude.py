@@ -1,4 +1,4 @@
-"""Alle Aufrufe an Claude (offizielles anthropic-SDK). Nur hier spricht vulnwatch mit Anthropic.
+"""Alle Aufrufe an Claude (offizielles anthropic-SDK). Nur hier spricht LabLantern mit Anthropic.
 
 - Schlüssel prüfen und Modelle auflisten (Einstellungen)
 - eine Meldung lesen: Fakten über ein festes Werkzeug-Schema (Frühwarnung, Feeds)
@@ -13,7 +13,7 @@ import anthropic
 
 from .aibase import AiError, quick, short_error
 
-log = logging.getLogger("vulnwatch.claude")
+log = logging.getLogger("lablantern.claude")
 
 # Modelle, die den serverseitigen Refusal-Fallback ("default") annehmen; für sie wird er immer mitgeschickt
 FALLBACK_MODELS = ("claude-fable-5-1", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5")

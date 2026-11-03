@@ -1,4 +1,4 @@
-// vw-release verwaltet den Signierschlüssel dieser Installation und veröffentlicht signierte Agent-Releases. Es
+// ll-release verwaltet den Signierschlüssel dieser Installation und veröffentlicht signierte Agent-Releases. Es
 // läuft in den Containern agent-key, agent-build und agent-sign (deploy/compose.yaml) und nutzt nur die
 // Standardbibliothek: Wo der private Schlüssel liegt, läuft kein fremder Code.
 package main
@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"vulnwatch/agent/internal/release"
+	"lablantern/agent/internal/release"
 )
 
 // Latest beschreibt das zuletzt veröffentlichte Release (<releases>/latest.json).
@@ -34,7 +34,7 @@ type Plan struct {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: vw-release init-key <key-file> <pub-file> | plan <src-dir> <releases-dir> | "+
+		fmt.Fprintln(os.Stderr, "usage: ll-release init-key <key-file> <pub-file> | plan <src-dir> <releases-dir> | "+
 			"publish <stage-dir> <releases-dir> <key-file> | verify <dir> <pub-file>")
 		os.Exit(2)
 	}
@@ -113,7 +113,7 @@ func publish(stage, releases, keyFile string) {
 	must(os.RemoveAll(tmp))
 	must(os.MkdirAll(tmp, 0o755))
 	dist := filepath.Join(stage, "dist")
-	names, _ := filepath.Glob(filepath.Join(dist, "vulnwatch-agent-linux-*"))
+	names, _ := filepath.Glob(filepath.Join(dist, "lablantern-agent-linux-*"))
 	for _, n := range names {
 		b, err := os.ReadFile(n)
 		must(err)

@@ -1,6 +1,6 @@
 # Health monitoring
 
-vulnwatch checks whether your hosts and services are up and keeps their uptime and response times. Other devices,
+LabLantern checks whether your hosts and services are up and keeps their uptime and response times. Other devices,
 such as an ESP32 status LED strip, Home Assistant or a script, read the result through a read-only API.
 
 Open **Health** in the sidebar. The page has two tabs:
@@ -14,11 +14,11 @@ Open **Health** in the sidebar. The page has two tabs:
 
 Every approved agent gets a monitor on its own, with two checks:
 
-- **Agent:** the agent's live connection to vulnwatch. The agent daemon holds a long-poll open, so vulnwatch
+- **Agent:** the agent's live connection to LabLantern. The agent daemon holds a long-poll open, so LabLantern
   notices within about a minute when it stops.
 - **Ping** to the address the agent enrolled with.
 
-A host's state combines what vulnwatch sees from outside with what the agent reports:
+A host's state combines what LabLantern sees from outside with what the agent reports:
 
 | Checks from outside | Agent | Host |
 | --- | --- | --- |
@@ -28,7 +28,7 @@ A host's state combines what vulnwatch sees from outside with what the agent rep
 | failing | ok | degraded: likely a network or firewall problem |
 
 Devices without an agent that you connected under **Systems** (TrueNAS, Home Assistant and every
-other connector type with a URL) are watched the same way: a ping plus an HTTP(S) check on the address vulnwatch
+other connector type with a URL) are watched the same way: a ping plus an HTTP(S) check on the address LabLantern
 reads them from. For a pinned, self-signed certificate the HTTP check doesn't verify the certificate; the connector
 itself already checks its fingerprint.
 
@@ -55,7 +55,7 @@ Pi-hole, AdGuard Home, DNS, certificate). The ports are the vendors' defaults; c
 | DNS server | A or AAAA query to the server | AdGuard Home, Pi-hole |
 | FRITZ!Box: device active | asks the FRITZ!Box whether it sees the device (by MAC or IP) | phones and laptops that ignore ping in Wi-Fi power save |
 | FRITZ!Box: internet | connection status of the WAN line (DSL, cable, fibre) | is the internet actually up |
-| Heartbeat (push) | the device calls a URL regularly; silence means down | laptops, cron jobs, devices vulnwatch can't reach |
+| Heartbeat (push) | the device calls a URL regularly; silence means down | laptops, cron jobs, devices LabLantern can't reach |
 
 Every check has its own target (optional, otherwise the host), interval, retry interval after a failure, timeout and
 two thresholds:
@@ -76,7 +76,7 @@ outage" alert instead of one per host.
 ### Router checks (FRITZ!Box)
 
 The two FRITZ!Box checks become available once the FRITZ!Box connector is set up under
-**Settings → Exposure**. Use a separate FRITZ!Box user with the right "FRITZ!Box settings"; vulnwatch only reads.
+**Settings → Exposure**. Use a separate FRITZ!Box user with the right "FRITZ!Box settings"; LabLantern only reads.
 If the FRITZ!Box itself is unreachable, these checks show **unknown**, not down.
 
 Phones change their Wi-Fi MAC address per network by default. Turn off the private address for your home Wi-Fi,
@@ -87,8 +87,8 @@ or check by a fixed IP instead.
 After saving, the generator shows the heartbeat address once (a new one can be made from the list):
 
 ```sh
-curl -fsS https://vulnwatch.lan:8443/api/health/beat/<token>             # "I'm alive"
-curl -fsS "https://vulnwatch.lan:8443/api/health/beat/<token>?state=down" # shutting down: red right away
+curl -fsS https://lablantern.lan:8443/api/health/beat/<token>             # "I'm alive"
+curl -fsS "https://lablantern.lan:8443/api/health/beat/<token>?state=down" # shutting down: red right away
 ```
 
 The device must call it at least once per interval (plus the grace time). A systemd unit with `ExecStop=` or a
@@ -100,14 +100,14 @@ Create a token per device under **Health → Settings → API for other devices*
 stored. A token can read states, nothing else. Revoke it there at any time.
 
 ```sh
-curl -s --cacert vulnwatch-ca.crt -H "Authorization: Bearer vwh_…" https://vulnwatch.lan:8443/api/health/states
+curl -s --cacert lablantern-ca.crt -H "Authorization: Bearer llh_…" https://lablantern.lan:8443/api/health/states
 ```
 
 | Endpoint | Returns |
 | --- | --- |
 | `GET /api/health/states` | compact, for microcontrollers (example below); `?hosts=1` adds name, critical flag and kind (`service` or `presence`) per host |
 | `GET /api/health/states?since=<rev>&wait=55` | long-poll: answers as soon as `rev` differs from `since`, otherwise `304` after `wait` seconds (at most 55) |
-| `GET /api/health/status` | every host with state, `since`, warning, latency and each check with its state, latency, error and the age of its result; plus a summary, `critical_down` and `rev`; takes `?since=&wait=` like `/states` (the rev is also in the `X-Vulnwatch-Rev` header) |
+| `GET /api/health/status` | every host with state, `since`, warning, latency and each check with its state, latency, error and the age of its result; plus a summary, `critical_down` and `rev`; takes `?since=&wait=` like `/states` (the rev is also in the `X-Lablantern-Rev` header) |
 | `GET /api/health/status/<key>` | one host |
 
 ```json
@@ -126,7 +126,7 @@ Compare it for equality only: after a restart it starts from a new value. `v` is
   `?since=<rev>` and you get an empty `304` while nothing changed.
 - **Wait for the next change (long-poll).** Best for a status LED: only outgoing connections, no open port, no shared
   secret, and changes arrive at once. Ask with `?since=<last rev>&wait=55` in a loop, with a read timeout of about
-  70 s. No answer within that time means vulnwatch or the network is gone.
+  70 s. No answer within that time means LabLantern or the network is gone.
 - **Get told (webhooks, below).** Best for servers such as Home Assistant or n8n.
 
 Each token may ask about once a second on average (60 requests per minute, short bursts allowed); more gets `429`
@@ -138,15 +138,15 @@ can be changed under "API key" in the generator. Devices use it, so changing it 
 
 **Never green on stale data:** each check carries the age of its result. If a result is older than three intervals,
 or the check engine has not run for a minute, the API reports `unknown` and `"engine_ok": false`. A status LED
-should show "no data" in that case, the same as when it can't reach vulnwatch at all.
+should show "no data" in that case, the same as when it can't reach LabLantern at all.
 
-The certificate comes from vulnwatch's own CA: download it from `https://<vulnwatch>/ca.crt` and give it to the
+The certificate comes from lablantern's own CA: download it from `https://<LabLantern>/ca.crt` and give it to the
 device (`WiFiClientSecure::setCACert` on an ESP32).
 
 ### Webhooks
 
 Instead of asking, a server can be told. Add a URL under **Health → Settings → API for other devices → Webhooks**.
-vulnwatch sends a `POST` with the same JSON as `/api/health/states?hosts=1`, plus `event` and `changes`:
+LabLantern sends a `POST` with the same JSON as `/api/health/states?hosts=1`, plus `event` and `changes`:
 
 ```json
 {"event": "state_changed", "v": 1, "rev": 1793628191043, "server_time": "2026-11-02T14:03:12Z", "engine_ok": true, …,
@@ -158,15 +158,15 @@ vulnwatch sends a `POST` with the same JSON as `/api/health/states?hosts=1`, plu
 | --- | --- |
 | `state_changed` | a host changed state, including pause and resume |
 | `engine_down` | the checks stopped running; every state is now `unknown` |
-| `engine_up` | the checks run again (also after every start of vulnwatch) |
-| `heartbeat` | every N minutes if set, so a receiver notices when vulnwatch itself is gone |
+| `engine_up` | the checks run again (also after every start of LabLantern) |
+| `heartbeat` | every N minutes if set, so a receiver notices when LabLantern itself is gone |
 | `test` | the **Test** button |
 
 Per webhook you can choose the events (none ticked means all) and limit it to some hosts by key; then `states` and
 `changes` only contain those hosts. A host added or removed shows up in `changes` with `from` or `to` set to `null`.
 
-Headers: `X-Vulnwatch-Event`, `X-Vulnwatch-Delivery` (a UUID, the same on retries, so receivers can drop
-duplicates), `X-Vulnwatch-Timestamp` (Unix seconds) and `X-Vulnwatch-Signature: sha256=<hex>`, an HMAC-SHA256 over
+Headers: `X-Lablantern-Event`, `X-Lablantern-Delivery` (a UUID, the same on retries, so receivers can drop
+duplicates), `X-Lablantern-Timestamp` (Unix seconds) and `X-Lablantern-Signature: sha256=<hex>`, an HMAC-SHA256 over
 `<timestamp>.<raw body>` with the webhook's signing key, shown once when you add it. Check the signature and reject
 timestamps older than five minutes before acting on a call. Plain `http://` works for devices in your network,
 `https://` targets need a certificate the master trusts.
@@ -174,7 +174,7 @@ timestamps older than five minutes before acting on a call. Plain `http://` work
 A failed delivery is retried after 5 s, 30 s and 2 minutes; the webhook shows the last event and error. Redirects
 aren't followed. Calls can arrive out of order: ignore one whose `rev` is lower than the last one you handled.
 
-Prometheus users get the same states as `vulnwatch_health_state{monitor="nas"}` (1 up, 0.5 degraded, 0 down,
+Prometheus users get the same states as `lablantern_health_state{monitor="nas"}` (1 up, 0.5 degraded, 0 down,
 -1 unknown or paused).
 
 ## How it runs

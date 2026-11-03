@@ -1,4 +1,4 @@
-"""Pairing neuer Agenten: `vulnwatch-agent setup` findet den Master per mDNS und fragt hier an.
+"""Pairing neuer Agenten: `lablantern-agent setup` findet den Master per mDNS und fragt hier an.
 
 Beide Seiten berechnen denselben Code aus dem Fingerabdruck des Wurzelzertifikats, einem Geheimnis des Agenten und
 einer Zufallszahl des Masters. Stimmt der Code in der Oberfläche mit dem auf dem Host überein, spricht der Agent mit

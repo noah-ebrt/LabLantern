@@ -1,4 +1,4 @@
-// Package discover sucht den vulnwatch-Master per mDNS (_vulnwatch._tcp) im lokalen Netz.
+// Package discover sucht den lablantern-Master per mDNS (_lablantern._tcp) im lokalen Netz.
 // Vertrauen entsteht dadurch nicht: Das klärt erst der Pairing-Code.
 package discover
 
@@ -15,7 +15,7 @@ import (
 	"golang.org/x/net/ipv4"
 )
 
-const service = "_vulnwatch._tcp.local."
+const service = "_lablantern._tcp.local."
 
 var mdnsAddr = &net.UDPAddr{IP: net.IPv4(224, 0, 0, 251), Port: 5353}
 

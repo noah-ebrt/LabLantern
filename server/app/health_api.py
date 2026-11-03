@@ -198,9 +198,9 @@ def build_health_router(ctx: Context, guards: Guards, engine: HealthEngine) -> A
     @router.get("/status")
     async def status(since: str | None = None, wait: float = Query(0, ge=0), _who=Depends(consumer)):
         """Alles mit Prüfungen, Latenz und Alter. since/wait wie bei /states: 304 heißt kein Zustand hat sich
-        geändert (Latenzen und Alter ändern sich laufend und wecken nicht). rev steht auch im Header X-Vulnwatch-Rev."""
+        geändert (Latenzen und Alter ändern sich laufend und wecken nicht). rev steht auch im Header X-Lablantern-Rev."""
         snap, same = await changed(since, wait)
-        head = {"X-Vulnwatch-Rev": str(snap.rev), "Cache-Control": "no-cache"}
+        head = {"X-Lablantern-Rev": str(snap.rev), "Cache-Control": "no-cache"}
         if same:
             return Response(status_code=304, headers=head)
 
@@ -229,7 +229,7 @@ def build_health_router(ctx: Context, guards: Guards, engine: HealthEngine) -> A
         warten (Long-Poll). If-None-Match mit dem ETag wirkt wie since. hosts=1: Name, kritisch und Art je Host."""
         known = since if since is not None else (request.headers.get("if-none-match") or "").strip('W/"') or None
         snap, same = await changed(known, wait)
-        head = {"ETag": f'"{snap.rev}"', "X-Vulnwatch-Rev": str(snap.rev), "Cache-Control": "no-cache"}
+        head = {"ETag": f'"{snap.rev}"', "X-Lablantern-Rev": str(snap.rev), "Cache-Control": "no-cache"}
         if same:
             return Response(status_code=304, headers=head)
         return JSONResponse(feed.document(snap, hosts=hosts), headers=head)
@@ -564,7 +564,7 @@ def build_health_router(ctx: Context, guards: Guards, engine: HealthEngine) -> A
 
     @router.post("/tokens")
     def new_token(body: TokenIn, found=Depends(guards.require_admin)):
-        token = "vwh_" + secrets.token_urlsafe(32)
+        token = "llh_" + secrets.token_urlsafe(32)
         with ctx.session_factory() as s:
             row = HealthToken(name=body.name.strip(), token_hash=sha256_hex(token), created_at=ctx.clock())
             s.add(row)
@@ -608,7 +608,7 @@ def build_health_router(ctx: Context, guards: Guards, engine: HealthEngine) -> A
             target = check_url(body.url)
         except ValueError as e:
             raise HTTPException(422, str(e)) from None
-        key = "vwhs_" + secrets.token_urlsafe(32)
+        key = "llhs_" + secrets.token_urlsafe(32)
         with ctx.session_factory() as s:
             row = HealthWebhook(target=target, created_at=ctx.clock())
             _filters(row, body)

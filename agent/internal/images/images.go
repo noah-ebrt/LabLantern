@@ -24,7 +24,7 @@ import (
 	"github.com/anchore/syft/syft/format/cyclonedxjson"
 	_ "modernc.org/sqlite" // Treiber für neuere RPM-Datenbanken (wie im Syft-CLI)
 
-	"vulnwatch/agent/internal/collector"
+	"lablantern/agent/internal/collector"
 )
 
 // Host: wo die Images liegen und wie sie gelesen werden; austauschbar für Tests.
@@ -52,7 +52,7 @@ func (h Host) SBOM(imageID string) ([]byte, error) {
 		if s.Runtime == "docker" {
 			return h.Syft(imageID, "docker")
 		}
-		f, err := os.CreateTemp("", "vulnwatch-image-*.tar")
+		f, err := os.CreateTemp("", "lablantern-image-*.tar")
 		if err != nil {
 			return nil, fmt.Errorf("image not readable: %w", err)
 		}

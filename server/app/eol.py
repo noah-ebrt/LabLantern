@@ -10,7 +10,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-log = logging.getLogger("vulnwatch.eol")
+log = logging.getLogger("lablantern.eol")
 
 URL = "https://endoflife.date/api/v1/products/full"
 REFRESH_HOURS = 24
@@ -25,7 +25,7 @@ VERSION = re.compile(r"^v?(\d+(?:\.\d+)*)")
 
 
 def _fetch(url: str = URL) -> bytes:
-    req = urllib.request.Request(url, headers={"User-Agent": "vulnwatch", "Accept": "application/json"})
+    req = urllib.request.Request(url, headers={"User-Agent": "lablantern", "Accept": "application/json"})
     with urllib.request.urlopen(req, timeout=60) as r:  # noqa: S310 (feste URL)
         return r.read(MAX_BYTES)
 

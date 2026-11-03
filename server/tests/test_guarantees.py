@@ -261,7 +261,7 @@ def test_watchdog_config_api_validates_per_provider(admin):
     bad = client.put("/api/settings/watchdog", headers=h, json={"provider": "uptimekuma", "run_url": "https://hc.example.org/ping/abcdef12"})
     assert bad.status_code == 422 and "/api/push/" in bad.json()["detail"]
     ok = client.put("/api/settings/watchdog", headers=h, json={"provider": "custom", "heartbeat_minutes": 15,
-                                                                "heartbeat_url": "http://monitor.lan:8080/beat/vulnwatch"})
+                                                                "heartbeat_url": "http://monitor.lan:8080/beat/lablantern"})
     assert ok.status_code == 200
     data = client.get("/api/settings/watchdog").json()
     assert data["config"] == {"provider": "custom", "heartbeat_minutes": 15} and data["heartbeat"]["set"] is True

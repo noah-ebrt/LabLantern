@@ -19,7 +19,7 @@ LOGIN_ERRORS = {400: "DSM rejected the account or password", 401: "the DSM accou
                 403: "the DSM account uses 2-factor authentication: use an account without it",
                 404: "the DSM account uses 2-factor authentication: use an account without it",
                 406: "DSM enforces 2-factor authentication for this account: exempt it or use another",
-                407: "DSM blocked vulnwatch's IP address (Control Panel → Security → Protection → Allow/Block List)",
+                407: "DSM blocked lablantern's IP address (Control Panel → Security → Protection → Allow/Block List)",
                 408: "the DSM password has expired", 409: "the DSM password has expired",
                 410: "DSM wants a new password for this account"}
 NOT_ADMIN = "not readable: the DSM account is not an administrator"
@@ -39,7 +39,7 @@ class DsmClient:
         self.fingerprint = fingerprint
         self.sid = ""
         login = {"api": "SYNO.API.Auth", "version": "6", "method": "login", "account": account, "passwd": password,
-                 "session": "vulnwatch", "format": "sid"}
+                 "session": "lablantern", "format": "sid"}
         self.sid = str(self._post(login, login=True).get("sid") or "")
         if not self.sid:
             raise ApplianceError("DSM sent no session")
@@ -51,7 +51,7 @@ class DsmClient:
             conn.connect()
             _check_pin(conn.sock, self.fingerprint)
             conn.request("POST", "/webapi/entry.cgi", body=urlencode(form),
-                         headers={"Content-Type": "application/x-www-form-urlencoded", "User-Agent": "vulnwatch"})
+                         headers={"Content-Type": "application/x-www-form-urlencoded", "User-Agent": "lablantern"})
             r = conn.getresponse()
             status, body = r.status, r.read(MAX_MESSAGE)
         except (OSError, ssl.SSLError, http.client.HTTPException) as e:
@@ -94,7 +94,7 @@ class DsmClient:
 
     def close(self) -> None:
         try:
-            self._post({"api": "SYNO.API.Auth", "version": "6", "method": "logout", "session": "vulnwatch",
+            self._post({"api": "SYNO.API.Auth", "version": "6", "method": "logout", "session": "lablantern",
                         "_sid": self.sid})
         except ApplianceError:
             pass
@@ -208,24 +208,24 @@ def synology_findings(data: dict) -> list[dict]:
     out = []
     u = data.get("update")
     if u and u["available"] and u["version"]:
-        out.append({"target": "host", "cve_id": "VW-UPDATE", "component": "Synology DSM",
+        out.append({"target": "host", "cve_id": "LL-UPDATE", "component": "Synology DSM",
                     "severity": classify_update(data["version"], u["version"]),
                     "installed_version": data["version"], "fixed_version": u["version"],
                     "title": f"DSM {u['version']} is available (installed {data['version'] or '?'})"})
     for sp in data.get("spaces") or []:
         if sev := BAD_STATES.get(sp["status"]):
-            out.append({"target": f"pool:{sp['name']}", "cve_id": "VW-POOL", "component": f"{sp['kind']} {sp['name']}",
+            out.append({"target": f"pool:{sp['name']}", "cve_id": "LL-POOL", "component": f"{sp['kind']} {sp['name']}",
                         "severity": sev, "installed_version": sp["status"], "fixed_version": "check Storage Manager",
                         "title": f"{sp['kind']} {sp['name']} is {sp['status']}"})
         if sp["kind"] == "Volume" and sp["percent"] is not None and (sev := classify_disk(sp["percent"])):
-            out.append({"target": f"disk:{sp['name']}", "cve_id": "VW-DISK", "component": f"Volume {sp['name']}",
+            out.append({"target": f"disk:{sp['name']}", "cve_id": "LL-DISK", "component": f"Volume {sp['name']}",
                         "severity": sev, "installed_version": f"{sp['percent']:.0f} %", "fixed_version": "free space",
                         "title": f"Volume {sp['name']} is {sp['percent']:.0f} % full"})
     for d in data.get("disks") or []:
         worst = max((BAD_STATES.get(d["status"]), BAD_STATES.get(d["smart"])), key=lambda s: {"hoch": 2, "mittel": 1}.get(s, 0))
         if worst:
             state = d["status"] if BAD_STATES.get(d["status"]) == worst else f"S.M.A.R.T. {d['smart']}"
-            out.append({"target": f"drive:{d['name']}", "cve_id": "VW-DRIVE", "component": f"{d['name']} {d['model']}".strip(),
+            out.append({"target": f"drive:{d['name']}", "cve_id": "LL-DRIVE", "component": f"{d['name']} {d['model']}".strip(),
                         "severity": worst, "installed_version": state, "fixed_version": "replace the drive",
                         "title": f"{d['name']} ({d['model'] or 'drive'}) reports {state}"})
     return out

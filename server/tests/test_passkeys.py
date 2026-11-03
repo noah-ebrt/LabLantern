@@ -18,11 +18,11 @@ def test_first_passkey_becomes_the_unsigned_initial_trust_list(admin):
     key = SoftAuthenticator()
     register(client, h, key)
     info = client.get("/api/passkeys").json()
-    assert info["rp_id"] == "vulnwatch.lan" and info["keys"][0]["name"] == "YubiKey"
+    assert info["rp_id"] == "lablantern.lan" and info["keys"][0]["name"] == "YubiKey"
     assert info["trust"] == {"rev": 1, "signed": False, "outdated": False}
     trust = env.new_client().post("/api/agent/commands/next", headers=bearer).json()["passkeys"]
     env_ = json.loads(trust["envelope"])
-    assert trust["assertion"] == "" and env_["rp_id"] == "vulnwatch.lan" and [k["id"] for k in env_["keys"]] == [key.id]
+    assert trust["assertion"] == "" and env_["rp_id"] == "lablantern.lan" and [k["id"] for k in env_["keys"]] == [key.id]
 
 
 def test_login_with_password_and_passkey(env):

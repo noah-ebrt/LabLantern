@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"vulnwatch/agent/internal/collector"
+	"lablantern/agent/internal/collector"
 )
 
 const (

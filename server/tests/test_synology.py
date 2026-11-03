@@ -35,7 +35,7 @@ class FakeDsm(http.server.BaseHTTPRequestHandler):
         api, method = form.get("api"), form.get("method")
         FakeDsm.seen.append(f"{api}.{method}")
         if api == "SYNO.API.Auth" and method == "login":
-            ok = form.get("account") == "vulnwatch" and form.get("passwd") == PASSWORD
+            ok = form.get("account") == "lablantern" and form.get("passwd") == PASSWORD
             return self._send({"success": True, "data": {"sid": "s1"}} if ok else {"success": False, "error": {"code": 400}})
         if form.get("_sid") != "s1":
             return self._send({"success": False, "error": {"code": 119}})
@@ -80,7 +80,7 @@ def dsm(tmp_path):
 def connect(admin, url, password=PASSWORD):
     _, client, h = admin
     return client.post("/api/settings/appliances", headers=h, json={"kind": "synology", "name": "nas", "url": url,
-                                                                      "account": "vulnwatch", "token": password})
+                                                                      "account": "lablantern", "token": password})
 
 
 def findings(env, sid):
@@ -96,9 +96,9 @@ def test_admin_reads_update_storage_and_packages(admin, dsm):
     f = findings(env, sid)
     up = f["host"]
     assert (up.cve_id, up.severity, up.installed_version, up.fixed_version, up.source) == \
-        ("VW-UPDATE", "hoch", "7.2.2-72806 Update 3", "7.2.2-72806 Update 4", "synology")
+        ("LL-UPDATE", "hoch", "7.2.2-72806 Update 3", "7.2.2-72806 Update 4", "synology")
     assert f["pool:reuse_1"].severity == "hoch"
-    assert f["disk:/volume1"].cve_id == "VW-DISK" and f["disk:/volume1"].installed_version == "96 %"
+    assert f["disk:/volume1"].cve_id == "LL-DISK" and f["disk:/volume1"].installed_version == "96 %"
     assert f["drive:Drive 2"].severity == "hoch" and "drive:Drive 1" not in f
     assert FakeDsm.seen[-1] == "SYNO.API.Auth.logout"
     with env.app.state.ctx.session_factory() as s:

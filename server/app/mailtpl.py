@@ -52,7 +52,7 @@ def code(text: str) -> str:
 
 def section(title: str, inner: str, aside: str = "") -> str:
     aside = f'<span style="float:right;color:{MUTED};font-weight:400">{aside}</span>' if aside else ""
-    return (f'<tr><td class="vw-pad" style="padding:22px 28px;border-top:1px solid {LINE}">'
+    return (f'<tr><td class="ll-pad" style="padding:22px 28px;border-top:1px solid {LINE}">'
             f'<div style="font-size:14px;font-weight:600;color:{TEXT};margin:0 0 12px">{aside}{e(title)}</div>'
             f'{inner}</td></tr>')
 
@@ -63,22 +63,22 @@ def page(subject: str, headline: str, status: str, meta: str, lede: str, section
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark"><meta name="supported-color-schemes" content="dark"><title>{e(subject)}</title>
-<style>@media (max-width:540px){{.vw-pad{{padding-left:18px!important;padding-right:18px!important}}.vw-sev td.vw-gap{{display:none!important}}.vw-sev td.vw-cell{{display:inline-block!important;width:49%!important;box-sizing:border-box;margin-bottom:6px}}}}</style></head>
+<style>@media (max-width:540px){{.ll-pad{{padding-left:18px!important;padding-right:18px!important}}.ll-sev td.ll-gap{{display:none!important}}.ll-sev td.ll-cell{{display:inline-block!important;width:49%!important;box-sizing:border-box;margin-bottom:6px}}}}</style></head>
 <body style="margin:0;padding:0;background:{GROUND};color:{TEXT};font-family:{FONT};-webkit-font-smoothing:antialiased">
 <div style="display:none;max-height:0;overflow:hidden">{e(headline)}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:{GROUND}">
 <tr><td align="center" style="padding:28px 12px 40px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:640px">
 <tr><td style="padding:0 4px 14px;font-size:13px;color:{MUTED}">
-<span style="float:right">{meta}</span><span style="color:{TEXT};font-weight:600;letter-spacing:-0.01em">vulnwatch</span></td></tr>
+<span style="float:right">{meta}</span><span style="color:{TEXT};font-weight:600;letter-spacing:-0.01em">LabLantern</span></td></tr>
 <tr><td style="background:{SURFACE};border:1px solid {LINE};border-radius:14px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-<tr><td class="vw-pad" style="padding:26px 28px 24px">
+<tr><td class="ll-pad" style="padding:26px 28px 24px">
 <h1 style="margin:0 0 12px;font-size:22px;line-height:1.25;font-weight:600;letter-spacing:-0.02em;color:{TEXT}">{e(headline)}</h1>
 {status}{lede}</td></tr>
 {''.join(sections)}
 </table></td></tr>
-<tr><td style="padding:16px 4px 0;font-size:12px;line-height:1.5;color:{MUTED}">Sent by vulnwatch. The web UI has the full list and history.</td></tr>
+<tr><td style="padding:16px 4px 0;font-size:12px;line-height:1.5;color:{MUTED}">Sent by LabLantern. The web UI has the full list and history.</td></tr>
 </table></td></tr></table></body></html>"""
 
 
@@ -109,7 +109,7 @@ def _tone(subject: str) -> tuple[str, str, str]:
     """Stufe und Überschrift aus dem Betreff, damit beide nie auseinanderlaufen."""
     for tag, label, color in TONES:
         if subject.startswith(tag):
-            return label, color, subject[len(tag):].strip().removeprefix("vulnwatch:").strip()
+            return label, color, subject[len(tag):].strip().removeprefix("LabLantern:").strip()
     return "Report", INFO, subject
 
 
@@ -120,12 +120,12 @@ def _severity_row(summary: dict, new: dict) -> str:
         color = SEV_COLOR[lvl] if n and lvl != "info" else (TEXT if n else MUTED)
         added = (f'<div style="font-size:12px;color:{TEXT_2};margin-top:2px">+{new[lvl]:,} new</div>'
                  if new.get(lvl) else f'<div style="font-size:12px;margin-top:2px">&nbsp;</div>')
-        cells.append(f'<td class="vw-cell" width="25%" style="padding:12px 14px;background:{SURFACE_2};border-radius:9px;vertical-align:top">'
+        cells.append(f'<td class="ll-cell" width="25%" style="padding:12px 14px;background:{SURFACE_2};border-radius:9px;vertical-align:top">'
                      f'<div style="font-size:12px;color:{MUTED}">{SEV_LABEL[lvl]}</div>'
                      f'<div style="font-size:22px;font-weight:600;letter-spacing:-0.02em;color:{color};'
                      f'font-variant-numeric:tabular-nums;margin-top:2px">{n:,}</div>{added}</td>')
-    gap = '<td class="vw-gap" width="8" style="font-size:0">&nbsp;</td>'
-    return (f'<table class="vw-sev" role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"><tr>'
+    gap = '<td class="ll-gap" width="8" style="font-size:0">&nbsp;</td>'
+    return (f'<table class="ll-sev" role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"><tr>'
             f'{gap.join(cells)}</tr></table>')
 
 
@@ -274,7 +274,7 @@ def _advisory(w: dict) -> str:
         mitig = f'<div style="margin-top:14px;font-size:12px;color:{MUTED}">Mitigation from the advisory</div>{mitig}'
     source = (f'<div style="margin-top:14px;font-size:12px;color:{MUTED}">{link(w["link"], "Read the advisory", TEXT_2)}'
               f'{" · " + e(host) if host else ""}</div>') if w["link"] else ""
-    return (f'<tr><td class="vw-pad" style="padding:22px 28px;border-top:1px solid {LINE};font-size:13px;line-height:1.55;color:{TEXT_2}">'
+    return (f'<tr><td class="ll-pad" style="padding:22px 28px;border-top:1px solid {LINE};font-size:13px;line-height:1.55;color:{TEXT_2}">'
             f'<div style="line-height:26px">{" ".join(tags)}</div>'
             f'<div style="margin:8px 0 10px;font-size:16px;line-height:1.35;font-weight:600;letter-spacing:-0.01em">'
             f'{link(w["link"], w["title"])}</div>'
@@ -298,7 +298,7 @@ def early_warning_html(subject: str, items: list[dict], systems: list[str], more
         lede.append(f"{review} {'needs' if review == 1 else 'need'} a manual check")
     sections = [_advisory(w) for w in items]
     if more:
-        sections.append(f'<tr><td class="vw-pad" style="padding:16px 28px;border-top:1px solid {LINE};font-size:13px;color:{MUTED}">'
+        sections.append(f'<tr><td class="ll-pad" style="padding:16px 28px;border-top:1px solid {LINE};font-size:13px;color:{MUTED}">'
                         f'{more} more under Early warnings in the web UI</td></tr>')
     meta = f"{n} {'advisory' if n == 1 else 'advisories'}"
     return page(subject, headline, status, meta, " · ".join(lede), sections)

@@ -43,7 +43,7 @@ def test_pairing_without_passkey_then_token_exactly_once(admin):
     env, client, h = admin
     pid = pair(env)
     listed = client.get("/api/pairings").json()
-    assert listed[0]["code"] == pairing_code(os.environ["VW_TEST_CA_FP"], SECRET, NONCES[pid])
+    assert listed[0]["code"] == pairing_code(os.environ["LL_TEST_CA_FP"], SECRET, NONCES[pid])
     assert listed[0]["replaces_existing"] is False
     assert status(env, pid).json() == {"status": "pending"}
     assert status(env, pid, secret="cd" * 32).status_code == 404   # ohne Geheimnis nichts zu holen

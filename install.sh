@@ -1,14 +1,14 @@
 #!/bin/sh
-# Installiert den vulnwatch-Master mit einem Befehl:
-#   curl -fsSL https://raw.githubusercontent.com/noah-ebrt/vulnwatch/main/install.sh | sh
+# Installiert den lablantern-Master mit einem Befehl:
+#   curl -fsSL https://raw.githubusercontent.com/noah-ebrt/LabLantern/main/install.sh | sh
 # oder aus einem Klon: ./install.sh
-# - außerhalb eines Klons wird nach ./vulnwatch geklont (anderes Ziel: VULNWATCH_DIR)
+# - außerhalb eines Klons wird nach ./lablantern geklont (anderes Ziel: LABLANTERN_DIR)
 # - eine vorhandene deploy/.env bleibt unverändert; sonst werden LAN-IP und Name erkannt und, wenn ein Terminal da ist,
-#   zur Bestätigung abgefragt (ohne Terminal: VULNWATCH_BIND_IP und VULNWATCH_NAME setzen oder die Erkennung gilt)
+#   zur Bestätigung abgefragt (ohne Terminal: LABLANTERN_BIND_IP und LABLANTERN_NAME setzen oder die Erkennung gilt)
 # - danach docker compose up -d --build und das Setup-Token aus dem Log
 set -eu
 
-repo_url=https://github.com/noah-ebrt/vulnwatch.git
+repo_url=https://github.com/noah-ebrt/LabLantern.git
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
@@ -22,12 +22,12 @@ here=$(cd "$(dirname "$0")" 2>/dev/null && pwd || true)
 if [ -n "$here" ] && [ -f "$here/deploy/compose.yaml" ]; then
     root=$here
 else
-    root=${VULNWATCH_DIR:-$PWD/vulnwatch}
+    root=${LABLANTERN_DIR:-$PWD/lablantern}
     if [ -f "$root/deploy/compose.yaml" ]; then
         say "Using the existing checkout in $root"
     else
         command -v git >/dev/null 2>&1 || die "git is not installed"
-        [ -e "$root" ] && die "$root exists but is not a vulnwatch checkout"
+        [ -e "$root" ] && die "$root exists but is not a LabLantern checkout"
         git clone --depth 1 "$repo_url" "$root"
     fi
 fi
@@ -48,19 +48,19 @@ if [ -f .env ]; then
     say "Keeping the existing deploy/.env"
 else
     detected=$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p')
-    ip=${VULNWATCH_BIND_IP:-$(ask "LAN IP of this host (the UI listens only here)" "$detected")}
-    name=${VULNWATCH_NAME:-$(ask "DNS name for the master (passkeys need a name)" "vulnwatch.lan")}
-    [ -n "$ip" ] || die "no LAN IP: set VULNWATCH_BIND_IP"
-    sed -e "s/^VULNWATCH_BIND_IP=.*/VULNWATCH_BIND_IP=$ip/" \
-        -e "s/^VULNWATCH_HOSTNAMES=.*/VULNWATCH_HOSTNAMES=$name,$ip/" .env.example >.env
-    say "Wrote deploy/.env (VULNWATCH_BIND_IP=$ip, VULNWATCH_HOSTNAMES=$name,$ip)"
+    ip=${LABLANTERN_BIND_IP:-$(ask "LAN IP of this host (the UI listens only here)" "$detected")}
+    name=${LABLANTERN_NAME:-$(ask "DNS name for the master (passkeys need a name)" "lablantern.lan")}
+    [ -n "$ip" ] || die "no LAN IP: set LABLANTERN_BIND_IP"
+    sed -e "s/^LABLANTERN_BIND_IP=.*/LABLANTERN_BIND_IP=$ip/" \
+        -e "s/^LABLANTERN_HOSTNAMES=.*/LABLANTERN_HOSTNAMES=$name,$ip/" .env.example >.env
+    say "Wrote deploy/.env (LABLANTERN_BIND_IP=$ip, LABLANTERN_HOSTNAMES=$name,$ip)"
 fi
 
-say "Building and starting vulnwatch; the first build takes a few minutes ..."
+say "Building and starting LabLantern; the first build takes a few minutes ..."
 docker compose up -d --build
 
-host=$(sed -n 's/^VULNWATCH_HOSTNAMES=\([^,]*\).*/\1/p' .env)
-port=$(sed -n 's/^VULNWATCH_PORT=\([0-9]*\).*/\1/p' .env)
+host=$(sed -n 's/^LABLANTERN_HOSTNAMES=\([^,]*\).*/\1/p' .env)
+port=$(sed -n 's/^LABLANTERN_PORT=\([0-9]*\).*/\1/p' .env)
 port=${port:-8443}
 
 # Das Token steht im Log, solange die Einrichtung nicht abgeschlossen ist
@@ -74,7 +74,7 @@ while [ $i -lt 60 ]; do
 done
 
 say ""
-say "vulnwatch is running: https://$host:$port"
+say "lablantern is running: https://$host:$port"
 if [ -n "$token" ]; then
     say "Setup token:          $token"
 else

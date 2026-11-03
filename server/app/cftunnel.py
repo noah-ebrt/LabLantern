@@ -20,7 +20,7 @@ from .context import Context
 from .guards import Guards
 from .models import System, put_setting, setting
 
-log = logging.getLogger("vulnwatch.cftunnel")
+log = logging.getLogger("lablantern.cftunnel")
 
 API = "https://api.cloudflare.com/client/v4"
 CF_CONFIG = "cftunnel.config"
@@ -36,7 +36,7 @@ class CfError(Exception):
 
 
 def _get(path: str, token: str) -> dict:
-    req = urllib.request.Request(API + path, headers={"Authorization": f"Bearer {token}", "User-Agent": "vulnwatch"})
+    req = urllib.request.Request(API + path, headers={"Authorization": f"Bearer {token}", "User-Agent": "lablantern"})
     try:
         with urllib.request.urlopen(req, timeout=15) as r:
             data = json.loads(r.read(5_000_000))

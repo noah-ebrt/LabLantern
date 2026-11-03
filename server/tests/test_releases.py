@@ -17,12 +17,12 @@ def pub_of(key):
 
 
 def publish(root, version, key=KEY, tamper=False, signed_by=None):
-    """Legt ein Release so ab, wie agent-sign es tut (vw-release publish)."""
-    bins = {f"vulnwatch-agent-linux-{a}": f"{a}-{version}".encode() for a in ("amd64", "arm64")}
+    """Legt ein Release so ab, wie agent-sign es tut (ll-release publish)."""
+    bins = {f"lablantern-agent-linux-{a}": f"{a}-{version}".encode() for a in ("amd64", "arm64")}
     manifest = json.dumps({"version": version, "created": "2026-10-29T00:00:00Z",
                            "files": {n: hashlib.sha256(b).hexdigest() for n, b in bins.items()}}, indent=2).encode()
     if tamper:
-        bins["vulnwatch-agent-linux-amd64"] = b"evil"
+        bins["lablantern-agent-linux-amd64"] = b"evil"
     rel = root / version
     rel.mkdir(parents=True)
     for name, data in {**bins, "manifest.json": manifest,

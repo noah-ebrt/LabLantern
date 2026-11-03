@@ -15,7 +15,7 @@ from .models import put_setting, setting
 from .reportpolicy import get_report_policy, set_report_policy
 from .scanrun import ScanAlreadyActive, advance_collecting_runs, expire_stale_jobs, request_scan_run
 
-log = logging.getLogger("vulnwatch.schedule")
+log = logging.getLogger("lablantern.schedule")
 
 SCHEDULE_KEY = "schedule.daily"
 DEFAULT = {"enabled": True, "time": "03:00"}

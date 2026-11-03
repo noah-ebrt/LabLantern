@@ -1,5 +1,5 @@
 {
-  "name": "vulnwatch",
+  "name": "lablantern",
   "private": true,
   "scripts": {
     "deploy": "sh deploy/deploy.sh"

@@ -58,7 +58,7 @@ jobs:
         run: |
           go install github.com/google/go-licenses@v1.6.0
           "$(go env GOPATH)/bin/go-licenses" check ./... --disallowed_types=forbidden,restricted \
-            --ignore vulnwatch/agent --ignore github.com/xi2/xz --ignore modernc.org/mathutil
+            --ignore lablantern/agent --ignore github.com/xi2/xz --ignore modernc.org/mathutil
 
   leaks:
     runs-on: ubuntu-24.04

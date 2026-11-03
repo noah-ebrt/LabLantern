@@ -14,7 +14,7 @@ from sqlalchemy import select
 from .context import Context
 from .models import System, put_setting, setting
 
-log = logging.getLogger("vulnwatch.exposure")
+log = logging.getLogger("lablantern.exposure")
 
 STALE_HOURS = 26   # täglicher Abgleich plus Spielraum
 

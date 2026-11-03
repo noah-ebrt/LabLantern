@@ -12,7 +12,7 @@ import (
 	"encoding/hex"
 	"regexp"
 
-	"vulnwatch/agent/internal/config"
+	"lablantern/agent/internal/config"
 )
 
 var nonceRe = regexp.MustCompile(`^[0-9a-f]{32}$`)

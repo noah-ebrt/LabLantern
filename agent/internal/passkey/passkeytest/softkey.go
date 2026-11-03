@@ -10,7 +10,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"vulnwatch/agent/internal/passkey"
+	"lablantern/agent/internal/passkey"
 )
 
 var enc = base64.RawURLEncoding

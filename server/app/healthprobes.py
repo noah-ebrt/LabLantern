@@ -250,7 +250,7 @@ def probe_http(spec: ProbeSpec) -> ProbeResult:
     p = spec.params
     scheme, host, port, path = p["scheme"], spec.host, p["port"], p["path"]
     method = p.get("method", "GET")
-    headers = {"User-Agent": "vulnwatch-health", "Connection": "close"}
+    headers = {"User-Agent": "lablantern-health", "Connection": "close"}
     if spec.auth:
         headers["Authorization"] = spec.auth
     t0 = time.monotonic()

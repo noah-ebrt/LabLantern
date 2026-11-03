@@ -1,8 +1,8 @@
 [Unit]
-Description=vulnwatch action trigger (passkey-confirmed request from vulnwatch-agentd)
+Description=lablantern action trigger (passkey-confirmed request from lablantern-agentd)
 
 [Path]
-PathExists=/run/vulnwatch/action.request
+PathExists=/run/lablantern/action.request
 
 [Install]
 WantedBy=paths.target

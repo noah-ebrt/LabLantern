@@ -17,7 +17,7 @@ package pairing                    // every file starts with its package name; t
 
 import (
 	"crypto/sha256"                // standard library
-	"vulnwatch/agent/internal/config" // this repo (module name from go.mod + folder)
+	"lablantern/agent/internal/config" // this repo (module name from go.mod + folder)
 )
 
 func Code(caFingerprint, secret string) string { … }  // Capital letter = exported (public)
@@ -25,7 +25,7 @@ func ask(ifi *net.Interface, …) []string { … }        // lower case = privat
 ```
 
 - There is no `export` keyword. **Capitalised names are public, lower-case names are private.**
-- `internal/` is special: only code inside `vulnwatch/agent` may import it. That is why everything lives there.
+- `internal/` is special: only code inside `lablantern/agent` may import it. That is why everything lives there.
 - An import is always used as `packagename.Thing`, e.g. `config.LoadConfig(...)`, like `import * as config`.
 
 ### Variables and types
@@ -168,7 +168,7 @@ this repo has fixed arguments.
 |---|---|
 | Run all tests | `CI=true go test ./... < /dev/null` |
 | Static checks | `go vet ./...` |
-| Build | `go build ./cmd/vulnwatch-agent` |
+| Build | `go build ./cmd/lablantern-agent` |
 | Show docs of a symbol | `go doc ./internal/passkey Verify` |
 | Who calls X? | VS Code with the Go extension: right-click → *Find All References* |
 
@@ -181,9 +181,9 @@ That alone makes reviewing much easier.
 
 Read in this order. Each step builds on the previous one.
 
-1. `cmd/vulnwatch-agent/main.go`: the entry point. `run()` dispatches the sub-commands (`setup`, `enroll`,
+1. `cmd/lablantern-agent/main.go`: the entry point. `run()` dispatches the sub-commands (`setup`, `enroll`,
    `daemon`, `collect-job`, `action-job`, `scan`). Skim it first to see the shape.
-2. `internal/config/config.go`: what is stored in `/etc/vulnwatch/agent.json` and how the pinned CA is validated.
+2. `internal/config/config.go`: what is stored in `/etc/lablantern/agent.json` and how the pinned CA is validated.
 3. `internal/client/client.go`: every HTTP call to the master. `FetchCA` is the only place that skips TLS
    verification, and its comment says why.
 4. `internal/collector/collector.go`: what is collected (os-release, dpkg/rpm, apt security updates, Docker
@@ -194,7 +194,7 @@ Read in this order. Each step builds on the previous one.
 7. `internal/passkey/passkey.go`: WebAuthn signature verification inside the agent. This is the heart of the
    "the master alone can't reboot a host" guarantee.
 8. `internal/actions/actions.go`: the root side of reboot / update / uninstall and of the passkey trust list.
-9. `internal/release/release.go` and `cmd/vw-release/main.go`: signed release manifests (Ed25519).
+9. `internal/release/release.go` and `cmd/ll-release/main.go`: signed release manifests (Ed25519).
 10. `internal/pairing`, `internal/discover`: `setup` via mDNS plus the pairing code.
 11. `internal/images/images.go`: a thin wrapper around the Syft library.
 12. `packaging/`: the systemd units and their sandboxing, tmpfiles, and package scripts. These matter as much as
@@ -214,7 +214,7 @@ Use this when you review a diff (yours or an AI's):
   check), never run in the daemon.
 - **New `exec.Command`?** Fixed program, fixed arguments, absolute path where possible, nothing from the
   network in the argv.
-- **New file read as root?** Use `jobs.ReadNoFollow` or `jobs.TakeFile` for anything inside `/run/vulnwatch`
+- **New file read as root?** Use `jobs.ReadNoFollow` or `jobs.TakeFile` for anything inside `/run/lablantern`
   (the daemon controls that directory).
 - **New file written as root?** Use `jobs.WriteAtomic`, and check the file mode it ends up with (currently 0644).
 - **TLS:** `InsecureSkipVerify` must stay limited to `FetchCA`. Every other request uses `client.New` with the

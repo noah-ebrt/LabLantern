@@ -26,13 +26,13 @@ type Config struct {
 
 func DefaultConfigPath() string {
 	if os.Geteuid() == 0 {
-		return "/etc/vulnwatch/agent.json"
+		return "/etc/lablantern/agent.json"
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "agent.json"
 	}
-	return filepath.Join(home, ".config", "vulnwatch", "agent.json")
+	return filepath.Join(home, ".config", "lablantern", "agent.json")
 }
 
 // NormalizeFingerprint macht aus "aa:bb ..." einheitlich "AABB...".
@@ -86,14 +86,14 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("cannot read configuration (%s): %w – not enrolled yet? Run 'vulnwatch-agent enroll' first", path, err)
+		return nil, fmt.Errorf("cannot read configuration (%s): %w – not enrolled yet? Run 'lablantern-agent enroll' first", path, err)
 	}
 	var cfg Config
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("invalid JSON in configuration (%s): %w", path, err)
 	}
 	if err := cfg.Validate(); err != nil {
-		return nil, fmt.Errorf("configuration %s unusable (%v): please enroll again with 'vulnwatch-agent enroll'", path, err)
+		return nil, fmt.Errorf("configuration %s unusable (%v): please enroll again with 'lablantern-agent enroll'", path, err)
 	}
 	return &cfg, nil
 }
@@ -126,13 +126,13 @@ func SaveConfig(path string, cfg *Config, caPEM []byte) error {
 	return nil
 }
 
-// shareWithDaemon gibt dem Daemon (Gruppe vulnwatch) Lesezugriff auf Token und CA, wenn das Paket
+// shareWithDaemon gibt dem Daemon (Gruppe lablantern) Lesezugriff auf Token und CA, wenn das Paket
 // installiert ist. Schreiben darf weiter nur root.
 func shareWithDaemon(dir, path string) {
 	if os.Geteuid() != 0 {
 		return
 	}
-	g, err := user.LookupGroup("vulnwatch")
+	g, err := user.LookupGroup("lablantern")
 	if err != nil {
 		return
 	}

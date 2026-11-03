@@ -12,13 +12,13 @@ const emit = defineEmits(['changed'])
 const ROUTERS = {
   opnsense: {
     label: 'OPNsense', url: 'https://opnsense.lan', secret: 'API secret',
-    empty: 'Not connected. With an API key vulnwatch reads the port forwards (Destination NAT) and marks the containers and hosts behind them as internet-exposed. Needs OPNsense 26.1 or newer.',
-    help: 'System › Access › Users: a user <code>vulnwatch</code> with only the privilege for Firewall: NAT: Destination NAT, then create an API key for it. OPNsense has no read-only variant of that privilege; vulnwatch only sends GET requests and never changes a rule. HTTPS only, the certificate is pinned when you save.',
+    empty: 'Not connected. With an API key LabLantern reads the port forwards (Destination NAT) and marks the containers and hosts behind them as internet-exposed. Needs OPNsense 26.1 or newer.',
+    help: 'System › Access › Users: a user <code>lablantern</code> with only the privilege for Firewall: NAT: Destination NAT, then create an API key for it. OPNsense has no read-only variant of that privilege; LabLantern only sends GET requests and never changes a rule. HTTPS only, the certificate is pinned when you save.',
   },
   unifi: {
     label: 'UniFi', url: 'https://unifi.lan', secret: 'API key',
-    empty: 'Not connected. With an API key vulnwatch reads the port forwards of your UniFi console and marks the containers and hosts behind them as internet-exposed.',
-    help: 'On a UniFi OS console with Network 9 or newer: add an admin with the role <strong>View Only</strong>, sign in as that admin and create an API key under Settings › Control Plane › Integrations. vulnwatch reads the port forward list of the site and never changes it. HTTPS only, the certificate is pinned when you save.',
+    empty: 'Not connected. With an API key LabLantern reads the port forwards of your UniFi console and marks the containers and hosts behind them as internet-exposed.',
+    help: 'On a UniFi OS console with Network 9 or newer: add an admin with the role <strong>View Only</strong>, sign in as that admin and create an API key under Settings › Control Plane › Integrations. LabLantern reads the port forward list of the site and never changes it. HTTPS only, the certificate is pinned when you save.',
   },
 }
 const data = reactive({ opnsense: null, unifi: null })

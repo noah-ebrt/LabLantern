@@ -1,17 +1,17 @@
-# vulnwatch
+# LabLantern
 
-[![CI](https://github.com/noah-ebrt/vulnwatch/actions/workflows/ci.yml/badge.svg)](https://github.com/noah-ebrt/vulnwatch/actions/workflows/ci.yml)
+[![CI](https://github.com/noah-ebrt/LabLantern/actions/workflows/ci.yml/badge.svg)](https://github.com/noah-ebrt/LabLantern/actions/workflows/ci.yml)
 [![License: PolyForm Noncommercial](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue)](LICENSE.md)
 
 **Self-hosted vulnerability monitoring for your homelab or small network.**
 
-![vulnwatch: findings matched to host and container, early warnings, and a fix list that turns the status green](docs/media/vulnwatch-demo.gif)
+![LabLantern: findings matched to host and container, early warnings, and a fix list that turns the status green](docs/media/lablantern-demo.gif)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/noah-ebrt/vulnwatch/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/noah-ebrt/LabLantern/main/install.sh | sh
 ```
 
-vulnwatch keeps track of every Linux host, container and appliance in your network, checks them for known security
+LabLantern keeps track of every Linux host, container and appliance in your network, checks them for known security
 vulnerabilities every day, and tells you clearly what needs your attention: what is critical, what is merely
 outdated, what is reachable from the internet, and which check could not run. It runs entirely on your own hardware
 and its web interface is reachable only in your LAN.
@@ -21,7 +21,7 @@ and its web interface is reachable only in your LAN.
 - **One overview** of all hosts, containers and devices, with a clear red / yellow / green status.
 - **Daily scans** of operating system packages and every running container image.
 - **Concrete next steps:** which image or package to update, and the command to do it.
-- **No silent gaps:** if a check fails, you see it. vulnwatch never reports "all clear" by leaving something out.
+- **No silent gaps:** if a check fails, you see it. LabLantern never reports "all clear" by leaving something out.
 - **Secure by design:** agents open no ports, dangerous actions need your passkey, secrets are stored encrypted.
 
 ## Features
@@ -92,7 +92,7 @@ and its web interface is reachable only in your LAN.
 
 ## Security
 
-vulnwatch watches over your network, so it is built to never become the weak spot itself:
+LabLantern watches over your network, so it is built to never become the weak spot itself:
 
 - **Agents open no ports.** They connect out to the master over HTTPS and trust only its own pinned certificate
   authority. Data collection runs as root without network access; the networked part runs unprivileged.
@@ -129,26 +129,26 @@ The full threat model, including what a compromised master or agent could and co
 ## Requirements
 
 - A Linux host in your LAN with Docker and the Compose plugin.
-- 4 GB RAM or more. Grype alone (`VULNWATCH_SCANNERS=grype`) needs less and is about five times faster; measured
+- 4 GB RAM or more. Grype alone (`LABLANTERN_SCANNERS=grype`) needs less and is about five times faster; measured
   figures for both modes are in [docs/INSTALL.md](docs/INSTALL.md).
 - About 5 GB of disk for the scanner databases and the 90-day raw data archive.
 - Outbound HTTPS from that host (vulnerability databases, container registries, endoflife.date).
-- A DNS name for the master in your LAN, `vulnwatch.lan` by default: one entry in your router or DNS server
+- A DNS name for the master in your LAN, `lablantern.lan` by default: one entry in your router or DNS server
   (AdGuard, Pi-hole, …), or in the hosts file of the machine you browse from. Browsers allow passkeys only on a name,
   not on a bare IP address. Agents can use the IP.
 
 ## Quick start
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/noah-ebrt/vulnwatch/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/noah-ebrt/LabLantern/main/install.sh | sh
 ```
 
-The script clones the repository to `./vulnwatch`, asks for the LAN IP (detected) and a DNS name (`vulnwatch.lan`),
+The script clones the repository to `./lablantern`, asks for the LAN IP (detected) and a DNS name (`lablantern.lan`),
 writes `deploy/.env`, runs `docker compose up -d --build` and prints the setup token. The first build takes a few
 minutes, because it also builds and signs the agent. To read the script before it runs:
 
 ```bash
-git clone https://github.com/noah-ebrt/vulnwatch.git vulnwatch && cd vulnwatch
+git clone https://github.com/noah-ebrt/LabLantern.git lablantern && cd lablantern
 less install.sh && ./install.sh
 ```
 
@@ -206,7 +206,7 @@ Dependencies are pinned with hashes and taken no earlier than 7 days after their
 
 ## Scope and status
 
-vulnwatch is in daily use on a homelab with four hosts. It is a risk overview and alerting tool: it does not replace
+LabLantern is in daily use on a homelab with four hosts. It is a risk overview and alerting tool: it does not replace
 endpoint protection (EDR) and does not install patches for you. Windows hosts are not supported yet. Support is best
 effort.
 
@@ -216,5 +216,5 @@ Nothing phones home. Everything that leaves your network is listed in
 ## License
 
 [PolyForm Noncommercial 1.0.0](LICENSE.md). Personal, homelab, research and non-profit use, modification and sharing
-are free. Commercial use requires a separate license from the author. This makes vulnwatch source-available, not open
+are free. Commercial use requires a separate license from the author. This makes LabLantern source-available, not open
 source in the OSI sense.

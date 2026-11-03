@@ -4,9 +4,9 @@ An agent is a small Go program in a `.deb` or `.rpm` package (amd64, arm64). It 
 
 | Part | Runs as | Does |
 | --- | --- | --- |
-| `vulnwatch-agentd` | user `vulnwatch`, no rights | keeps one outgoing HTTPS connection to the master, sends reports, receives commands |
-| `vulnwatch-collect` | root, no network | reads packages, pending security updates, reboot flag, Docker containers and image SBOMs; on bare metal also drives and pools (`lsblk`, `zpool`, `/proc/mdstat`, `smartctl` if installed) |
-| `vulnwatch-action` | root, no network | reboot and agent update, only with a passkey signature it verifies itself |
+| `lablantern-agentd` | user `lablantern`, no rights | keeps one outgoing HTTPS connection to the master, sends reports, receives commands |
+| `lablantern-collect` | root, no network | reads packages, pending security updates, reboot flag, Docker containers and image SBOMs; on bare metal also drives and pools (`lsblk`, `zpool`, `/proc/mdstat`, `smartctl` if installed) |
+| `lablantern-action` | root, no network | reboot and agent update, only with a passkey signature it verifies itself |
 
 No port is opened on the host. The master never holds a key to log in to your hosts.
 
@@ -56,7 +56,7 @@ only installs a package signed by the release key and newer than itself. The sam
 ## Remove a host
 
 **Systems → Delete** sends an uninstall command (passkey) and removes the host once the agent confirms.
-**Revoke** only blocks the agent's token. Manually: `sudo apt purge vulnwatch-agent` (or `rpm -e`).
+**Revoke** only blocks the agent's token. Manually: `sudo apt purge lablantern-agent` (or `rpm -e`).
 
 ## Change the agent
 
@@ -74,7 +74,7 @@ version (0.16.0 → 0.16.1), so changed code never ships under an old version. C
 nothing new. `docker compose logs agent-build agent-sign` shows what happened.
 
 **The signing key.** The first start creates an Ed25519 key in the volume `agent_key`. Only the containers
-`agent-key` and `agent-sign` mount it; they run nothing but `vw-release` and have no network. Every agent carries the
+`agent-key` and `agent-sign` mount it; they run nothing but `ll-release` and have no network. Every agent carries the
 public key from its build and installs only updates signed with it. Back up `agent_key` (see
 [INSTALL.md](INSTALL.md#5-backup-and-restore)): with a new key, hosts accept no more updates until you run the setup
 command on them once more.

@@ -1,11 +1,11 @@
 #!/bin/sh
 # shellcheck disable=SC2154 # Variablen aus der Versionsdatei des Systems
-# vulnwatch collector for Unraid: version, Slackware packages and running Docker containers.
+# LabLantern collector for Unraid: version, Slackware packages and running Docker containers.
 # Image SBOMs only if syft is installed (otherwise the image scan shows n/a). Setup: the command from
-# "+ Add host → Other device", run with VW_DIR=/boot/config/vulnwatch (/etc does not survive a reboot).
-# Cron: User Scripts plugin, custom schedule "23 * * * *", script: sh /boot/config/vulnwatch/unraid.sh
+# "+ Add host → Other device", run with LL_DIR=/boot/config/lablantern (/etc does not survive a reboot).
+# Cron: User Scripts plugin, custom schedule "23 * * * *", script: sh /boot/config/lablantern/unraid.sh
 set -eu
-D=${VW_DIR:-/boot/config/vulnwatch}
+D=${LL_DIR:-/boot/config/lablantern}
 # shellcheck source=/dev/null # setzt version
 . /etc/unraid-version
 

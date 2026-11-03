@@ -1,4 +1,4 @@
-module vulnwatch/agent
+module lablantern/agent
 
 go 1.26.8
 

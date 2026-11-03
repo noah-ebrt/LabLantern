@@ -89,7 +89,7 @@ def test_core_update_major_and_plugins(admin, opn):
     core = found["host"]
     assert (core.severity, core.installed_version, core.fixed_version, core.source) == ("hoch", "25.7.5", "25.7.6", "opnsense")
     assert "packages" not in found   # curl kommt mit dem Core-Update
-    assert (found["eol"].cve_id, found["eol"].fixed_version) == ("VW-EOL", "26.1.4")
+    assert (found["eol"].cve_id, found["eol"].fixed_version) == ("LL-EOL", "26.1.4")
     assert found["major"].severity == "mittel" and found["major"].fixed_version == "26.1"
     assert versions["status"] == "fund" and "last check" in versions["detail"]
     assert {p["keyword"] for p in products} == {"opnsense", "wireguard"}   # nicht installiertes Plugin fehlt
@@ -104,7 +104,7 @@ def test_only_package_updates_is_one_finding(admin, opn):
 
 
 def test_never_checked_is_na(admin, opn):
-    """Die Firewall hat noch nicht nach Updates gesucht: vulnwatch stößt keine Prüfung an, die Prüfung ist n/a."""
+    """Die Firewall hat noch nicht nach Updates gesucht: LabLantern stößt keine Prüfung an, die Prüfung ist n/a."""
     env = admin[0]
     FakeOpn.status = {"status": "none", "status_msg": "Firmware status requires to check for update first"}
     r = connect(admin, opn).json()

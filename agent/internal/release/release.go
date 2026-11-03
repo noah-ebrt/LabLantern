@@ -20,7 +20,7 @@ import (
 )
 
 // publicKeyB64 ist der öffentliche Release-Schlüssel dieser Installation. Der Build setzt ihn
-// (-ldflags "-X vulnwatch/agent/internal/release.publicKeyB64=…", siehe packaging/build-agent.sh); ohne ihn nimmt
+// (-ldflags "-X lablantern/agent/internal/release.publicKeyB64=…", siehe packaging/build-agent.sh); ohne ihn nimmt
 // der Agent keine Updates an.
 var publicKeyB64 string
 
@@ -47,10 +47,10 @@ func fileSHA(path string) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-// BuildManifest erfasst alle vulnwatch-agent-* Dateien eines Build-Verzeichnisses.
+// BuildManifest erfasst alle lablantern-agent-* Dateien eines Build-Verzeichnisses.
 func BuildManifest(dir, version string) (*Manifest, error) {
 	m := &Manifest{Version: version, Created: time.Now().UTC().Format(time.RFC3339), Files: map[string]string{}}
-	paths, _ := filepath.Glob(filepath.Join(dir, "vulnwatch-agent-linux-*"))
+	paths, _ := filepath.Glob(filepath.Join(dir, "lablantern-agent-linux-*"))
 	for _, p := range paths {
 		sum, err := fileSHA(p)
 		if err != nil {

@@ -8,9 +8,9 @@ import (
 	"testing"
 )
 
-// Läuft nur mit -tags live und Docker-Socket: VW_LIVE_IMAGE=<Image-ID>.
+// Läuft nur mit -tags live und Docker-Socket: LL_LIVE_IMAGE=<Image-ID>.
 func TestSyftAgainstARealLocalImage(t *testing.T) {
-	out, err := SyftSBOM(os.Getenv("VW_LIVE_IMAGE"))
+	out, err := SyftSBOM(os.Getenv("LL_LIVE_IMAGE"))
 	if err != nil {
 		t.Fatal(err)
 	}

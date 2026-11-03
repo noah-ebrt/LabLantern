@@ -21,7 +21,7 @@ import (
 	"strings"
 	"time"
 
-	"vulnwatch/agent/internal/queries"
+	"lablantern/agent/internal/queries"
 )
 
 const aptCheck = "/usr/lib/update-notifier/apt-check"

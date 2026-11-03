@@ -24,7 +24,7 @@ from .reportpolicy import ALERT_LEVELS, get_report_policy, report_decision, set_
 from .rules import classify_severity
 from .snooze import apply_snoozes, ended_since, snoozed_summary
 
-log = logging.getLogger("vulnwatch.scanrun")
+log = logging.getLogger("lablantern.scanrun")
 
 JOB_TIMEOUT = 75 * 60          # Grype und OSV über alle SBOMs; OSV lädt allein ~5 min seine Datenbank
 COLLECT_TIMEOUT = 10 * 60      # so lange wird auf frische Agentendaten gewartet
@@ -292,7 +292,7 @@ def _send(ctx: Context, run_id: int, info: dict) -> None:
     policy = get_report_policy(ctx)
     regular = info.get("trigger") == "scheduled" and kind == "report"
     if regular:
-        # Häufigkeit und Pause gelten nur für den Bericht des geplanten Laufs; Handläufe meldet vulnwatch immer
+        # Häufigkeit und Pause gelten nur für den Bericht des geplanten Laufs; Handläufe meldet LabLantern immer
         from .schedule import get_timezone
         now_local = datetime.fromtimestamp(ctx.clock(), ZoneInfo(get_timezone(ctx)))
         decision = report_decision(policy, info, now_local)

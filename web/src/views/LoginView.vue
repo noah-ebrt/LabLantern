@@ -53,7 +53,7 @@ async function submit() {
 
 <template>
   <section class="card">
-    <h1>vulnwatch</h1>
+    <h1>LabLantern</h1>
     <form @submit.prevent="submit">
       <label>Username<input v-model="form.username" name="username" autocomplete="username" required autofocus /></label>
       <label>Password<input v-model="form.password" name="password" type="password" autocomplete="current-password" required /></label>

@@ -263,7 +263,7 @@ useLive(['settings', 'findings'], load, 3000)
           <form class="settings-form" @submit.prevent="saveNpm">
             <div class="grid">
               <label><span class="field-label">Admin URL (port 81)</span><input v-model="form.url" name="npm_url" placeholder="http://npm.lan:81" autocomplete="off" required /></label>
-              <label><span class="field-label">User e-mail</span><input v-model="form.email" name="npm_email" placeholder="vulnwatch@example.org" autocomplete="off" required /></label>
+              <label><span class="field-label">User e-mail</span><input v-model="form.email" name="npm_email" placeholder="lablantern@example.org" autocomplete="off" required /></label>
               <SecretField v-model="form.password" name="npm_password" label="Password" :set="!!npm?.password?.set" :updated-at="npm?.password?.updated_at" />
               <label>
                 <span class="field-label">Host running NPM</span>
@@ -273,7 +273,7 @@ useLive(['settings', 'findings'], load, 3000)
                 </select>
               </label>
             </div>
-            <p class="subtext">A dedicated NPM user with item visibility “All items” and view-only rights is enough. vulnwatch never reads private keys, access lists or DNS credentials.</p>
+            <p class="subtext">A dedicated NPM user with item visibility “All items” and view-only rights is enough. LabLantern never reads private keys, access lists or DNS credentials.</p>
             <div class="actions">
               <button class="primary" :disabled="busy || !form.url || !form.email"><Icon name="check" :size="15" />{{ busy ? 'Saving & testing…' : 'Save and test' }}</button>
             </div>
@@ -298,11 +298,11 @@ useLive(['settings', 'findings'], load, 3000)
           <form class="settings-form" @submit.prevent="saveFritz">
             <div class="grid">
               <label><span class="field-label">TR-064 address (port 49000)</span><input v-model="fform.url" name="fritz_url" placeholder="http://192.168.178.1:49000" autocomplete="off" required /></label>
-              <label><span class="field-label">User</span><input v-model="fform.user" name="fritz_user" placeholder="vulnwatch" autocomplete="off" required /></label>
+              <label><span class="field-label">User</span><input v-model="fform.user" name="fritz_user" placeholder="lablantern" autocomplete="off" required /></label>
               <SecretField v-model="fform.password" name="fritz_password" label="Password" :set="!!fritz?.password?.set" :updated-at="fritz?.password?.updated_at" />
             </div>
             <p class="subtext">The user needs the right “FRITZ!Box settings”, and “Allow access for applications” must be on (Home network › Network › Network settings).
-              vulnwatch only reads the forwards. IPv6 releases are not visible over TR-064; mark those by hand.</p>
+              LabLantern only reads the forwards. IPv6 releases are not visible over TR-064; mark those by hand.</p>
             <div class="actions">
               <button class="primary" :disabled="busy || !fform.url || !fform.user"><Icon name="check" :size="15" />{{ busy ? 'Saving & testing…' : 'Save and test' }}</button>
             </div>

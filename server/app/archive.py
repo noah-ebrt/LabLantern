@@ -15,7 +15,7 @@ from sqlalchemy import select
 from .context import Context
 from .models import Setting, System
 
-log = logging.getLogger("vulnwatch.archive")
+log = logging.getLogger("lablantern.archive")
 
 KEEP_DAYS = 90
 # Einstellungen, die nichts an der Bewertung ändern (Zustand, Zeitstempel), zählen nicht zur Konfigurationsversion

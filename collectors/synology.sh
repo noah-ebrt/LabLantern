@@ -1,11 +1,11 @@
 #!/bin/sh
 # shellcheck disable=SC2154 # Variablen aus der Versionsdatei des Systems
-# vulnwatch collector for Synology DSM: DSM version, installed packages and running containers
+# LabLantern collector for Synology DSM: DSM version, installed packages and running containers
 # (Container Manager). Image SBOMs only if syft is installed. Run as root. Setup: the command from
 # "+ Add host → Other device". Cron: Control Panel → Task Scheduler → Scheduled Task → User-defined script,
-# user root, hourly, command: sh /volume1/vulnwatch/synology.sh
+# user root, hourly, command: sh /volume1/lablantern/synology.sh
 set -eu
-D=${VW_DIR:-/etc/vulnwatch-collector}
+D=${LL_DIR:-/etc/lablantern-collector}
 # shellcheck source=/dev/null # setzt productversion, buildnumber
 . /etc.defaults/VERSION
 PATH=$PATH:/usr/local/bin

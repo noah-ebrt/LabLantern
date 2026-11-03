@@ -40,13 +40,13 @@ async function disable() {
   await load()
 }
 
-const scrape = computed(() => `- job_name: vulnwatch
+const scrape = computed(() => `- job_name: lablantern
   scheme: https
   metrics_path: /metrics
   authorization:
     credentials: ${token.value || '<token>'}
   tls_config:
-    ca_file: /etc/prometheus/vulnwatch-ca.crt   # ${window.location.origin}/ca.crt
+    ca_file: /etc/prometheus/lablantern-ca.crt   # ${window.location.origin}/ca.crt
   static_configs:
     - targets: ['${window.location.host}']`)
 

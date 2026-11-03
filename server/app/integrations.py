@@ -107,8 +107,8 @@ def build_integrations_router(ctx: Context, guards: Guards) -> APIRouter:
             raise HTTPException(409, "SMTP is not set up yet")
         result = {"ok": True}
         try:
-            send_mail(cfg, ctx.secrets.get(SMTP_PASSWORD_SECRET), "vulnwatch: test mail",
-                      "If you can read this, mail delivery from vulnwatch works.")
+            send_mail(cfg, ctx.secrets.get(SMTP_PASSWORD_SECRET), "LabLantern: test mail",
+                      "If you can read this, mail delivery from LabLantern works.")
         except MailError as e:
             result = {"ok": False, "error": str(e)}
         with ctx.session_factory() as s:
@@ -188,8 +188,8 @@ def build_integrations_router(ctx: Context, guards: Guards) -> APIRouter:
         failed = []
         for c in channels:
             ok, _err = notify_mod.send_notification(
-                [c["url"]], "vulnwatch: test notification",
-                "If you can read this, vulnwatch notifications work.")
+                [c["url"]], "LabLantern: test notification",
+                "If you can read this, LabLantern notifications work.")
             if not ok:
                 failed.append(c["name"])
         error = f"Delivery failed for: {', '.join(failed)}" if failed else None

@@ -215,9 +215,9 @@ def test_metrics_need_a_token_and_expose_state(admin):
     r = anon.get("/metrics", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/plain")
     body = r.text
-    assert 'vulnwatch_findings_open{severity="hoch"} 1' in body
-    assert 'vulnwatch_check_status{system="host-c",check="paket_cve"} 1' in body
-    assert "vulnwatch_coverage_percent" in body and "vulnwatch_last_run_success 1" in body
+    assert 'lablantern_findings_open{severity="hoch"} 1' in body
+    assert 'lablantern_check_status{system="host-c",check="paket_cve"} 1' in body
+    assert "lablantern_coverage_percent" in body and "lablantern_last_run_success 1" in body
     assert token not in client.get("/api/settings/metrics").text   # nur der Hash liegt in der Datenbank
     new = client.post("/api/settings/metrics/token", headers=h).json()["token"]
     assert anon.get("/metrics", headers={"Authorization": f"Bearer {token}"}).status_code == 401
@@ -235,7 +235,7 @@ def test_fixable_counts_host_fixes_and_images_with_a_newer_build(admin):
                           source=source, target=target))
         add("image:caddy:2-alpine", "CVE-2026-1")           # Fix nur in der Paketquelle: wartet auf Upstream
         add("image:waha", "CVE-2026-2")                     # neueres Image da: behebbar
-        add("image:waha", "VW-IMAGE-OUTDATED", fixed="newer image", source="registry")
+        add("image:waha", "LL-IMAGE-OUTDATED", fixed="newer image", source="registry")
         s.commit()
     ov = client.get("/api/overview").json()
     assert sum(ov["fixable"].values()) == 2 and sum(ov["findings"].values()) == 5

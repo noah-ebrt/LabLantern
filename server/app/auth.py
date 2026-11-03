@@ -48,7 +48,7 @@ def new_totp_secret() -> str:
 
 
 def totp_uri(secret: str, username: str) -> str:
-    return pyotp.TOTP(secret).provisioning_uri(name=username, issuer_name="vulnwatch")
+    return pyotp.TOTP(secret).provisioning_uri(name=username, issuer_name="LabLantern")
 
 
 def totp_qr_svg(uri: str) -> str:

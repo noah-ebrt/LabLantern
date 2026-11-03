@@ -1,4 +1,4 @@
-// Package client spricht den vulnwatch-Server an. Vertrauen entsteht in zwei Schritten:
+// Package client spricht den lablantern-Server an. Vertrauen entsteht in zwei Schritten:
 //  1. Bootstrap: Das Wurzelzertifikat wird geholt und gegen den Fingerabdruck geprüft, den der Admin
 //     aus der Oberfläche mitgebracht hat (nur dieses eine Mal ohne TLS-Prüfung, der Inhalt ist selbstprüfend).
 //  2. Danach gilt ausschließlich dieses Zertifikat als Vertrauensanker, mit voller Prüfung inklusive Hostname.
@@ -18,8 +18,8 @@ import (
 	"strings"
 	"time"
 
-	"vulnwatch/agent/internal/collector"
-	"vulnwatch/agent/internal/config"
+	"lablantern/agent/internal/collector"
+	"lablantern/agent/internal/config"
 )
 
 const maxBody = 64 * 1024
@@ -182,7 +182,7 @@ func (c *Client) SendReport(report *collector.HostReport) ([]string, error) {
 		_ = json.Unmarshal(out, &res)
 		return res.NeededSBOMs, nil
 	case status == http.StatusForbidden && (strings.Contains(string(out), "waiting for approval") || strings.Contains(string(out), "wartet auf Freigabe")):
-		return nil, fmt.Errorf("system is waiting for approval in the vulnwatch web UI")
+		return nil, fmt.Errorf("system is waiting for approval in the LabLantern web UI")
 	case status == http.StatusForbidden && (strings.Contains(string(out), "revoked") || strings.Contains(string(out), "widerrufen")):
 		return nil, fmt.Errorf("access for this host was revoked in the web UI")
 	case status == http.StatusUnauthorized:

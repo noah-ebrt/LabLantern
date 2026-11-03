@@ -423,6 +423,6 @@ def test_light_mode_skips_osv_and_reports_it_disabled(live):
 def test_scanners_setting_is_validated():
     from app.worker import scanners_from_env
     assert scanners_from_env({}) == "grype+osv"
-    assert scanners_from_env({"VULNWATCH_SCANNERS": "grype"}) == "grype"
+    assert scanners_from_env({"LABLANTERN_SCANNERS": "grype"}) == "grype"
     with pytest.raises(SystemExit):
-        scanners_from_env({"VULNWATCH_SCANNERS": "trivy"})
+        scanners_from_env({"LABLANTERN_SCANNERS": "trivy"})

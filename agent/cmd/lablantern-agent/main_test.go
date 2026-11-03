@@ -24,14 +24,14 @@ import (
 	"testing"
 	"time"
 
-	"vulnwatch/agent/internal/actions"
-	"vulnwatch/agent/internal/collector"
-	"vulnwatch/agent/internal/config"
-	"vulnwatch/agent/internal/discover"
-	"vulnwatch/agent/internal/jobs"
-	"vulnwatch/agent/internal/pairing"
-	"vulnwatch/agent/internal/passkey"
-	"vulnwatch/agent/internal/passkey/passkeytest"
+	"lablantern/agent/internal/actions"
+	"lablantern/agent/internal/collector"
+	"lablantern/agent/internal/config"
+	"lablantern/agent/internal/discover"
+	"lablantern/agent/internal/jobs"
+	"lablantern/agent/internal/pairing"
+	"lablantern/agent/internal/passkey"
+	"lablantern/agent/internal/passkey/passkeytest"
 )
 
 type serverFixture struct {
@@ -345,7 +345,7 @@ func TestImageSBOMFailureIsReportedToTheServer(t *testing.T) {
 	}
 }
 
-// fakeCollector spielt vulnwatch-collect.service: nimmt den Auftrag des Daemons an und arbeitet ihn ab.
+// fakeCollector spielt lablantern-collect.service: nimmt den Auftrag des Daemons an und arbeitet ihn ab.
 func fakeCollector(t *testing.T, p jobs.Paths, env collector.Env) (stop func()) {
 	done := make(chan struct{})
 	go func() {
@@ -448,7 +448,7 @@ func TestDaemonSyncsPasskeysAndHandsSignedRebootToRoot(t *testing.T) {
 	defer func() { actionPaths = actions.DefaultPaths() }()
 	done := make(chan struct{})
 	defer close(done)
-	go func() { // spielt vulnwatch-action.service
+	go func() { // spielt lablantern-action.service
 		for {
 			select {
 			case <-done:
@@ -462,12 +462,12 @@ func TestDaemonSyncsPasskeysAndHandsSignedRebootToRoot(t *testing.T) {
 	}()
 
 	key := passkeytest.NewSoftKey(t)
-	trust, _ := json.Marshal(passkey.TrustSet{Kind: "passkeys", Rev: 1, RPID: "vulnwatch.lan", Keys: []passkey.Key{key.Key()}})
+	trust, _ := json.Marshal(passkey.TrustSet{Kind: "passkeys", Rev: 1, RPID: "lablantern.lan", Keys: []passkey.Key{key.Key()}})
 	s.trust = map[string]any{"rev": 1, "envelope": string(trust), "assertion": ""}
 	now := time.Now().Unix()
 	cmd, _ := json.Marshal(map[string]any{"kind": "command", "system_id": 5, "type": "reboot", "params": map[string]any{"delay": 30},
 		"issued_at": now, "expires_at": now + 300, "nonce": "0123456789abcdef0123456789abcdef"})
-	sig, _ := json.Marshal(key.Sign(string(cmd), "vulnwatch.lan", "https://vulnwatch.lan:8443", 0x05))
+	sig, _ := json.Marshal(key.Sign(string(cmd), "lablantern.lan", "https://lablantern.lan:8443", 0x05))
 	s.commands = []map[string]any{{"id": 9, "type": "reboot", "params": map[string]string{
 		"delay": "30", "envelope": string(cmd), "assertion": string(sig)}}}
 

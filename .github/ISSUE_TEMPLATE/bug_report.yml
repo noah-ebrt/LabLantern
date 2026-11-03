@@ -20,7 +20,7 @@ body:
     id: versions
     attributes:
       label: Versions
-      description: vulnwatch commit or tag, agent version (Systems), host OS
+      description: LabLantern commit or tag, agent version (Systems), host OS
   - type: textarea
     id: logs
     attributes:

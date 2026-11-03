@@ -21,7 +21,7 @@ from .guards import Guards
 from .models import System, put_setting, setting
 from .secrets_store import kept_secret_error
 
-log = logging.getLogger("vulnwatch.fritzbox")
+log = logging.getLogger("lablantern.fritzbox")
 
 FRITZ_CONFIG = "fritz.config"
 FRITZ_SECRET = "fritz.password"
@@ -109,7 +109,7 @@ def match_forwards(s, forwards: list[dict],
             _note(via, hit[0], hit[1], [f"port {f['external_port']}"])
             continue
         if hit == "no matching container":
-            hit = "device is not monitored by vulnwatch"
+            hit = "device is not monitored by lablantern"
         unmatched.append({"forward": f"{f['protocol']} {f['external_port']} → {f['internal_client']}:{f['internal_port']}",
                           "description": f["description"], "reason": hit})
     return {k: sorted(v) for k, v in exposed.items()}, unmatched

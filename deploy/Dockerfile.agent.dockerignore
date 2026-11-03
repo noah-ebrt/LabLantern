@@ -6,4 +6,4 @@ agent/graft
 agent/docs
 agent/dist
 agent/build
-agent/vulnwatch-agent
+agent/lablantern-agent

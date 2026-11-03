@@ -1,4 +1,4 @@
-// Package jobs verbindet den unprivilegierten Daemon (Benutzer vulnwatch, mit Netz) mit dem Sammler
+// Package jobs verbindet den unprivilegierten Daemon (Benutzer lablantern, mit Netz) mit dem Sammler
 // (root, ohne Netz). Der Daemon legt einen Auftrag in sein eigenes Verzeichnis, eine systemd-Path-Unit
 // startet den Sammler, der Sammler schreibt das Ergebnis in ein Verzeichnis, das nur root beschreiben darf.
 // Der Auftrag gilt als nicht vertrauenswürdig: Er kann nur Image-SBOMs aus dem eigenen Inventar anfordern.
@@ -16,8 +16,8 @@ import (
 	"syscall"
 	"time"
 
-	"vulnwatch/agent/internal/collector"
-	"vulnwatch/agent/internal/queries"
+	"lablantern/agent/internal/collector"
+	"lablantern/agent/internal/queries"
 )
 
 const (
@@ -61,7 +61,7 @@ type Paths struct {
 }
 
 func Default() Paths {
-	return Paths{RequestFile: "/run/vulnwatch/collect.request", OutDir: "/run/vulnwatch-out"}
+	return Paths{RequestFile: "/run/lablantern/collect.request", OutDir: "/run/lablantern-out"}
 }
 
 func NewNonce() string {
@@ -94,7 +94,7 @@ func (p Paths) Wait(nonce string, timeout, interval time.Duration) (*Result, err
 			}
 		}
 		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("collector did not answer within %s (journalctl -u vulnwatch-collect.service)", timeout)
+			return nil, fmt.Errorf("collector did not answer within %s (journalctl -u lablantern-collect.service)", timeout)
 		}
 		time.Sleep(interval)
 	}

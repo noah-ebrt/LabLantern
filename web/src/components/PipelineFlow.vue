@@ -76,7 +76,7 @@ const colGap = computed(() => Math.max(230, (width.value - 2 * PAD_X - NODE_W) /
 const colX = (c) => PAD_X + c * colGap.value
 
 // ---------- verschobene Knoten (nur in diesem Browser) ----------
-const STORE = 'vw.flow.offsets'
+const STORE = 'll.flow.offsets'
 const offsets = reactive((() => {
   try {
     return JSON.parse(localStorage.getItem(STORE) || '{}')

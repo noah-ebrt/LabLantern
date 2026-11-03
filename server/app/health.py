@@ -26,7 +26,7 @@ from .healthprobes import ACTIVE, FRITZ_KINDS, ProbeResult, ProbeSpec, clean_par
 from .healthfeed import HealthFeed
 from .models import HealthCheck, HealthEvent, HealthMonitor, HealthRollup, HealthSample, System, setting
 
-log = logging.getLogger("vulnwatch.health")
+log = logging.getLogger("lablantern.health")
 
 TICK = 2.0
 WORKERS = 16
@@ -160,7 +160,7 @@ AUTO_STATUSES = ("active", "connector")   # Agenten und Geräte ohne Agent (True
 
 
 def default_checks(sys: System, connector: dict | None) -> list[tuple[str, dict]]:
-    """Grundprüfungen je System: Agent + Ping für Agenten; Ping + die Adresse, über die vulnwatch das Gerät
+    """Grundprüfungen je System: Agent + Ping für Agenten; Ping + die Adresse, über die LabLantern das Gerät
     ausliest, für Connector-Systeme. Gilt für jede Connector-Art, auch künftige, solange sie eine URL hat."""
     out: list[tuple[str, dict]] = []
     if sys.status == "active":
@@ -175,7 +175,7 @@ def default_checks(sys: System, connector: dict | None) -> list[tuple[str, dict]
             out.append(("http", clean_params("http", {
                 "target": target, "scheme": u.scheme, "port": u.port or (443 if u.scheme == "https" else 80),
                 "path": u.path or "/", "expect": "2xx", "follow_redirects": True,
-                # vulnwatch prüft das Zertifikat solcher Geräte per Fingerabdruck (meist selbst signiert)
+                # LabLantern prüft das Zertifikat solcher Geräte per Fingerabdruck (meist selbst signiert)
                 "verify_tls": not connector.get("fingerprint")})))
     return out
 
@@ -529,19 +529,19 @@ class HealthEngine:
             return
         lines, title = [], ""
         if went_down and len(known) >= OUTAGE_MIN and len(down_now) >= OUTAGE_SHARE * len(known):
-            title = f"vulnwatch: network outage – {len(down_now)} of {len(known)} hosts down"
+            title = f"LabLantern: network outage – {len(down_now)} of {len(known)} hosts down"
             lines.append("Most monitored hosts failed at the same time. Check the network, switch or router first.")
             lines += [f"- {m.name}" for m in down_now]
         else:
             if went_down:
                 names = ", ".join(m.name for m, _p in went_down)
-                title = f"vulnwatch: {names} {'is' if len(went_down) == 1 else 'are'} DOWN"
+                title = f"LabLantern: {names} {'is' if len(went_down) == 1 else 'are'} DOWN"
                 for m, _p in went_down:
                     lines.append(f"{m.name} ({m.host or 'no host'}) is down")
                     lines += [f"  {d}" for d in details.get(m.id, [])[:5]]
             if recovered:
                 names = ", ".join(m.name for m in recovered)
-                title = title or f"vulnwatch: {names} recovered"
+                title = title or f"LabLantern: {names} recovered"
                 lines += [f"{m.name} is back up" for m in recovered]
         body = "\n".join(lines)
         self.executor.submit(self._send, title, body)

@@ -38,10 +38,10 @@ a row), `[ALERT]` (critical findings), `[ERROR]` (systems not checked), `[WARNIN
 
 ## Offsite watchdog (optional)
 
-A monitor outside your network alerts you when vulnwatch itself goes quiet (host off, power or internet gone, a run
+A monitor outside your network alerts you when LabLantern itself goes quiet (host off, power or internet gone, a run
 stuck). Choose the service once, then paste one URL per check:
 
-| Service | Ping URL | What vulnwatch sends |
+| Service | Ping URL | What LabLantern sends |
 | --- | --- | --- |
 | Healthchecks (self-hosted or healthchecks.io) | `https://…/ping/<uuid>` | start, success, `/fail` with the reason |
 | Uptime Kuma | push monitor URL `https://…/api/push/<token>` | `status=up` or `status=down` with a message |
@@ -56,7 +56,7 @@ Create a dedicated NPM user without admin rights: item visibility **All items**,
 everything else hidden. NPM itself forces Access Lists and Certificates to view only. Enter the admin URL (port 81),
 the user and password, and the host NPM runs on.
 
-vulnwatch then reads every 6 hours:
+LabLantern then reads every 6 hours:
 
 - **Exposure:** proxy targets are mapped to containers by container name or by host IP and published port.
   Findings of internet-exposed containers are rated higher (CVSS 9+ critical, CVSS 7+ with fix high). Targets it
@@ -69,12 +69,12 @@ vulnwatch then reads every 6 hours:
 - **TLS certificates** of active proxy hosts: under 20 days left is a medium finding (NPM renews at 30 days), under 7
   days or expired is high.
 
-It never reads private keys, access lists or DNS credentials. The user stays read-only, so vulnwatch cannot renew or
+It never reads private keys, access lists or DNS credentials. The user stays read-only, so LabLantern cannot renew or
 change certificates.
 
 ## Router port forwards: FRITZ!Box, OPNsense, UniFi (optional)
 
-Settings › Versions & exposure. vulnwatch reads the port forwards of the router every 6 hours and matches each target
+Settings › Versions & exposure. LabLantern reads the port forwards of the router every 6 hours and matches each target
 (internal IP and port) to a container or a host service, like the NPM routes. That also covers services that bypass
 the proxy (game servers, VPN). A forward without a clear target is listed with the reason, and a failed read is an
 error in the coverage matrix while the last known mapping stays.
@@ -82,7 +82,7 @@ error in the coverage matrix while the last known mapping stays.
 | Router | Access | Notes |
 | --- | --- | --- |
 | FRITZ!Box | TR-064 on port 49000, a FRITZ!Box user with "FRITZ!Box settings" | IPv4 only; mark IPv6 releases by hand |
-| OPNsense 26.1 or newer | API key and secret of a user with only the privilege for Firewall: NAT: Destination NAT | `GET /api/firewall/d_nat/search_rule`. OPNsense has no read-only variant of that privilege; vulnwatch only sends GET requests |
+| OPNsense 26.1 or newer | API key and secret of a user with only the privilege for Firewall: NAT: Destination NAT | `GET /api/firewall/d_nat/search_rule`. OPNsense has no read-only variant of that privilege; LabLantern only sends GET requests |
 | UniFi OS console, Network 9 or newer | API key of an admin with the role View Only (Settings › Control Plane › Integrations) | `GET /proxy/network/api/s/<site>/rest/portforward` |
 
 OPNsense and UniFi only over HTTPS; the certificate is pinned when you save, as for TrueNAS. Port and target aliases
@@ -92,7 +92,7 @@ built from the vendors' API documentation and not yet tested against a real devi
 ## Cloudflare Tunnel (optional)
 
 Create an API token under My Profile › API Tokens with only **Account · Cloudflare Tunnel · Read** for your account,
-and enter it with the account ID in Settings, below the router cards. vulnwatch then reads, every 6 hours, the public hostnames of
+and enter it with the account ID in Settings, below the router cards. LabLantern then reads, every 6 hours, the public hostnames of
 every remotely managed tunnel and maps each origin to a container or host:
 
 - `http://<container>:<port>`: the container with that name (the one next to cloudflared if several hosts have it),
@@ -100,7 +100,7 @@ every remotely managed tunnel and maps each origin to a container or host:
 - `http://localhost:<port>`: the host running the `cloudflare/cloudflared` container.
 
 A tunnel route is public by definition, so there is no DNS check. Tunnels managed with a local `config.yml` have no
-readable rules; they are listed as not matched, as are origins vulnwatch cannot map. Mark those by hand in the host
+readable rules; they are listed as not matched, as are origins LabLantern cannot map. Mark those by hand in the host
 dialog. If the API fails, the last mapping stays and Cloudflare Tunnel shows as an error in the coverage matrix.
 
 ## Traefik (Docker labels, built in)
@@ -115,10 +115,10 @@ Docker provider on the same host is visible; routes from Traefik's file provider
 ## Devices without agent: TrueNAS, Home Assistant, Proxmox VE, Synology DSM and OPNsense
 
 Added under **Systems → Add host**, not in the settings: each device becomes a host of its own, with findings, a
-row in the coverage matrix and the actions **Test**, **Edit** and **Delete** in the host list. vulnwatch only reads,
-every 6 hours (and on **Test**). It never writes to the device, and the device never connects to vulnwatch.
+row in the coverage matrix and the actions **Test**, **Edit** and **Delete** in the host list. LabLantern only reads,
+every 6 hours (and on **Test**). It never writes to the device, and the device never connects to LabLantern.
 
-**TLS:** over HTTPS vulnwatch reads the device's certificate when you save and pins its SHA-256 fingerprint
+**TLS:** over HTTPS LabLantern reads the device's certificate when you save and pins its SHA-256 fingerprint
 (TrueNAS usually has a self-signed one). The key or token is only sent over a connection with exactly that
 certificate. After a certificate change the test fails with "certificate changed"; **Trust new certificate** in the
 host list pins the new one. Compare the fingerprint on the device first if you did not change it yourself.
@@ -129,7 +129,7 @@ coverage. A failed or older-than-24-hour read is an error in the matrix, never a
 **Ratings:** an update on the same release line (the first two numbers equal: 25.04.2.4 → 25.04.2.5,
 2026.10.1 → 2026.10.3) is high, a new line is medium, as with container versions.
 
-**Storage:** for TrueNAS, Synology DSM and Proxmox VE vulnwatch also reads pools and drives into one common shape:
+**Storage:** for TrueNAS, Synology DSM and Proxmox VE LabLantern also reads pools and drives into one common shape:
 each pool with its layout (RAIDZ1, 2× MIRROR, SHR …), state and fill level, each drive with model, size, type,
 temperature where the API has it, and health. The host's details show them side by side per pool, one disk symbol
 per drive (green healthy, yellow warning, red failing, dashed when the API gives no state), with model and
@@ -147,9 +147,9 @@ shows a dashed symbol. Sleeping disks are not woken (`smartctl -n standby`).
 
 Prepare on the NAS:
 
-1. Credentials → Users → Add: a user `vulnwatch` with the role **Read-only Administrator**.
+1. Credentials → Users → Add: a user `lablantern` with the role **Read-only Administrator**.
 2. An API key for that user. Before TrueNAS 24.10, API keys always have full admin rights; update first if you can.
-3. Use `https://` in the URL. TrueNAS revokes a key that was ever sent over plain HTTP, so vulnwatch refuses
+3. Use `https://` in the URL. TrueNAS revokes a key that was ever sent over plain HTTP, so LabLantern refuses
    `http://` for TrueNAS.
 
 API used (read only):
@@ -163,7 +163,7 @@ API used (read only):
 | Settings | `service.query`, `smb.config`, `ssh.config`, `ftp.config`, `system.general.config`, `auth.twofactor.config`, `user.query` |
 
 Each call in the last two rows is optional: if a version lacks it or the role may not read it, only that check is
-missing. `ssh.config` also returns the SSH host private keys; vulnwatch keeps only the password switch.
+missing. `ssh.config` also returns the SSH host private keys; LabLantern keeps only the password switch.
 
 | Finding | Source | Rating |
 | --- | --- | --- |
@@ -185,12 +185,12 @@ warning.
 
 Prepare in Home Assistant:
 
-1. Settings → People → Users → Add user: `vulnwatch`, administrator off.
+1. Settings → People → Users → Add user: `lablantern`, administrator off.
 2. Log in as that user: Profile → Security → Long-lived access tokens → Create token.
 3. URL with port, e.g. `http://homeassistant.lan:8123` (or `https://` if Home Assistant serves TLS itself).
 
 API used (read only): `GET /api/states` and `GET /api/config` with `Authorization: Bearer <token>`. Entity IDs
-depend on Home Assistant's language, so vulnwatch recognises entities by device class, unit and value type, not by
+depend on Home Assistant's language, so LabLantern recognises entities by device class, unit and value type, not by
 name. From `/api/config` it keeps only the state and the list of integrations, never the location or URLs.
 
 | Finding | Source | Rating |
@@ -222,15 +222,15 @@ one too ("stopped, not checked") until you exclude it in the overview with a rea
 count. The PVE node itself is Debian: install the agent on it for package CVEs and security updates; the connector
 adds the view of the guests and the PVE version.
 
-**Older PVE releases** list pending updates only for tokens with `Sys.Modify`, a write privilege. vulnwatch
+**Older PVE releases** list pending updates only for tokens with `Sys.Modify`, a write privilege. LabLantern
 doesn't ask for it: the version check then shows N/A with that reason, end of life is still checked.
 
 ### Synology DSM
 
-DSM has no API tokens and no read-only role, so vulnwatch logs in with an account and its password (one session per
+DSM has no API tokens and no read-only role, so LabLantern logs in with an account and its password (one session per
 read, logged out afterwards; sent as a POST body, never in a URL). The guide under **Systems → Add host → Synology
-DSM** walks through it: a dedicated user `vulnwatch` in the **administrators** group, all applications and shared
-folders denied, no 2-factor authentication. Without admin rights vulnwatch reads only the version; the update check,
+DSM** walks through it: a dedicated user `lablantern` in the **administrators** group, all applications and shared
+folders denied, no 2-factor authentication. Without admin rights LabLantern reads only the version; the update check,
 packages and storage show N/A with the reason "not an administrator", never ok. HTTPS only (port 5001), certificate
 pinned as above.
 
@@ -262,17 +262,17 @@ HTTPS only, certificate pinned as above.
 | Installed plugins | `/api/core/firmware/info` | no finding; watched by the AI early warning (`os-haproxy` as "haproxy") |
 
 OPNsense knows about updates only after it has checked (System → Firmware → Status → Check for updates, or a cron
-job). vulnwatch doesn't start a check, since that would be a write: until the firewall has checked, the version check
+job). LabLantern doesn't start a check, since that would be a write: until the firewall has checked, the version check
 shows N/A with that reason; end of life is still checked. Built from the OPNsense API docs, not yet tested against a
 real firewall.
 
 ## Other devices: collector scripts
 
 For devices where neither the agent nor an API connector fits (Unraid, UGREEN UGOS Pro, Synology DSM, OpenWrt …), a cron script on the
-device reports OS version, packages and containers to vulnwatch (`POST /api/collector/v1/report`, one token per
-device). vulnwatch only receives and never answers with a command. Only what the report provides is rated; the rest
+device reports OS version, packages and containers to LabLantern (`POST /api/collector/v1/report`, one token per
+device). LabLantern only receives and never answers with a command. Only what the report provides is rated; the rest
 is n/a. Scripts, setup and limits: [`collectors/README.md`](../collectors/README.md). The traffic stays in your
-network: the device talks to vulnwatch, vulnwatch contacts nothing for it.
+network: the device talks to LabLantern, LabLantern contacts nothing for it.
 
 ## Sharp drop alarm
 
@@ -352,12 +352,12 @@ Ollama reads feeds on your own hardware, so nothing leaves your network. On the 
 1. Make it listen on the network: `OLLAMA_HOST=0.0.0.0:11434` (for the systemd service: `systemctl edit ollama`, add
    `Environment="OLLAMA_HOST=0.0.0.0:11434"`, restart). Pull a model that supports tool calls, e.g. `ollama pull <model>`.
 2. Allow port 11434 in the firewall for the private network only (never expose Ollama to the internet; it has no login).
-3. In vulnwatch, **Settings → AI early warning → AI provider → OpenAI-compatible**: Base URL `http://<ollama-host>:11434/v1` (note the
+3. In LabLantern, **Settings → AI early warning → AI provider → OpenAI-compatible**: Base URL `http://<ollama-host>:11434/v1` (note the
    `/v1`), leave the API key empty, **Save**, then **Test**.
 4. Under **Models per task** pick the Ollama model for reading feeds.
 
 The base URL is stored like a key (the settings page shows scheme, host, port and path, never credentials or query parameters). Local models are slower (a 27B model needs a minute or more
-per entry; vulnwatch waits up to 10 minutes for one answer and does not retry) and read less reliably than the hosted ones; they do not offer web search, so research and the vendor
+per entry; LabLantern waits up to 10 minutes for one answer and does not retry) and read less reliably than the hosted ones; they do not offer web search, so research and the vendor
 check stay on Anthropic or OpenAI.
 
 ## Prometheus metrics (optional)
@@ -368,19 +368,19 @@ check, agent report age and connection, last run result and duration, canary, sc
 TLS certificate days left and watchdog pings. No finding details, no secrets.
 
 ```yaml
-- job_name: vulnwatch
+- job_name: lablantern
   scheme: https
   authorization:
     credentials: <token>
   tls_config:
-    ca_file: /etc/prometheus/vulnwatch-ca.crt   # from https://<master>:8443/ca.crt
+    ca_file: /etc/prometheus/lablantern-ca.crt   # from https://<master>:8443/ca.crt
   static_configs:
-    - targets: ['vulnwatch.lan:8443']
+    - targets: ['lablantern.lan:8443']
 ```
 
 ## What leaves your network
 
-vulnwatch has no telemetry and no update check of its own. These are the outbound connections, all over HTTPS (except a custom AI endpoint, which may be plain `http://` on your network):
+LabLantern has no telemetry and no update check of its own. These are the outbound connections, all over HTTPS (except a custom AI endpoint, which may be plain `http://` on your network):
 
 | To | When | What is sent |
 | --- | --- | --- |

@@ -18,7 +18,7 @@ beforeEach(() => {
     }
     if (url === '/api/collector/systems' || url === '/api/collector/systems/7/token') {
       return json({ id: 7, name: 'unraid', token: 'tok-once', server_url: 'https://192.0.2.10:8443',
-        ca_fingerprint: 'AA:BB', setup_cmd: 'D=${VW_DIR:-/etc/vulnwatch-collector} && echo tok-once > "$D/token"' })
+        ca_fingerprint: 'AA:BB', setup_cmd: 'D=${LL_DIR:-/etc/lablantern-collector} && echo tok-once > "$D/token"' })
     }
     return json({}, 404)
   }))

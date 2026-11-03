@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/noah-ebrt/vulnwatch/blob/main/docs/collector-schema.json",
-  "title": "vulnwatch collector report v1",
+  "$id": "https://github.com/noah-ebrt/LabLantern/blob/main/docs/collector-schema.json",
+  "title": "lablantern collector report v1",
   "description": "Body of POST /api/collector/v1/report (Authorization: Bearer <device token>). At most 5 MB and one report every 5 minutes per device. The answer is always {\"ok\": true}: the server never sends commands or updates back.",
   "type": "object",
   "required": ["schema", "os", "packages"],

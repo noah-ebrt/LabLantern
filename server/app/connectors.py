@@ -28,7 +28,7 @@ from .secrets_store import kept_secret_error
 from .publicdns import CHECK_FAILED, OVERRIDES_KEY, classify_hostname, decide, load_overrides
 from .rules import classify_certificate
 
-log = logging.getLogger("vulnwatch.connectors")
+log = logging.getLogger("lablantern.connectors")
 
 NPM_CONFIG = "npm.config"
 NPM_SECRET = "npm.password"
@@ -43,7 +43,7 @@ class NpmError(Exception):
 
 
 def _call(base: str, path: str, token: str | None = None, body: dict | None = None, timeout: float = 15):
-    headers = {"Content-Type": "application/json", "User-Agent": "vulnwatch"}
+    headers = {"Content-Type": "application/json", "User-Agent": "lablantern"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
     req = urllib.request.Request(base.rstrip("/") + path, data=json.dumps(body).encode() if body else None,
@@ -105,7 +105,7 @@ def certificate_status(hosts: list[dict], certs: list[dict], now: datetime) -> t
             domains = ", ".join(c["domains"]) or c["name"]
             when = "has an unreadable expiry date" if days is None else (
                 f"expired {abs(days):.0f} days ago" if days < 0 else f"expires in {days:.0f} days")
-            desired.append({"target": f"certificate:{c['id']}", "cve_id": "VW-CERT-EXPIRY", "severity": sev,
+            desired.append({"target": f"certificate:{c['id']}", "cve_id": "LL-CERT-EXPIRY", "severity": sev,
                             "component": domains[:300], "installed_version": (exp.date().isoformat() if exp else "?"),
                             "fixed_version": "renew in NPM",
                             "title": f"TLS certificate for {domains} {when}: NPM renews 30 days ahead, check the renewal"[:500]})

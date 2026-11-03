@@ -174,9 +174,9 @@ onMounted(load)
             <label v-for="[key, label] in EVENTS" :key="key" class="chk"><input v-model="hookEvents" type="checkbox" :value="key" />{{ label }}</label>
           </fieldset>
           <p class="subtext">
-            vulnwatch POSTs <code>changes</code> plus the full <code>states</code> as in <code>/api/health/states</code>, signed with
-            HMAC-SHA256 over <code>timestamp.body</code> in <code>X-Vulnwatch-Signature</code>. Failed calls are retried after 5 s,
-            30 s and 2 min. A heartbeat lets the receiver notice when vulnwatch itself is gone.
+            LabLantern POSTs <code>changes</code> plus the full <code>states</code> as in <code>/api/health/states</code>, signed with
+            HMAC-SHA256 over <code>timestamp.body</code> in <code>X-Lablantern-Signature</code>. Failed calls are retried after 5 s,
+            30 s and 2 min. A heartbeat lets the receiver notice when LabLantern itself is gone.
           </p>
           <div class="actions">
             <button type="submit" class="primary" :disabled="!canSaveHook">

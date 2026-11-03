@@ -153,7 +153,7 @@ def calculate_coverage_matrix(session: Session, now: datetime | None = None, sbo
 
         if sys.status == "connector":   # TrueNAS, Home Assistant: nur was die API hergibt
             checks = connector_checks(sys, now, session.scalar(select(func.count(Finding.id)).where(
-                Finding.system_id == sys.id, Finding.status == "open", Finding.cve_id == "VW-UPDATE")))
+                Finding.system_id == sys.id, Finding.status == "open", Finding.cve_id == "LL-UPDATE")))
             for status, _ in checks.values():
                 total += status != "na"
                 ok_count += status in ("ok", "fund")

@@ -38,8 +38,8 @@ def test_images_and_other_sources_never_contain_installation_paths():
     assert recommend(f(target="image:hub:1"), UBUNTU)["command"] == "docker compose build --pull"
     assert recommend(f(target="image:other:2", component="x"), UBUNTU)["command"] == "docker pull other:2"
     assert "change the image tag" in recommend(f(target="image:openspeedtest/latest", source="registry",
-                                                 cve_id="VW-IMAGE-NEWER", fixed_version="2.0"), UBUNTU)["text"]
+                                                 cve_id="LL-IMAGE-NEWER", fixed_version="2.0"), UBUNTU)["text"]
     for source, target in (("npm", "certificate:3"), ("truenas", "app:plex"), ("homeassistant", "battery:sensor.x"),
                            ("eol", "host"), ("ai", "host")):
-        r = recommend(f(source=source, target=target, cve_id="VW-X"), UBUNTU)
+        r = recommend(f(source=source, target=target, cve_id="LL-X"), UBUNTU)
         assert r["text"] and r["command"] == ""

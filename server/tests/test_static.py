@@ -7,7 +7,7 @@ from app.main import create_app
 def make(tmp_path, with_web=True):
     web = tmp_path / "web"
     web.mkdir()
-    (web / "index.html").write_text("<!doctype html><title>vulnwatch</title>")
+    (web / "index.html").write_text("<!doctype html><title>LabLantern</title>")
     (web / "assets").mkdir()
     (web / "assets" / "app.js").write_text("console.log(1)")
     app = create_app(Settings(data_dir=tmp_path / "data", web_dir=web if with_web else None))
@@ -16,7 +16,7 @@ def make(tmp_path, with_web=True):
 
 def test_root_serves_index(tmp_path):
     r = make(tmp_path).get("/")
-    assert r.status_code == 200 and "<title>vulnwatch</title>" in r.text
+    assert r.status_code == 200 and "<title>LabLantern</title>" in r.text
     assert "default-src 'self'" in r.headers["content-security-policy"]
 
 
@@ -27,7 +27,7 @@ def test_assets_are_served(tmp_path):
 
 def test_unknown_page_falls_back_to_index_for_the_spa(tmp_path):
     r = make(tmp_path).get("/einstellungen")
-    assert r.status_code == 200 and "<title>vulnwatch</title>" in r.text
+    assert r.status_code == 200 and "<title>LabLantern</title>" in r.text
 
 
 def test_unknown_api_path_is_404_not_index(tmp_path):

@@ -15,15 +15,15 @@ import (
 	"strings"
 	"time"
 
-	"vulnwatch/agent/internal/actions"
-	"vulnwatch/agent/internal/client"
-	"vulnwatch/agent/internal/collector"
-	"vulnwatch/agent/internal/config"
-	"vulnwatch/agent/internal/discover"
-	"vulnwatch/agent/internal/images"
-	"vulnwatch/agent/internal/jobs"
-	"vulnwatch/agent/internal/pairing"
-	"vulnwatch/agent/internal/queries"
+	"lablantern/agent/internal/actions"
+	"lablantern/agent/internal/client"
+	"lablantern/agent/internal/collector"
+	"lablantern/agent/internal/config"
+	"lablantern/agent/internal/discover"
+	"lablantern/agent/internal/images"
+	"lablantern/agent/internal/jobs"
+	"lablantern/agent/internal/pairing"
+	"lablantern/agent/internal/queries"
 )
 
 // AgentVersion wird beim Build per -ldflags überschrieben.
@@ -58,7 +58,7 @@ func run(args []string, stdout, stderr io.Writer, env collector.Env) int {
 	case "action-job":
 		return runActionJob(stderr)
 	case "version", "--version", "-v":
-		fmt.Fprintf(stdout, "vulnwatch-agent %s\n", AgentVersion)
+		fmt.Fprintf(stdout, "lablantern-agent %s\n", AgentVersion)
 		return 0
 	case "help", "--help", "-h":
 		printHelp(stdout)
@@ -70,19 +70,19 @@ func run(args []string, stdout, stderr io.Writer, env collector.Env) int {
 }
 
 func printHelp(w io.Writer) {
-	fmt.Fprintf(w, `vulnwatch-agent %s – push agent for vulnerabilities and inventory
+	fmt.Fprintf(w, `lablantern-agent %s – push agent for vulnerabilities and inventory
 
 Usage:
-  sudo vulnwatch-agent setup [--master <URL> [--ca-fingerprint <FP>]] [--passkeys-sha256 <HASH>]
+  sudo lablantern-agent setup [--master <URL> [--ca-fingerprint <FP>]] [--passkeys-sha256 <HASH>]
                                    (find the master on the LAN and pair with a code)
-  vulnwatch-agent enroll --server <URL> --token <TOKEN> --ca-fingerprint <FP> [--passkeys-sha256 <HASH>] [--config <PATH>]
-  vulnwatch-agent scan [--config <PATH>]      (as root: collect and report now)
-  vulnwatch-agent daemon           (run by vulnwatch-agentd.service as user vulnwatch)
-  vulnwatch-agent collect-job      (run by vulnwatch-collect.service as root without network)
-  vulnwatch-agent action-job       (run by vulnwatch-action.service: passkey-confirmed reboot/update)
-  vulnwatch-agent version
+  lablantern-agent enroll --server <URL> --token <TOKEN> --ca-fingerprint <FP> [--passkeys-sha256 <HASH>] [--config <PATH>]
+  lablantern-agent scan [--config <PATH>]      (as root: collect and report now)
+  lablantern-agent daemon           (run by lablantern-agentd.service as user lablantern)
+  lablantern-agent collect-job      (run by lablantern-collect.service as root without network)
+  lablantern-agent action-job       (run by lablantern-action.service: passkey-confirmed reboot/update)
+  lablantern-agent version
 
-The vulnwatch web UI shows the complete enroll command including the fingerprint under Systems.
+The LabLantern web UI shows the complete enroll command including the fingerprint under Systems.
 `, AgentVersion)
 }
 
@@ -120,7 +120,7 @@ func runSetup(args []string, stdout, stderr io.Writer) int {
 	}
 	url := strings.TrimRight(*master, "/")
 	if url == "" {
-		fmt.Fprintln(stdout, "Searching for the vulnwatch master on the local network…")
+		fmt.Fprintln(stdout, "Searching for the LabLantern master on the local network…")
 		found, err := discoverMasters(3 * time.Second)
 		if err != nil {
 			fmt.Fprintf(stderr, "Error: %v\n", err)
@@ -128,7 +128,7 @@ func runSetup(args []string, stdout, stderr io.Writer) int {
 		}
 		switch len(found) {
 		case 0:
-			fmt.Fprintln(stderr, "No master found on this network. Pass it explicitly: sudo vulnwatch-agent setup --master https://<ip>:8443")
+			fmt.Fprintln(stderr, "No master found on this network. Pass it explicitly: sudo lablantern-agent setup --master https://<ip>:8443")
 			return 1
 		case 1:
 			url = found[0]
@@ -171,7 +171,7 @@ func runSetup(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	fmt.Fprintf(stdout, "\n    Pairing code:  %s\n\n", pairing.Code(*fp, secret, nonce))
-	fmt.Fprintln(stdout, "Open vulnwatch → Systems → Pending pairings, check that the code is identical, then approve.")
+	fmt.Fprintln(stdout, "Open LabLantern → Systems → Pending pairings, check that the code is identical, then approve.")
 	fmt.Fprintln(stdout, "A different code means you are not talking to your master: reject it there.")
 	fmt.Fprintln(stdout, "Waiting for approval (up to 15 minutes)…")
 	deadline := time.Now().Add(15 * time.Minute)
@@ -190,12 +190,12 @@ func runSetup(args []string, stdout, stderr io.Writer) int {
 				}
 				fmt.Fprintf(stdout, "✓ Paired as '%s' (system ID %d); master certificate pinned in %s.\n", *hostName, st.SystemID, *configPath)
 				if restartDaemon() {
-					fmt.Fprintln(stdout, "✓ vulnwatch-agentd restarted; the first report follows within a minute.")
+					fmt.Fprintln(stdout, "✓ lablantern-agentd restarted; the first report follows within a minute.")
 				}
 				return 0
 			case "pending", "committed":
 			default:
-				fmt.Fprintf(stderr, "Pairing %s in the vulnwatch UI.\n", st.Status)
+				fmt.Fprintf(stderr, "Pairing %s in the LabLantern UI.\n", st.Status)
 				return 1
 			}
 		}
@@ -219,10 +219,10 @@ var restartDaemon = func() bool {
 	if os.Geteuid() != 0 {
 		return false
 	}
-	if _, err := os.Stat("/usr/lib/systemd/system/vulnwatch-agentd.service"); err != nil {
+	if _, err := os.Stat("/usr/lib/systemd/system/lablantern-agentd.service"); err != nil {
 		return false
 	}
-	return exec.Command("systemctl", "restart", "vulnwatch-agentd.service").Run() == nil
+	return exec.Command("systemctl", "restart", "lablantern-agentd.service").Run() == nil
 }
 
 func runEnroll(args []string, stdout, stderr io.Writer) int {
@@ -294,9 +294,9 @@ func runEnroll(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "✓ Host '%s' enrolled (system ID %d), server CA verified and pinned.\n", *hostName, res.SystemID)
 	fmt.Fprintf(stdout, "✓ Configuration: %s\n", target)
 	if restartDaemon() {
-		fmt.Fprintln(stdout, "✓ vulnwatch-agentd restarted; it reports within a minute.")
+		fmt.Fprintln(stdout, "✓ lablantern-agentd restarted; it reports within a minute.")
 	}
-	fmt.Fprintln(stdout, "Next step: approve the host in the vulnwatch web UI under Systems.")
+	fmt.Fprintln(stdout, "Next step: approve the host in the LabLantern web UI under Systems.")
 	return 0
 }
 
@@ -454,13 +454,13 @@ func deliver(cl *client.Client, src source, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// runDaemon läuft als Benutzer vulnwatch: hält per Long-Poll eine ausgehende Verbindung zum Master,
+// runDaemon läuft als Benutzer lablantern: hält per Long-Poll eine ausgehende Verbindung zum Master,
 // meldet, wenn ein Report fällig ist, und führt Befehle aus der festen Liste aus. Daten erhebt der
 // Sammler (root, ohne Netz). Nach dem Start meldet er sofort, damit ein Update gleich sichtbar ist.
 func runDaemon(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("daemon", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	configPath := fs.String("config", "/etc/vulnwatch/agent.json", "path of the configuration file")
+	configPath := fs.String("config", "/etc/lablantern/agent.json", "path of the configuration file")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -474,7 +474,7 @@ func runDaemon(args []string, stdout, stderr io.Writer) int {
 			force = false
 		} else if authRejected {
 			// gelöscht oder widerrufen: selten nachfragen, bis jemand neu paart oder das Paket entfernt
-			fmt.Fprintln(stderr, "The master no longer accepts this agent (deleted or revoked). Retrying in 15 minutes; pair again with 'vulnwatch-agent setup --force' or remove the package.")
+			fmt.Fprintln(stderr, "The master no longer accepts this agent (deleted or revoked). Retrying in 15 minutes; pair again with 'lablantern-agent setup --force' or remove the package.")
 			time.Sleep(rejectedDelay)
 		} else {
 			time.Sleep(retryDelay)
@@ -626,9 +626,9 @@ func stageUpdate(cl *client.Client) error {
 	return nil
 }
 
-// runActionJob läuft als root ohne Netz (vulnwatch-action.service).
+// runActionJob läuft als root ohne Netz (lablantern-action.service).
 func runActionJob(stderr io.Writer) int {
-	cfg, err := config.LoadConfig("/etc/vulnwatch/agent.json")
+	cfg, err := config.LoadConfig("/etc/lablantern/agent.json")
 	if err != nil {
 		fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 1
@@ -642,7 +642,7 @@ func runActionJob(stderr io.Writer) int {
 	return 0
 }
 
-// runCollectJob läuft als root ohne Netz (vulnwatch-collect.service) und arbeitet einen Auftrag ab.
+// runCollectJob läuft als root ohne Netz (lablantern-collect.service) und arbeitet einen Auftrag ab.
 func runCollectJob(stderr io.Writer, env collector.Env, p jobs.Paths) int {
 	req, err := p.Take()
 	if err != nil {

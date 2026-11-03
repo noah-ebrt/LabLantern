@@ -16,7 +16,7 @@ import openai
 
 from .aibase import AiError, quick, short_error
 
-log = logging.getLogger("vulnwatch.openai")
+log = logging.getLogger("lablantern.openai")
 
 OPENAI_BASE = "https://api.openai.com/v1"
 # Chat-Modelle bei OpenAI (Präfixe); alles andere in der Modellliste (Bilder, Audio, Embeddings …) wird nicht angeboten

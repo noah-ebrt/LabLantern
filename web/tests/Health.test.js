@@ -35,9 +35,9 @@ beforeEach(() => {
         monitors: [MON], incidents: [{ monitor_id: 1, name: 'pve', ts: 1800000000, detail: '' }], fritz: false })
     }
     if (url === '/api/health/options') return json(OPTIONS)
-    if (url === '/api/health/tokens' && init.method === 'POST') return json({ id: 1, token: 'vwh_secret' })
+    if (url === '/api/health/tokens' && init.method === 'POST') return json({ id: 1, token: 'llh_secret' })
     if (url === '/api/health/tokens') return json([])
-    if (url === '/api/health/webhooks' && init.method === 'POST') return json({ id: 1, secret: 'vwhs_key' })
+    if (url === '/api/health/webhooks' && init.method === 'POST') return json({ id: 1, secret: 'llhs_key' })
     if (url === '/api/health/webhooks') return json([])
     if (url === '/api/health/monitors' && init.method === 'POST') return json({ id: 2, slug: 'nas', heartbeat_tokens: {} })
     return json({}, 404)
@@ -162,7 +162,7 @@ describe('HealthApiSettings', () => {
     await w.find('input[aria-label="Token name"]').setValue('LED')
     await w.findAll('form')[0].trigger('submit')
     await flushPromises()
-    expect(w.find('.cmd-text').text()).toBe('vwh_secret')
+    expect(w.find('.cmd-text').text()).toBe('llh_secret')
     expect(w.text()).toContain('Token for LED · shown only now')
 
     await w.find('input[aria-label="Webhook name"]').setValue('Shelf')
@@ -171,7 +171,7 @@ describe('HealthApiSettings', () => {
     await flushPromises()
     expect(calls.find((c) => c.url === '/api/health/webhooks' && c.method === 'POST').body).toEqual({
       name: 'Shelf', url: 'http://192.168.1.50/hook', events: ['state_changed', 'engine_down', 'engine_up'], monitors: [], heartbeat_min: 0 })
-    expect(w.find('.cmd-text').text()).toBe('vwhs_key')
+    expect(w.find('.cmd-text').text()).toBe('llhs_key')
     expect(w.text()).toContain('Signing key for Shelf')
   })
 

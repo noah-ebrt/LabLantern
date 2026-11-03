@@ -21,7 +21,7 @@ def report(**over):
         "kernel": "6.8.0-45-generic", "arch": "amd64", "security_updates_count": 2, "security_updates_known": True,
         "reboot_required": True, "packages": PKGS, "collection_errors": {},
         "containers": [{"id": "abc123", "name": "caddy", "image": "caddy:2.9.1-alpine", "image_id": "sha256:1"},
-                       {"id": "def456", "name": "server", "image": "vulnwatch-server:dev", "image_id": "sha256:2"}],
+                       {"id": "def456", "name": "server", "image": "lablantern-server:dev", "image_id": "sha256:2"}],
     }
     base.update(over)
     return base
@@ -58,7 +58,7 @@ def test_enrollment_info_carries_the_real_ca_fingerprint_and_a_pinned_command(ad
     env, client, h = admin
     r = client.post("/api/systems/enrollment-token", headers={**h, "Host": "192.0.2.10:8443"})
     d = r.json()
-    assert d["ca_fingerprint"] == os.environ["VW_TEST_CA_FP"]
+    assert d["ca_fingerprint"] == os.environ["LL_TEST_CA_FP"]
     assert d["server_url"] == "https://192.0.2.10:8443"
     assert f"--ca-fingerprint {d['ca_fingerprint']}" in d["enroll_cmd"]
     assert f"--token {d['token']}" in d["enroll_cmd"] and f"--server {d['server_url']}" in d["enroll_cmd"]
@@ -68,16 +68,16 @@ def test_enrollment_info_carries_the_real_ca_fingerprint_and_a_pinned_command(ad
 def test_agents_get_the_configured_ip_not_the_name_the_admin_used(admin):
     # Neue Hosts kennen den Namen oft nicht (anderer DNS); die IP funktioniert immer
     env, client, h = admin
-    d = client.post("/api/systems/enrollment-token", headers={**h, "Host": "vulnwatch.lan:9443"}).json()
+    d = client.post("/api/systems/enrollment-token", headers={**h, "Host": "lablantern.lan:9443"}).json()
     assert d["server_url"] == "https://192.0.2.10:8443"
 
 
 def test_without_a_configured_ip_the_used_name_is_taken_if_configured(tmp_path, caplog):
-    env = Env(tmp_path, caplog, hostnames=["vulnwatch.lan", "localhost"])
+    env = Env(tmp_path, caplog, hostnames=["lablantern.lan", "localhost"])
     secret = env.complete_setup()
     csrf = env.login(env.client, secret).json()["csrf_token"]
-    d = env.client.post("/api/systems/enrollment-token", headers={"X-CSRF-Token": csrf, "Host": "vulnwatch.lan:9443"}).json()
-    assert d["server_url"] == "https://vulnwatch.lan:9443"
+    d = env.client.post("/api/systems/enrollment-token", headers={"X-CSRF-Token": csrf, "Host": "lablantern.lan:9443"}).json()
+    assert d["server_url"] == "https://lablantern.lan:9443"
 
 
 def test_unknown_host_header_is_not_reflected_into_the_command(admin):
@@ -103,7 +103,7 @@ def test_install_command_pins_package_checksums_and_enrolls(admin):
         assert f"{name}) SUM={hashlib.sha256(f'fake-{name}'.encode()).hexdigest()};;" in cmd
     assert "sha256sum -c" in cmd and "/api/agent/download/$ARCH.$PKG" in cmd
     assert "sudo dpkg -i" in cmd and "sudo rpm -U" in cmd and "mktemp -d" in cmd
-    assert cmd.endswith(f"sudo vulnwatch-agent enroll --server https://192.0.2.10:8443 --token {d['token']} "
+    assert cmd.endswith(f"sudo lablantern-agent enroll --server https://192.0.2.10:8443 --token {d['token']} "
                         f"--ca-fingerprint {d['ca_fingerprint']}")
 
 
@@ -127,13 +127,13 @@ def test_agent_download_serves_only_known_files(env):
 
 
 def test_download_404_when_binary_is_missing(env):
-    (env.agent_dir / "vulnwatch-agent-linux-arm64").unlink()
+    (env.agent_dir / "lablantern-agent-linux-arm64").unlink()
     assert env.new_client().get("/api/agent/download/arm64").status_code == 404
 
 
 def test_tls_allowed_only_for_configured_names(env):
     c = env.new_client()
-    for ok in ("vulnwatch.lan", "192.0.2.10", "localhost", "VULNWATCH.LAN"):
+    for ok in ("lablantern.lan", "192.0.2.10", "localhost", "LABLANTERN.LAN"):
         assert c.get(f"/api/internal/tls-allowed?domain={ok}").status_code == 200, ok
     for bad in ("evil.example", "10.0.0.1", ""):
         assert c.get(f"/api/internal/tls-allowed?domain={bad}").status_code in (404, 422), bad
@@ -307,7 +307,7 @@ def test_ip_follows_the_latest_report(admin):
 def test_agent_commands_use_the_ip_even_when_the_ui_is_opened_by_name(admin):
     env, client, h = admin
     env.app.state.ctx.settings_agent_version = lambda: "0.12.0"
-    d = client.post("/api/systems/enrollment-token", headers={**h, "Host": "vulnwatch.lan:8443"}).json()
+    d = client.post("/api/systems/enrollment-token", headers={**h, "Host": "lablantern.lan:8443"}).json()
     assert "https://192.0.2.10:8443/api/agent/download/" in d["setup_cmd"]
     assert d["setup_cmd"].endswith(f"setup --master https://192.0.2.10:8443 --ca-fingerprint {d['ca_fingerprint']}")
 

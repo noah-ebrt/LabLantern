@@ -11,11 +11,11 @@ func TestParseUsesSRVPortAndARecord(t *testing.T) {
 	b := dnsmessage.NewBuilder(nil, dnsmessage.Header{Response: true, Authoritative: true})
 	b.StartAnswers()
 	b.PTRResource(dnsmessage.ResourceHeader{Name: dnsmessage.MustNewName(service), Class: dnsmessage.ClassINET},
-		dnsmessage.PTRResource{PTR: dnsmessage.MustNewName("vulnwatch." + service)})
+		dnsmessage.PTRResource{PTR: dnsmessage.MustNewName("lablantern." + service)})
 	b.StartAdditionals()
-	b.SRVResource(dnsmessage.ResourceHeader{Name: dnsmessage.MustNewName("vulnwatch." + service), Class: dnsmessage.ClassINET},
-		dnsmessage.SRVResource{Port: 8443, Target: dnsmessage.MustNewName("vulnwatch-master.local.")})
-	b.AResource(dnsmessage.ResourceHeader{Name: dnsmessage.MustNewName("vulnwatch-master.local."), Class: dnsmessage.ClassINET},
+	b.SRVResource(dnsmessage.ResourceHeader{Name: dnsmessage.MustNewName("lablantern." + service), Class: dnsmessage.ClassINET},
+		dnsmessage.SRVResource{Port: 8443, Target: dnsmessage.MustNewName("lablantern-master.local.")})
+	b.AResource(dnsmessage.ResourceHeader{Name: dnsmessage.MustNewName("lablantern-master.local."), Class: dnsmessage.ClassINET},
 		dnsmessage.AResource{A: [4]byte{192, 0, 2, 10}})
 	msg, err := b.Finish()
 	if err != nil {

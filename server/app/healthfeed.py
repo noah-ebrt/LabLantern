@@ -21,7 +21,7 @@ from sqlalchemy import select
 from . import healthwebhooks as webhooks
 from .models import HealthCheck, HealthMonitor
 
-log = logging.getLogger("vulnwatch.health")
+log = logging.getLogger("lablantern.health")
 VERSION = 1
 WATCH = 5.0
 MAX_WAIT = 55.0

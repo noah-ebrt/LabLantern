@@ -142,7 +142,7 @@ def build_passkeys_router(ctx: Context, guards: Guards) -> APIRouter:
     def need_rp() -> str:
         rp = rp_id(ctx)
         if rp is None:
-            raise HTTPException(409, "Passkeys need a hostname: add one (e.g. vulnwatch.lan) to VULNWATCH_HOSTNAMES "
+            raise HTTPException(409, "Passkeys need a hostname: add one (e.g. lablantern.lan) to LABLANTERN_HOSTNAMES "
                                      "and open the UI under that name")
         return rp
 
@@ -189,7 +189,7 @@ def build_passkeys_router(ctx: Context, guards: Guards) -> APIRouter:
         with ctx.session_factory() as s:
             existing = s.scalars(select(Passkey).where(Passkey.user_id == user.id)).all()
         opts = generate_registration_options(
-            rp_id=rp, rp_name="vulnwatch", user_name=user.username, user_id=f"vw-user-{user.id}".encode(),
+            rp_id=rp, rp_name="LabLantern", user_name=user.username, user_id=f"ll-user-{user.id}".encode(),
             exclude_credentials=[PublicKeyCredentialDescriptor(id=_b64d(k.credential_id)) for k in existing],
             authenticator_selection=AuthenticatorSelectionCriteria(
                 resident_key=ResidentKeyRequirement.PREFERRED, user_verification=UserVerificationRequirement.REQUIRED),

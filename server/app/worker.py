@@ -18,10 +18,10 @@ from .canary import run_canary_check
 from .scanner import (ScanError, grype_db_status, grype_db_update, merge_sources, osv_db_status, scan_sbom_grype,
                       scan_sboms_osv)
 
-log = logging.getLogger("vulnwatch.worker")
+log = logging.getLogger("lablantern.worker")
 SCANNERS = ("grype+osv", "grype")
 # Leichter Modus: nur Grype. OSV lädt dann keine Datenbanken (spart den größten Teil des Arbeitsspeichers)
-LIGHT_STATUS = {"ok": True, "disabled": True, "reason": "light mode (VULNWATCH_SCANNERS=grype)"}
+LIGHT_STATUS = {"ok": True, "disabled": True, "reason": "light mode (LABLANTERN_SCANNERS=grype)"}
 OSV_REUSE_HOURS = 20   # ältere OSV-Datenbank: neu laden statt Ergebnisse wiederverwenden (Frische-Gate)
 
 
@@ -232,7 +232,7 @@ class Worker:
         systems: list[dict] = []
         files: dict[str, Path] = {}   # Inhalts-Hash -> SBOM-Datei (für Grype und den OSV-Durchgang)
         parts: list[tuple[dict, str, list[tuple[str, str]]]] = []   # System, Hash der Host-SBOM, (Image-Ref, Hash)
-        with tempfile.TemporaryDirectory(prefix="vw-sbom-") as tmp:
+        with tempfile.TemporaryDirectory(prefix="ll-sbom-") as tmp:
             # 1. Alle SBOMs laden und nach Inhalt zusammenfassen: dasselbe Image auf mehreren Hosts nur einmal
             report(job["id"], step="download", text=f"Downloading the SBOMs of {len(hosts)} hosts")
             for entry in hosts:
@@ -334,30 +334,30 @@ def _noop() -> None:
 
 
 def scanners_from_env(env) -> str:
-    value = env.get("VULNWATCH_SCANNERS", "grype+osv").strip() or "grype+osv"
+    value = env.get("LABLANTERN_SCANNERS", "grype+osv").strip() or "grype+osv"
     if value not in SCANNERS:
-        raise SystemExit(f"VULNWATCH_SCANNERS must be one of {', '.join(SCANNERS)}, not {value!r}")
+        raise SystemExit(f"LABLANTERN_SCANNERS must be one of {', '.join(SCANNERS)}, not {value!r}")
     return value
 
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     scanners = scanners_from_env(os.environ)
-    token = Path(os.environ.get("VULNWATCH_WORKER_TOKEN_FILE", "/worker_auth/worker.token")).read_text().strip()
-    canary_dir = Path(os.environ.get("VULNWATCH_CANARY_DIR", "/canary"))
-    osv_cache = Path(os.environ.get("VULNWATCH_OSV_CACHE", str(Path.home() / ".cache" / "osv")))
+    token = Path(os.environ.get("LABLANTERN_WORKER_TOKEN_FILE", "/worker_auth/worker.token")).read_text().strip()
+    canary_dir = Path(os.environ.get("LABLANTERN_CANARY_DIR", "/canary"))
+    osv_cache = Path(os.environ.get("LABLANTERN_OSV_CACHE", str(Path.home() / ".cache" / "osv")))
     have_osv = scanners != "grype" and shutil.which("osv-scanner") is not None
     if scanners == "grype":
         log.info("Light mode: scanning with Grype only, OSV is switched off")
     elif not have_osv:
         log.warning("osv-scanner not found: runs report the second source as missing")
     # Zwischenspeicher im tmpfs: übersteht Läufe, aber keinen neuen Container (neue Grype-Version, frisch)
-    result_cache = Path(tempfile.gettempdir()) / "vw-results"
+    result_cache = Path(tempfile.gettempdir()) / "ll-results"
     result_cache.mkdir(exist_ok=True)
-    worker = Worker(ServerClient(os.environ.get("VULNWATCH_SERVER_URL", "http://server:8000"), token), canary_dir,
+    worker = Worker(ServerClient(os.environ.get("LABLANTERN_SERVER_URL", "http://server:8000"), token), canary_dir,
                     osv_fn=(lambda paths: scan_sboms_osv(paths, osv_cache)) if have_osv else None,
                     osv_status=lambda: osv_db_status(osv_cache),
-                    parallel=int(os.environ.get("VULNWATCH_SCAN_PARALLEL", "4")), result_cache=result_cache,
+                    parallel=int(os.environ.get("LABLANTERN_SCAN_PARALLEL", "4")), result_cache=result_cache,
                     osv_cache_dir=osv_cache, scanners=scanners)
     running = True
 

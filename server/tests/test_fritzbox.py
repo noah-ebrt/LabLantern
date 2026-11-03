@@ -75,7 +75,7 @@ def test_router_forwards_are_read_and_matched(ctx, monkeypatch):
         exposed, unmatched = fritzbox.match_forwards(s, forwards)
     assert exposed == {a: ["npm"], b: ["mc-hardcore"]}
     assert unmatched == [{"forward": "TCP 51820 → 10.0.0.99:51820", "description": "wireguard",
-                          "reason": "device is not monitored by vulnwatch"}]
+                          "reason": "device is not monitored by lablantern"}]
 
 
 def test_tr064_port_is_added_when_missing():

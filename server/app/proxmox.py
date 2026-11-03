@@ -16,7 +16,7 @@ from .models import System
 from .rules import classify_disk, classify_update
 
 APT_FORBIDDEN = ("pending updates not readable: this Proxmox VE version needs Sys.Modify for /apt/update, "
-                 "vulnwatch asks only for PVEAuditor (read-only)")
+                 "lablantern asks only for PVEAuditor (read-only)")
 
 
 class _Forbidden(ApplianceError):
@@ -38,7 +38,7 @@ class PveClient:
         try:
             conn.connect()
             _check_pin(conn.sock, self.fingerprint)
-            conn.request("GET", "/api2/json" + path, headers={"Authorization": self.auth, "User-Agent": "vulnwatch"})
+            conn.request("GET", "/api2/json" + path, headers={"Authorization": self.auth, "User-Agent": "lablantern"})
             r = conn.getresponse()
             status, body = r.status, r.read(MAX_MESSAGE)
         except (OSError, ssl.SSLError, http.client.HTTPException) as e:
@@ -187,7 +187,7 @@ def proxmox_findings(data: dict) -> list[dict]:
     for n in data["nodes"]:
         pm = next((u for u in n["updates"] or [] if u["package"] == "pve-manager"), None)
         if pm:
-            out.append({"target": f"node:{n['node']}", "cve_id": "VW-UPDATE", "component": "Proxmox VE",
+            out.append({"target": f"node:{n['node']}", "cve_id": "LL-UPDATE", "component": "Proxmox VE",
                         "severity": classify_update(pm["installed"], pm["new"]),
                         "installed_version": pm["installed"], "fixed_version": pm["new"],
                         "title": f"Proxmox VE {pm['new']} is available on {n['node']} (installed {pm['installed']})"})
@@ -195,11 +195,11 @@ def proxmox_findings(data: dict) -> list[dict]:
     st = data.get("storage") or {}
     for p in st.get("pools") or []:
         if p["state"] in ("bad", "warn"):
-            out.append({"target": f"pool:{p['name']}", "cve_id": "VW-POOL", "component": f"ZFS pool {p['name']}",
+            out.append({"target": f"pool:{p['name']}", "cve_id": "LL-POOL", "component": f"ZFS pool {p['name']}",
                         "severity": "hoch" if p["state"] == "bad" else "mittel", "installed_version": p["status"],
                         "fixed_version": "zpool status -v on the node", "title": f"ZFS pool {p['name']} is {p['status']}"})
         if p["percent"] is not None and (sev := classify_disk(p["percent"])):
-            out.append({"target": f"disk:{p['name']}", "cve_id": "VW-DISK", "component": f"ZFS pool {p['name']}",
+            out.append({"target": f"disk:{p['name']}", "cve_id": "LL-DISK", "component": f"ZFS pool {p['name']}",
                         "severity": sev, "installed_version": f"{p['percent']:.0f} %", "fixed_version": "free space",
                         "title": f"ZFS pool {p['name']} is {p['percent']:.0f} % full"})
     return out + drive_findings(st, "node → Disks: check S.M.A.R.T. values and replace the drive")

@@ -121,7 +121,7 @@ def served(env):
 
 
 def stream_lines(base, client):
-    cookie = {"Cookie": f"vw_session={client.cookies.get('vw_session')}"}
+    cookie = {"Cookie": f"ll_session={client.cookies.get('ll_session')}"}
     return httpx.stream("GET", f"{base}/api/events", headers=cookie, timeout=5)
 
 

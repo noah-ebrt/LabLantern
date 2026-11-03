@@ -14,8 +14,8 @@ def running_server(tmp_path):
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
-    env = {**os.environ, "VULNWATCH_DATA_DIR": str(tmp_path / "data"), "VULNWATCH_PORT": str(port),
-           "VULNWATCH_HOSTNAMES": "localhost,127.0.0.1", "VULNWATCH_BIND": "127.0.0.1"}
+    env = {**os.environ, "LABLANTERN_DATA_DIR": str(tmp_path / "data"), "LABLANTERN_PORT": str(port),
+           "LABLANTERN_HOSTNAMES": "localhost,127.0.0.1", "LABLANTERN_BIND": "127.0.0.1"}
     log = (tmp_path / "server.log").open("w")
     proc = subprocess.Popen([sys.executable, "-m", "app"], env=env, stdout=log, stderr=subprocess.STDOUT)
     try:
@@ -56,8 +56,8 @@ def start(tmp_path, extra_env):
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
-    env = {**os.environ, "VULNWATCH_DATA_DIR": str(tmp_path / "data"), "VULNWATCH_PORT": str(port),
-           "VULNWATCH_HOSTNAMES": "localhost", "VULNWATCH_BIND": "127.0.0.1", **extra_env}
+    env = {**os.environ, "LABLANTERN_DATA_DIR": str(tmp_path / "data"), "LABLANTERN_PORT": str(port),
+           "LABLANTERN_HOSTNAMES": "localhost", "LABLANTERN_BIND": "127.0.0.1", **extra_env}
     log = (tmp_path / "server.log").open("w")
     proc = subprocess.Popen([sys.executable, "-m", "app"], env=env, stdout=log, stderr=subprocess.STDOUT)
     for _ in range(100):
@@ -70,7 +70,7 @@ def start(tmp_path, extra_env):
 
 
 def test_plain_http_mode_behind_a_proxy_creates_no_pki_and_logs_no_misleading_fingerprint(tmp_path):
-    proc, port, log = start(tmp_path, {"VULNWATCH_PLAIN_HTTP": "1"})
+    proc, port, log = start(tmp_path, {"LABLANTERN_PLAIN_HTTP": "1"})
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/state", timeout=5) as r:
             assert r.status == 200
@@ -85,9 +85,9 @@ def test_plain_http_mode_behind_a_proxy_creates_no_pki_and_logs_no_misleading_fi
 
 def test_master_key_and_worker_token_can_live_in_their_own_volumes(tmp_path):
     keys, auth = tmp_path / "keys", tmp_path / "auth"
-    proc, port, log = start(tmp_path, {"VULNWATCH_PLAIN_HTTP": "1",
-                                       "VULNWATCH_MASTER_KEY_FILE": str(keys / "master.key"),
-                                       "VULNWATCH_WORKER_TOKEN_FILE": str(auth / "worker.token")})
+    proc, port, log = start(tmp_path, {"LABLANTERN_PLAIN_HTTP": "1",
+                                       "LABLANTERN_MASTER_KEY_FILE": str(keys / "master.key"),
+                                       "LABLANTERN_WORKER_TOKEN_FILE": str(auth / "worker.token")})
     try:
         pass
     finally:
@@ -102,7 +102,7 @@ def test_forwarded_for_is_only_believed_from_the_proxy_address(tmp_path):
     """Wer Port 8000 direkt erreicht (Worker, Docker-Host), darf keine fremde Adresse vortäuschen: 20 Fehlversuche
     mit wechselndem X-Forwarded-For zählen alle für dieselbe echte Adresse, der 21. wird gesperrt."""
     import json as _json
-    proc, port, log = start(tmp_path, {"VULNWATCH_PLAIN_HTTP": "1", "VULNWATCH_TRUSTED_PROXY": "10.255.255.2"})
+    proc, port, log = start(tmp_path, {"LABLANTERN_PLAIN_HTTP": "1", "LABLANTERN_TRUSTED_PROXY": "10.255.255.2"})
     codes = []
     try:
         for i in range(21):

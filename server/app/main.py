@@ -48,7 +48,7 @@ from .models import AdminUser, put_setting
 from .notify import notify_via_apprise
 from .secrets_store import SecretStore, load_or_create_master_key, migrate_master_key
 
-log = logging.getLogger("vulnwatch")
+log = logging.getLogger("lablantern")
 
 
 def _prepare_setup_token(ctx: Context) -> None:
@@ -71,7 +71,7 @@ def create_app(settings: Settings, clock: Callable[[], float] = time.time) -> Fa
     for name in ("httpx", "httpx2", "httpcore", "openai", "anthropic"):
         logging.getLogger(name).setLevel(logging.WARNING)
     settings.data_dir.mkdir(parents=True, exist_ok=True)
-    engine = make_engine(settings.data_dir / "vulnwatch.db")
+    engine = make_engine(settings.data_dir / "lablantern.db")
     init_db(engine)
     session_factory = sessionmaker(engine, expire_on_commit=False)
     with session_factory() as s:
@@ -111,7 +111,7 @@ def create_app(settings: Settings, clock: Callable[[], float] = time.time) -> Fa
             health.stop()
             scheduler.shutdown(wait=False)
 
-    app = FastAPI(title="vulnwatch", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
+    app = FastAPI(title="LabLantern", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     app.state.scheduler = scheduler
     app.state.health = health
     app.state.ctx = ctx

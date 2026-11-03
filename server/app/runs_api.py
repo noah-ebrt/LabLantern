@@ -53,13 +53,13 @@ def _loads(raw: str) -> dict:
 
 def fixable_now():
     """Scannerfund mit Fix-Version, den ein Update jetzt behebt: das Paketupdate auf dem Host, oder für das Image
-    gibt es ein neueres (VW-IMAGE-OUTDATED/-NEWER auf demselben Ziel). Steht der Fix nur in der Paketquelle der
+    gibt es ein neueres (LL-IMAGE-OUTDATED/-NEWER auf demselben Ziel). Steht der Fix nur in der Paketquelle der
     Distribution und das Image ist nicht neu gebaut, zählt er nicht. Ob das neue Image den Fix wirklich enthält,
     zeigt erst der nächste Scan."""
     update = aliased(Finding)
     # nicht korreliert: einmal ausgewertet; ein EXISTS je Fund dauert bei >100 000 offenen Funden Minuten
     image_update = tuple_(Finding.system_id, Finding.target).in_(
-        select(update.system_id, update.target).where(update.cve_id.in_(("VW-IMAGE-OUTDATED", "VW-IMAGE-NEWER")),
+        select(update.system_id, update.target).where(update.cve_id.in_(("LL-IMAGE-OUTDATED", "LL-IMAGE-NEWER")),
                                                       update.status != "resolved"))
     return ((Finding.fixed_version != "") & Finding.source.in_(("grype", "osv", "both"))
             & ((Finding.target == "host") | image_update))

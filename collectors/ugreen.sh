@@ -1,13 +1,13 @@
 #!/bin/sh
-# vulnwatch collector for UGREEN NAS (UGOS Pro, Debian-based): OS version, Debian packages (dpkg) and running
+# LabLantern collector for UGREEN NAS (UGOS Pro, Debian-based): OS version, Debian packages (dpkg) and running
 # containers (Docker app). The packages are checked against Debian's advisories. Image SBOMs only if syft is installed.
 # Run as root (sudo -i after SSH login; enable SSH under Control Panel → Terminal). Setup: the command from
 # "+ Add host → Other device". Keep the script on a data volume, a firmware update may reset the system disk:
-#   export VW_DIR=/volume1/vulnwatch   (before the setup command, and in the cron line)
+#   export LL_DIR=/volume1/lablantern   (before the setup command, and in the cron line)
 # Cron (crontab -e as root):
-#   17 * * * * VW_DIR=/volume1/vulnwatch sh /volume1/vulnwatch/ugreen.sh
+#   17 * * * * LL_DIR=/volume1/lablantern sh /volume1/lablantern/ugreen.sh
 set -eu
-D=${VW_DIR:-/etc/vulnwatch-collector}
+D=${LL_DIR:-/etc/lablantern-collector}
 # shellcheck source=/dev/null # setzt ID, VERSION_ID, PRETTY_NAME
 . /etc/os-release
 

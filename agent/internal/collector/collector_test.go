@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"vulnwatch/agent/internal/queries"
+	"lablantern/agent/internal/queries"
 )
 
 type result struct {
@@ -224,7 +224,7 @@ func TestRebootRequired(t *testing.T) {
 }
 
 const dockerJSON = `[{"Id":"0123456789abcdef0123","Names":["/caddy"],"Image":"caddy:2.9.1-alpine","ImageID":"sha256:1","State":"running","Labels":{"a":"b"},"Created":1700000000,"Ports":[{"PrivatePort":443,"PublicPort":8443,"Type":"tcp"},{"PrivatePort":443,"PublicPort":8443,"Type":"tcp","IP":"::"}]},
-{"Id":"fedcba9876543210ffff","Names":["/server"],"Image":"vulnwatch-server:dev","ImageID":"sha256:2","State":"exited","Labels":null,"Created":1700000100}]`
+{"Id":"fedcba9876543210ffff","Names":["/server"],"Image":"lablantern-server:dev","ImageID":"sha256:2","State":"exited","Labels":null,"Created":1700000100}]`
 
 func TestDockerContainersIncludingStoppedOnes(t *testing.T) {
 	f := ubuntu()

@@ -1,6 +1,6 @@
 {
-  "name": "vulnwatch",
-  "short_name": "vulnwatch",
+  "name": "LabLantern",
+  "short_name": "LabLantern",
   "description": "Self-hosted vulnerability monitor and fleet security dashboard",
   "icons": [
     {

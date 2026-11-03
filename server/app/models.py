@@ -292,7 +292,7 @@ class Passkey(Base):
 
 
 class Pairing(Base):
-    """Anfrage eines neuen Agenten über `vulnwatch-agent setup`; wird erst nach Code-Vergleich freigegeben."""
+    """Anfrage eines neuen Agenten über `lablantern-agent setup`; wird erst nach Code-Vergleich freigegeben."""
 
     __tablename__ = "pairings"
 

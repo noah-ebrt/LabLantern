@@ -11,7 +11,7 @@ RUN go mod download
 COPY agent/ ./
 # Ein Release entsteht nur aus Code, dessen Tests durchlaufen.
 RUN go vet ./... && go test ./... \
- && go build -trimpath -o /usr/local/bin/vw-release ./cmd/vw-release \
+ && go build -trimpath -o /usr/local/bin/ll-release ./cmd/ll-release \
  && install -m 0755 packaging/build-agent.sh /usr/local/bin/build-agent \
  && mkdir /key /stage /releases /cache && chown 10001:10001 /key /stage /releases /cache
 ENV GOCACHE=/cache/go-build HOME=/tmp

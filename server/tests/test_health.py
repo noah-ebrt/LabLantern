@@ -277,13 +277,13 @@ def test_long_poll_waits_for_a_change(hw, monkeypatch):
 
     # /status kann dasselbe, für Geräte, die Latenz und Alter mit anzeigen
     r = client.get("/api/health/status", headers=auth)
-    rev = r.headers["X-Vulnwatch-Rev"]
+    rev = r.headers["X-Lablantern-Rev"]
     assert rev == str(r.json()["rev"])
     run(env, engine)   # neue Messwerte, kein Wechsel
     assert client.get(f"/api/health/status?since={rev}&wait=0.2", headers=auth).status_code == 304
     client.post(f"/api/health/monitors/{mid}/pause", json={"paused": False}, headers=h)
     r = client.get(f"/api/health/status?since={rev}&wait=10", headers=auth)
-    assert r.status_code == 200 and r.json()["monitors"][0]["state"] == "unknown" and r.headers["X-Vulnwatch-Rev"] != rev
+    assert r.status_code == 200 and r.json()["monitors"][0]["state"] == "unknown" and r.headers["X-Lablantern-Rev"] != rev
 
 
 def test_token_is_rate_limited_and_shows_last_ip(hw):
@@ -517,13 +517,13 @@ def test_webhook_gets_signed_events(hw, receiver):
     run(env, engine)   # erste Runde: die Engine läuft an, alles von unknown auf up
     headers, body = got[-1]
     doc = json.loads(body)
-    assert headers["X-Vulnwatch-Event"] == "engine_up" == doc["event"] and doc["states"] == {"nas": "up"}
+    assert headers["X-Lablantern-Event"] == "engine_up" == doc["event"] and doc["states"] == {"nas": "up"}
     assert doc["changes"][0] | {"at": None} == {"slug": "nas", "name": "NAS", "critical": True, "from": "unknown",
                                                 "to": "up", "at": None}
     assert doc["v"] == 1 and doc["rev"] and doc["hosts"]["nas"] == {"label": "NAS", "critical": True, "kind": "service"}
-    signed = headers["X-Vulnwatch-Timestamp"].encode() + b"." + body
-    assert headers["X-Vulnwatch-Signature"] == "sha256=" + hmac.new(key.encode(), signed, hashlib.sha256).hexdigest()
-    assert len(headers["X-Vulnwatch-Delivery"]) == 36
+    signed = headers["X-Lablantern-Timestamp"].encode() + b"." + body
+    assert headers["X-Lablantern-Signature"] == "sha256=" + hmac.new(key.encode(), signed, hashlib.sha256).hexdigest()
+    assert len(headers["X-Lablantern-Delivery"]) == 36
 
     n = len(got)
     run(env, engine)   # kein Wechsel, kein Aufruf
@@ -600,7 +600,7 @@ def test_webhook_heartbeat_and_retries(hw, receiver, monkeypatch):
     assert got == []
     env.clock.advance(60)
     engine.feed.watch_once()
-    assert [json.loads(b)["event"] for _, b in got] == ["heartbeat"] and got[0][0]["X-Vulnwatch-Event"] == "heartbeat"
+    assert [json.loads(b)["event"] for _, b in got] == ["heartbeat"] and got[0][0]["X-Lablantern-Event"] == "heartbeat"
 
     # Ziel weg: Wiederholungen nach BACKOFF, ohne zu schlafen; gleiche Delivery-ID
     queued = []

@@ -1,4 +1,4 @@
-# vulnwatch master: internals
+# LabLantern master: internals
 
 How the master (server, worker, proxy, mDNS announcer) is built and how each flow works. Use it to check
 changes against the design. The threat model is in [SECURITY.md](../SECURITY.md); the agent side is in
@@ -12,14 +12,14 @@ State: phase 2 plus rework v4 (2026-10-25).
 
 ```
  LAN ── https://<BIND_IP>:8443 ──► proxy (Caddy)
-                                     │  TLS with its own internal CA (on-demand, only for VULNWATCH_HOSTNAMES)
+                                     │  TLS with its own internal CA (on-demand, only for LABLANTERN_HOSTNAMES)
                                      │  blocks /api/worker/* and /api/internal/* from outside
                                      ▼
                                    server :8000 (FastAPI + Vue build, plain HTTP inside the compose network)
                                      ▲   volumes: data (SQLite, SBOMs, releases), keys (master.key), worker_auth (rw)
                                      │
                     worker ──────────┘  HTTP + worker token; NO data/keys volumes; Grype + canary files
- announce (host network) ── mDNS _vulnwatch._tcp → BIND_IP:8443 (no volumes, no rights)
+ announce (host network) ── mDNS _lablantern._tcp → BIND_IP:8443 (no volumes, no rights)
 ```
 
 | Service | Image | Rights | Talks to |
@@ -29,14 +29,14 @@ State: phase 2 plus rework v4 (2026-10-25).
 | `worker` | `deploy/Dockerfile.worker` | same | server API (`/api/worker/*`), Grype DB download |
 | `announce` | server image, `python -m app.announce` | host network (multicast), nothing mounted | LAN multicast |
 
-The server never terminates TLS in this setup (`VULNWATCH_PLAIN_HTTP=1`). Without the proxy it can run
+The server never terminates TLS in this setup (`LABLANTERN_PLAIN_HTTP=1`). Without the proxy it can run
 standalone with its own CA from `pki.py`, but the compose file doesn't use that mode.
 
 ## 2. Request pipeline
 
 1. **Caddy** terminates TLS, replaces `X-Forwarded-For` with the real client IP, enforces a 64 MB body limit,
    and returns 404 for internal paths.
-2. **uvicorn** (`__main__.py`) runs with `proxy_headers=True` and `forwarded_allow_ips=$VULNWATCH_TRUSTED_PROXY`.
+2. **uvicorn** (`__main__.py`) runs with `proxy_headers=True` and `forwarded_allow_ips=$LABLANTERN_TRUSTED_PROXY`.
    That is the proxy's fixed address on the separate network `edge`, which only the proxy and the server join.
    Anything else that reaches `server:8000` directly (worker, Docker host) can't fake its IP.
 3. **Middleware `security_headers`** (`main.py`): rejects `/api/agent/*` requests whose `Content-Length` exceeds
@@ -44,7 +44,7 @@ standalone with its own CA from `pki.py`, but the compose file doesn't use that 
    (`default-src 'self'`) and `Cache-Control: no-store` for `/api/*`.
 4. **Router** under `/api`. Anything else is the SPA (`_serve_spa`; resolved paths must stay inside `web/`).
 5. **Guards** (`guards.py`), used as FastAPI dependencies:
-   - `require_session`: valid `vw_session` cookie. The cookie value is a random token; the DB stores only its
+   - `require_session`: valid `ll_session` cookie. The cookie value is a random token; the DB stores only its
      SHA-256. It expires after 12 h.
    - `require_csrf`: `require_session` + header `X-CSRF-Token` equal to the session's CSRF token
      (constant-time compare).
@@ -60,7 +60,7 @@ Agent and worker endpoints don't use cookies. They authenticate with a bearer to
 |---|---|
 | `__main__.py` | start uvicorn (plain HTTP behind the proxy, or own TLS) |
 | `main.py` | `create_app`: DB, master key, context, scheduler, routers, middleware, SPA |
-| `config.py` | `Settings` from env (`VULNWATCH_*`) |
+| `config.py` | `Settings` from env (`LABLANTERN_*`) |
 | `context.py` | `Context`: settings, DB session factory, secret store, rate limiters, clock, notifier, audit helper |
 | `db.py`, `models.py`, `migrate.py` | SQLAlchemy + SQLite (WAL, foreign keys); additive column migrations |
 | `auth.py` | argon2 passwords, tokens, constant-time compare, TOTP (±1 step), `RateLimiter` (in memory) |
@@ -87,7 +87,7 @@ Agent and worker endpoints don't use cookies. They authenticate with a bearer to
 | `internal.py` | `/api/internal/tls-allowed` for Caddy's `on_demand_tls ask` |
 | `announce.py` | mDNS announcement (separate container) |
 
-## 4. Data model (SQLite, `data/vulnwatch.db`)
+## 4. Data model (SQLite, `data/lablantern.db`)
 
 | Table | Key columns | Notes |
 |---|---|---|
@@ -115,7 +115,7 @@ and moves the TOTP secret to `totp.<id>`. Failures are limited to 5 per 15 min p
 unknown, so timing reveals nothing), and the TOTP code must be from a step **newer than the last one used**
 (replay protection). Limits: 5 failures per 15 min per username **and IP** (so nobody else can lock you out),
 20 per IP. On success the server creates a
-session row and sets the cookie `vw_session` (HttpOnly, Secure, SameSite=Strict, 12 h).
+session row and sets the cookie `ll_session` (HttpOnly, Secure, SameSite=Strict, 12 h).
 
 **Login with passkey**: `POST /login/passkey/options` (username + password → challenge for that user's
 credentials), then `POST /login/passkey` (assertion, UV required).
@@ -142,7 +142,7 @@ credentials), then `POST /login/passkey` (assertion, UV required).
    its hash is stored.
 3. Admin: `POST /systems/{id}/approve` sets it `active`.
 
-### Pairing (no token, `vulnwatch-agent setup`)
+### Pairing (no token, `lablantern-agent setup`)
 1. Agent: `POST /agent/pair {hostname, commitment}` (commitment = SHA-256(secret)). Unauthenticated, limited to
    10 per 10 min per IP, at most 2 open per IP and 20 in total. The server stores the commitment and answers with
    a fresh random `nonce`. Status is `committed`: no code yet, not shown in the UI, can't be approved.
@@ -183,7 +183,7 @@ expire after 5 min, `sent` ones fail after 15 min, at most 5 open per system.
 
 ### Agent releases (`releases.py`)
 Every minute (and on demand) the server reads `latest.json` and `release.pub` from the read-only volume that
-`agent-sign` writes (`VULNWATCH_AGENT_RELEASES_DIR`). It verifies the Ed25519 signature of the manifest and every
+`agent-sign` writes (`LABLANTERN_AGENT_RELEASES_DIR`). It verifies the Ed25519 signature of the manifest and every
 checksum, takes a release only if it is newer or signed with a different key, copies it into `data/agent-releases/`
 and serves it from there. Build and signing: `agent/docs/INTERNALS.md`, section 5.10.
 

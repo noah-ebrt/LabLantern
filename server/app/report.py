@@ -1,7 +1,7 @@
 import logging
 from typing import Any
 
-log = logging.getLogger("vulnwatch.report")
+log = logging.getLogger("lablantern.report")
 
 MAX_LISTED_FINDINGS = 25
 EN = {"kritisch": "critical", "hoch": "high", "mittel": "medium", "info": "info"}
@@ -17,21 +17,21 @@ def _subject(info: dict[str, Any]) -> str:
     drops = info.get("sharp_drops") or []
     if invalid:
         reason = info.get("error") or info.get("canary_message") or info.get("db_reason") or "unbekannt"
-        subject = f"[IMMEDIATE ALERT] vulnwatch: run invalid – {reason}"
+        subject = f"[IMMEDIATE ALERT] LabLantern: run invalid – {reason}"
     elif repeat:
         # PLAN Abschnitt 5: System zweimal in Folge ohne Daten ist kritisch (Sofort-Alarm)
-        subject = f"[IMMEDIATE ALERT] vulnwatch: no data from {', '.join(repeat)} in two runs in a row"
+        subject = f"[IMMEDIATE ALERT] LabLantern: no data from {', '.join(repeat)} in two runs in a row"
     elif drops:
-        subject = ("[IMMEDIATE ALERT] vulnwatch: findings dropped sharply on "
+        subject = ("[IMMEDIATE ALERT] LabLantern: findings dropped sharply on "
                    + ", ".join(f"{name} ({a} → {b})" for name, a, b in drops))
     elif kritisch:
-        subject = f"[ALERT] vulnwatch: {kritisch} critical vulnerabilit{'y' if kritisch == 1 else 'ies'} open"
+        subject = f"[ALERT] LabLantern: {kritisch} critical vulnerabilit{'y' if kritisch == 1 else 'ies'} open"
     elif errors:
-        subject = f"[ERROR] vulnwatch: {len(errors)} system(s) not checked"
+        subject = f"[ERROR] LabLantern: {len(errors)} system(s) not checked"
     elif hoch:
-        subject = f"[WARNING] vulnwatch: {hoch} high vulnerabilit{'y' if hoch == 1 else 'ies'} open"
+        subject = f"[WARNING] LabLantern: {hoch} high vulnerabilit{'y' if hoch == 1 else 'ies'} open"
     else:
-        subject = f"[OK] vulnwatch: {info.get('period', 'daily')} report – all systems as expected"
+        subject = f"[OK] LabLantern: {info.get('period', 'daily')} report – all systems as expected"
     return subject
 
 
@@ -50,7 +50,7 @@ def format_run_report(info: dict[str, Any]) -> tuple[str, str]:
     subject = _subject(info)
 
     lines = [
-        f"vulnwatch run #{info['run_id']} ({info.get('trigger', 'manual')}) – status: {info['status']}",
+        f"lablantern run #{info['run_id']} ({info.get('trigger', 'manual')}) – status: {info['status']}",
         "=" * 60,
         f"Canary test: {'green' if info['canary_ok'] else 'RED'} – {info.get('canary_message', '')}",
         f"Scanner database: {'fresh' if info['db_ok'] else 'ERROR'}"

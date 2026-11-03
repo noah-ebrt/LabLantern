@@ -1,8 +1,8 @@
 [Unit]
-Description=vulnwatch collector trigger (request from vulnwatch-agentd)
+Description=lablantern collector trigger (request from lablantern-agentd)
 
 [Path]
-PathExists=/run/vulnwatch/collect.request
+PathExists=/run/lablantern/collect.request
 
 [Install]
 WantedBy=paths.target

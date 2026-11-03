@@ -10,7 +10,7 @@ import SettingsEntry from './SettingsEntry.vue'
 import SettingsList from './SettingsList.vue'
 import SettingsSection from './SettingsSection.vue'
 
-// Offsite-Wächter (optional): ein Dienst außer Haus schlägt Alarm, wenn vulnwatch verstummt.
+// Offsite-Wächter (optional): ein Dienst außer Haus schlägt Alarm, wenn LabLantern verstummt.
 // Healthchecks, Uptime Kuma oder ein eigener Dienst; der Herzschlag-Abstand ist einstellbar.
 const PROVIDERS = [
   ['healthchecks', 'Healthchecks'],
@@ -98,7 +98,7 @@ async function save() {
 }
 
 async function remove(kind) {
-  if (!confirm('Remove this ping URL? vulnwatch then stops pinging this check, and the monitor will alert once it is overdue.')) return
+  if (!confirm('Remove this ping URL? LabLantern then stops pinging this check, and the monitor will alert once it is overdue.')) return
   await api.put('/api/settings/watchdog', { clear: [kind] })
   await load()
 }
@@ -118,7 +118,7 @@ useLive(['settings'], load)
 </script>
 
 <template>
-  <SettingsCard icon="activity" title="Offsite watchdog" subtitle="A monitor outside your network alerts you when vulnwatch itself goes quiet" :status="health">
+  <SettingsCard icon="activity" title="Offsite watchdog" subtitle="A monitor outside your network alerts you when LabLantern itself goes quiet" :status="health">
     <template v-if="state">
       <SettingsList v-if="!anySet && !open" empty empty-text="Not set up. Works with Healthchecks, Uptime Kuma or any URL that alerts when pings stop.">
         <template #empty>
@@ -140,9 +140,9 @@ useLive(['settings'], load)
           </label>
         </div>
         <p class="subtext">
-          <template v-if="config.provider === 'healthchecks'">vulnwatch pings start, success and failure with the reason.</template>
-          <template v-else-if="config.provider === 'uptimekuma'">Create push monitors; vulnwatch sends status up or down with a message.</template>
-          <template v-else>vulnwatch sends a POST on success only; your monitor alerts when it stops arriving.</template>
+          <template v-if="config.provider === 'healthchecks'">LabLantern pings start, success and failure with the reason.</template>
+          <template v-else-if="config.provider === 'uptimekuma'">Create push monitors; LabLantern sends status up or down with a message.</template>
+          <template v-else>LabLantern sends a POST on success only; your monitor alerts when it stops arriving.</template>
         </p>
 
         <SettingsSection title="Checks" :count="CHECKS.filter((c) => state[c.key]?.set).length">

@@ -1,6 +1,6 @@
 # Contributing
 
-Bug reports, ideas and pull requests are welcome. vulnwatch is a hobby project, so answers may take a while.
+Bug reports, ideas and pull requests are welcome. LabLantern is a hobby project, so answers may take a while.
 
 ## Before you post
 
@@ -21,6 +21,6 @@ Most code comments are in German; English comments in new code are fine.
 
 ## License of contributions
 
-vulnwatch is published under the [PolyForm Noncommercial License 1.0.0](LICENSE.md). By submitting a contribution
+LabLantern is published under the [PolyForm Noncommercial License 1.0.0](LICENSE.md). By submitting a contribution
 you confirm that you have the right to submit it, and you agree that it is licensed under the same terms and that
 the project owner, Noah Eberhardt, may also license it under other terms, including commercial ones.

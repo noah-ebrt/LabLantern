@@ -14,7 +14,7 @@ def b64u(data: bytes) -> str:
 
 
 class SoftAuthenticator:
-    def __init__(self, rp_id: str = "vulnwatch.lan", origin: str = "https://vulnwatch.lan:8443"):
+    def __init__(self, rp_id: str = "lablantern.lan", origin: str = "https://lablantern.lan:8443"):
         self.rp_id, self.origin = rp_id, origin
         self.key = ec.generate_private_key(ec.SECP256R1())
         self.cred_id = os.urandom(16)

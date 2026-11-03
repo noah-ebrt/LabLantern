@@ -20,7 +20,7 @@ from .context import Context
 from .guards import Guards
 from .models import put_setting, setting
 
-log = logging.getLogger("vulnwatch.releases")
+log = logging.getLogger("lablantern.releases")
 
 CURRENT_KEY = "releases.current"
 MAX_FILE = 200 * 1024 * 1024
@@ -93,7 +93,7 @@ def sync_latest_release(ctx: Context) -> str | None:
     shutil.rmtree(tmp, ignore_errors=True)
     tmp.mkdir(parents=True)
     for name, sha in manifest["files"].items():
-        if "/" in name or not name.startswith("vulnwatch-agent"):
+        if "/" in name or not name.startswith("lablantern-agent"):
             shutil.rmtree(tmp, ignore_errors=True)
             raise ReleaseError(f"release {newest}: unexpected file {name}")
         data = _read(rel / name)

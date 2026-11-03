@@ -1,19 +1,19 @@
 #!/bin/sh
 set -e
-getent group vulnwatch >/dev/null || groupadd --system vulnwatch
-getent passwd vulnwatch >/dev/null || useradd --system --gid vulnwatch --home-dir /nonexistent \
-  --no-create-home --shell /usr/sbin/nologin vulnwatch
+getent group lablantern >/dev/null || groupadd --system lablantern
+getent passwd lablantern >/dev/null || useradd --system --gid lablantern --home-dir /nonexistent \
+  --no-create-home --shell /usr/sbin/nologin lablantern
 # Der Daemon darf Token und CA lesen, schreiben darf nur root.
-if [ -d /etc/vulnwatch ]; then
-  chown root:vulnwatch /etc/vulnwatch
-  chmod 0750 /etc/vulnwatch
-  if [ -f /etc/vulnwatch/agent.json ]; then
-    chown root:vulnwatch /etc/vulnwatch/agent.json
-    chmod 0640 /etc/vulnwatch/agent.json
+if [ -d /etc/lablantern ]; then
+  chown root:lablantern /etc/lablantern
+  chmod 0750 /etc/lablantern
+  if [ -f /etc/lablantern/agent.json ]; then
+    chown root:lablantern /etc/lablantern/agent.json
+    chmod 0640 /etc/lablantern/agent.json
   fi
 fi
-systemd-tmpfiles --create /usr/lib/tmpfiles.d/vulnwatch.conf
+systemd-tmpfiles --create /usr/lib/tmpfiles.d/lablantern.conf
 systemctl daemon-reload
-systemctl enable vulnwatch-collect.path vulnwatch-action.path vulnwatch-agentd.service >/dev/null 2>&1
-systemctl restart vulnwatch-collect.path vulnwatch-action.path vulnwatch-agentd.service
+systemctl enable lablantern-collect.path lablantern-action.path lablantern-agentd.service >/dev/null 2>&1
+systemctl restart lablantern-collect.path lablantern-action.path lablantern-agentd.service
 exit 0

@@ -112,7 +112,7 @@ def test_unmatched_forward_listed(admin, router):
     client.put("/api/settings/router/opnsense", headers=h, json={"url": router, "secret": OPN_SECRET, "key": OPN_KEY})
     state = client.post("/api/settings/router/opnsense/test", headers=h).json()
     reasons = {u["forward"]: u["reason"] for u in state["unmatched"]}
-    assert reasons["UDP 51820 → 10.0.0.9:51820"] == "device is not monitored by vulnwatch"
+    assert reasons["UDP 51820 → 10.0.0.9:51820"] == "device is not monitored by lablantern"
     assert "alias" in reasons["TCP 8443 → webservers:8443"]
 
 

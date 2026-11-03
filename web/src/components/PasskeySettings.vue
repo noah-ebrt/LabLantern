@@ -65,7 +65,7 @@ const status = computed(() => (!info.value ? null : info.value.trust.outdated ? 
   <SettingsCard icon="key" title="Passkeys" subtitle="Sign in, and confirm reboots and agent updates with a touch" :status="status">
     <template v-if="info">
       <p v-if="!info.rp_id" class="message error">
-        Passkeys need a hostname. Add one (e.g. <code>vulnwatch.lan</code>) to <code>VULNWATCH_HOSTNAMES</code>, point it to this host in your DNS, and open the UI under that name.
+        Passkeys need a hostname. Add one (e.g. <code>lablantern.lan</code>) to <code>LABLANTERN_HOSTNAMES</code>, point it to this host in your DNS, and open the UI under that name.
       </p>
       <p v-else-if="wrongHost" class="message">
         Open the UI as <a :href="rpUrl">{{ rpUrl }}</a> to use passkeys; browsers do not allow them on an IP address.

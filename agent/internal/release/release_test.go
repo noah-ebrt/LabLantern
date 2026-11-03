@@ -20,8 +20,8 @@ func keys(t *testing.T) (ed25519.PublicKey, ed25519.PrivateKey) {
 
 func dist(t *testing.T) string {
 	d := t.TempDir()
-	os.WriteFile(filepath.Join(d, "vulnwatch-agent-linux-amd64"), []byte("amd64-binary"), 0o755)
-	os.WriteFile(filepath.Join(d, "vulnwatch-agent-linux-arm64"), []byte("arm64-binary"), 0o755)
+	os.WriteFile(filepath.Join(d, "lablantern-agent-linux-amd64"), []byte("amd64-binary"), 0o755)
+	os.WriteFile(filepath.Join(d, "lablantern-agent-linux-arm64"), []byte("arm64-binary"), 0o755)
 	return d
 }
 
@@ -36,7 +36,7 @@ func TestSignedManifestVerifiesAndListsChecksums(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Version != "0.5.0" || len(got.Files) != 2 || got.Files["vulnwatch-agent-linux-amd64"] == "" {
+	if got.Version != "0.5.0" || len(got.Files) != 2 || got.Files["lablantern-agent-linux-amd64"] == "" {
 		t.Fatalf("Manifest: %+v", got)
 	}
 }
@@ -62,14 +62,14 @@ func TestBinaryMustMatchTheSignedChecksum(t *testing.T) {
 	data, sig := Sign(m, priv)
 	pub := priv.Public().(ed25519.PublicKey)
 	got, _ := Verify(data, sig, pub)
-	if err := got.CheckFile("vulnwatch-agent-linux-amd64", filepath.Join(d, "vulnwatch-agent-linux-amd64")); err != nil {
+	if err := got.CheckFile("lablantern-agent-linux-amd64", filepath.Join(d, "lablantern-agent-linux-amd64")); err != nil {
 		t.Fatal(err)
 	}
-	os.WriteFile(filepath.Join(d, "vulnwatch-agent-linux-amd64"), []byte("manipuliert"), 0o755)
-	if err := got.CheckFile("vulnwatch-agent-linux-amd64", filepath.Join(d, "vulnwatch-agent-linux-amd64")); err == nil {
+	os.WriteFile(filepath.Join(d, "lablantern-agent-linux-amd64"), []byte("manipuliert"), 0o755)
+	if err := got.CheckFile("lablantern-agent-linux-amd64", filepath.Join(d, "lablantern-agent-linux-amd64")); err == nil {
 		t.Fatal("manipuliertes Binary muss scheitern")
 	}
-	if err := got.CheckFile("nicht-im-manifest", filepath.Join(d, "vulnwatch-agent-linux-amd64")); err == nil {
+	if err := got.CheckFile("nicht-im-manifest", filepath.Join(d, "lablantern-agent-linux-amd64")); err == nil {
 		t.Fatal("unbekannte Datei muss scheitern")
 	}
 }

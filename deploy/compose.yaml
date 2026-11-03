@@ -1,7 +1,7 @@
 name: deploy  # Volumes heißen deploy_*; fest, damit ein Umzug des Ordners nichts ändert
 
 x-agent-job: &agent-job
-  image: vulnwatch-agent-builder:${VULNWATCH_TAG:-dev}
+  image: lablantern-agent-builder:${LABLANTERN_TAG:-dev}
   restart: "no"
   network_mode: none
   user: "10001:10001"
@@ -21,14 +21,14 @@ services:
     security_opt: ["no-new-privileges:true"]
     tmpfs: [/tmp]
     environment:
-      VULNWATCH_BIND_IP: ${VULNWATCH_BIND_IP}
+      LABLANTERN_BIND_IP: ${LABLANTERN_BIND_IP}
     ports:
       # Bewusst ohne Standardwert: Die Oberfläche gehört nur an die LAN-IP, nie an 0.0.0.0.
-      - "${VULNWATCH_BIND_IP:?set it in .env: the LAN IP of this host}:${VULNWATCH_PORT:-8443}:8443"
+      - "${LABLANTERN_BIND_IP:?set it in .env: the LAN IP of this host}:${LABLANTERN_PORT:-8443}:8443"
     networks:
       # Eigenes Netz nur mit dem Server und einer festen Adresse: Nur ihr glaubt der Server X-Forwarded-For.
       edge:
-        ipv4_address: ${VULNWATCH_PROXY_IP:-10.89.254.2}
+        ipv4_address: ${LABLANTERN_PROXY_IP:-10.89.254.2}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -46,7 +46,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    image: vulnwatch-server:${VULNWATCH_TAG:-dev}
+    image: lablantern-server:${LABLANTERN_TAG:-dev}
     restart: unless-stopped
     user: "10001:10001"
     read_only: true
@@ -57,19 +57,19 @@ services:
     sysctls:
       net.ipv4.ping_group_range: "0 2147483647"
     environment:
-      VULNWATCH_PLAIN_HTTP: "1"  # TLS terminiert der Proxy
-      VULNWATCH_PORT: "8000"
-      VULNWATCH_PUBLIC_PORT: ${VULNWATCH_PORT:-8443}
+      LABLANTERN_PLAIN_HTTP: "1"  # TLS terminiert der Proxy
+      LABLANTERN_PORT: "8000"
+      LABLANTERN_PUBLIC_PORT: ${LABLANTERN_PORT:-8443}
       # Namen und IPs, unter denen die Oberfläche erreichbar ist (Zertifikate werden nur dafür ausgestellt)
-      VULNWATCH_HOSTNAMES: ${VULNWATCH_HOSTNAMES:?set it in .env, e.g. vulnwatch.lan,192.168.1.50}
-      VULNWATCH_CA_URL: http://proxy:8081/ca.crt
+      LABLANTERN_HOSTNAMES: ${LABLANTERN_HOSTNAMES:?set it in .env, e.g. lablantern.lan,192.168.1.50}
+      LABLANTERN_CA_URL: http://proxy:8081/ca.crt
       # Nur diese Adresse darf die echte Client-IP mitteilen (Worker und Docker-Host erreichen Port 8000 auch direkt)
-      VULNWATCH_TRUSTED_PROXY: ${VULNWATCH_PROXY_IP:-10.89.254.2}
+      LABLANTERN_TRUSTED_PROXY: ${LABLANTERN_PROXY_IP:-10.89.254.2}
     networks:
       default:
       edge:
         # fest, damit der Server nie die Adresse des Proxys belegt (sonst startet der Proxy nicht)
-        ipv4_address: ${VULNWATCH_SERVER_IP:-10.89.254.3}
+        ipv4_address: ${LABLANTERN_SERVER_IP:-10.89.254.3}
     volumes:
       - data:/data
       - keys:/keys               # Master-Schlüssel: nur der Server
@@ -84,9 +84,9 @@ services:
       start_period: 15s
 
   announce:
-    # mDNS-Ankündigung für `vulnwatch-agent setup`. Host-Netz nötig (Multicast), sonst nichts:
+    # mDNS-Ankündigung für `lablantern-agent setup`. Host-Netz nötig (Multicast), sonst nichts:
     # keine Volumes, keine Rechte, nur lesend. Eine gefälschte Ankündigung scheitert am Pairing-Code.
-    image: vulnwatch-server:${VULNWATCH_TAG:-dev}
+    image: lablantern-server:${LABLANTERN_TAG:-dev}
     command: ["python", "-m", "app.announce"]
     network_mode: host
     restart: unless-stopped
@@ -97,8 +97,8 @@ services:
     healthcheck:
       disable: true
     environment:
-      VULNWATCH_BIND_IP: ${VULNWATCH_BIND_IP}
-      VULNWATCH_PORT: ${VULNWATCH_PORT:-8443}
+      LABLANTERN_BIND_IP: ${LABLANTERN_BIND_IP}
+      LABLANTERN_PORT: ${LABLANTERN_PORT:-8443}
     depends_on:
       server:
         condition: service_healthy
@@ -107,7 +107,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.worker
-    image: vulnwatch-worker:${VULNWATCH_TAG:-dev}
+    image: lablantern-worker:${LABLANTERN_TAG:-dev}
     restart: unless-stopped
     user: "10001:10001"
     read_only: true
@@ -115,23 +115,23 @@ services:
     security_opt: ["no-new-privileges:true"]
     tmpfs: [/tmp]
     environment:
-      VULNWATCH_SERVER_URL: http://server:8000
-      VULNWATCH_WORKER_TOKEN_FILE: /worker_auth/worker.token
-      VULNWATCH_SCANNERS: ${VULNWATCH_SCANNERS:-grype+osv}
+      LABLANTERN_SERVER_URL: http://server:8000
+      LABLANTERN_WORKER_TOKEN_FILE: /worker_auth/worker.token
+      LABLANTERN_SCANNERS: ${LABLANTERN_SCANNERS:-grype+osv}
     volumes:
       # Kein data-Volume, kein keys-Volume: Der Worker sieht weder Datenbank noch Master-Schlüssel.
-      - grype_cache:/home/vulnwatch/.cache
+      - grype_cache:/home/lablantern/.cache
       - worker_auth:/worker_auth:ro
     depends_on:
       server:
         condition: service_healthy
 
   # Agent-Pakete dieser Installation: bei jedem `docker compose up` einmal durchlaufen, ohne Netz. Unveränderter Code
-  # baut nichts neu. Den Signierschlüssel (Volume agent_key) sehen nur agent-key und agent-sign, die allein vw-release
+  # baut nichts neu. Den Signierschlüssel (Volume agent_key) sehen nur agent-key und agent-sign, die allein ll-release
   # ausführen (nur Standardbibliothek); der Server liest die fertigen Pakete nur.
   agent-key:
     <<: *agent-job
-    command: ["vw-release", "init-key", "/key/release.key", "/releases/release.pub"]
+    command: ["ll-release", "init-key", "/key/release.key", "/releases/release.pub"]
     volumes:
       - agent_key:/key
       - agent_releases:/releases
@@ -152,7 +152,7 @@ services:
 
   agent-sign:
     <<: *agent-job
-    command: ["vw-release", "publish", "/stage", "/releases", "/key/release.key"]
+    command: ["ll-release", "publish", "/stage", "/releases", "/key/release.key"]
     volumes:
       - agent_key:/key:ro
       - agent_stage:/stage:ro
@@ -166,7 +166,7 @@ networks:
   edge:
     ipam:
       config:
-        - subnet: ${VULNWATCH_EDGE_SUBNET:-10.89.254.0/29}   # in .env ändern, falls das Netz im LAN schon vergeben ist
+        - subnet: ${LABLANTERN_EDGE_SUBNET:-10.89.254.0/29}   # in .env ändern, falls das Netz im LAN schon vergeben ist
 
 volumes:
   data:

@@ -1,6 +1,6 @@
 """OPNsense als Geräteart (Firmware), neben den Portfreigaben aus routerforwards.py: Version, ausstehende Updates,
 Major-Upgrade und Plugins, gelesen mit API-Schlüssel und -Geheimnis über HTTPS mit gepinntem Zertifikat. Den Stand
-der Updates liefert die letzte Prüfung der Firewall selbst; vulnwatch stößt keine an (das wäre ein POST, und der
+der Updates liefert die letzte Prüfung der Firewall selbst; LabLantern stößt keine an (das wäre ein POST, und der
 Connector schreibt nichts)."""
 import base64
 
@@ -52,17 +52,17 @@ def opnsense_findings(data: dict) -> list[dict]:
     out = []
     core = next((u for u in data["updates"] if u["package"] == data["core"]), None)
     if core:
-        out.append({"target": "host", "cve_id": "VW-UPDATE", "component": "OPNsense",
+        out.append({"target": "host", "cve_id": "LL-UPDATE", "component": "OPNsense",
                     "severity": classify_update(core["installed"] or data["version"], core["new"]),
                     "installed_version": core["installed"] or data["version"], "fixed_version": core["new"],
                     "title": f"OPNsense {core['new']} is available (installed {core['installed'] or data['version']})"})
     elif data["updates"]:
         names = ", ".join(u["package"] for u in data["updates"][:5]) + (" …" if len(data["updates"]) > 5 else "")
-        out.append({"target": "packages", "cve_id": "VW-UPDATE", "component": "OPNsense packages", "severity": "mittel",
+        out.append({"target": "packages", "cve_id": "LL-UPDATE", "component": "OPNsense packages", "severity": "mittel",
                     "installed_version": f"{len(data['updates'])} pending", "fixed_version": "System → Firmware → Updates",
                     "title": f"{len(data['updates'])} package update(s) pending on OPNsense: {names}"[:500]})
     if data["major"]:
-        out.append({"target": "major", "cve_id": "VW-UPDATE", "component": "OPNsense",
+        out.append({"target": "major", "cve_id": "LL-UPDATE", "component": "OPNsense",
                     "severity": classify_update(data["version"], data["major"]),
                     "installed_version": data["version"], "fixed_version": data["major"],
                     "title": f"OPNsense {data['major']} is available as a major upgrade (installed {data['version']})"})

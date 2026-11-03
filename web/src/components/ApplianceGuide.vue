@@ -5,7 +5,7 @@ import Icon from './Icon.vue'
 import SecretField from './SecretField.vue'
 
 // Anleitung und Formular für ein Gerät ohne Agent (TrueNAS, Home Assistant): was gelesen wird, was vorher auf dem
-// Gerät einzurichten ist, welche API-Aufrufe vulnwatch macht. Mit `entry` wird eine bestehende Verbindung bearbeitet.
+// Gerät einzurichten ist, welche API-Aufrufe LabLantern macht. Mit `entry` wird eine bestehende Verbindung bearbeitet.
 const props = defineProps({
   kind: { type: String, required: true },     // truenas | homeassistant | proxmox | synology | opnsense
   entry: { type: Object, default: null },     // aus /api/settings/appliances
@@ -20,10 +20,10 @@ const GUIDES = {
       'Storage pools, volumes and drives: degraded or crashed → high, a failing drive (status or S.M.A.R.T.) → high, a volume 90 % full → medium, 95 % → high',
       'Installed packages (Container Manager, Synology Photos, …) with versions, for the early warning'],
     steps: [
-      'Control Panel → User &amp; Group → Create: a user <code>vulnwatch</code> with a long random password.',
-      'Put it in the <strong>administrators</strong> group: DSM has no read-only role, and only administrators may read the update check, packages and storage. Without it vulnwatch reads only the version and shows the rest as n/a.',
-      'Deny it everything it does not need: under <strong>Applications</strong> deny all (File Station, SMB, AFP, FTP …), under <strong>Permissions</strong> no access to shared folders. vulnwatch only uses the DSM Web API.',
-      'No 2-factor authentication for this user (exempt it if 2FA is enforced) and make sure Auto Block does not list vulnwatch’s IP.',
+      'Control Panel → User &amp; Group → Create: a user <code>lablantern</code> with a long random password.',
+      'Put it in the <strong>administrators</strong> group: DSM has no read-only role, and only administrators may read the update check, packages and storage. Without it LabLantern reads only the version and shows the rest as n/a.',
+      'Deny it everything it does not need: under <strong>Applications</strong> deny all (File Station, SMB, AFP, FTP …), under <strong>Permissions</strong> no access to shared folders. LabLantern only uses the DSM Web API.',
+      'No 2-factor authentication for this user (exempt it if 2FA is enforced) and make sure Auto Block does not list LabLantern’s IP.',
       'Enter <code>https://&lt;nas&gt;:5001</code>, the account and its password.',
     ],
     url: 'https://nas.lan:5001', secret: 'Password', account: 'Account',
@@ -39,10 +39,10 @@ const GUIDES = {
       'End of life of the release line from endoflife.date',
       'Installed plugins (os-wireguard, os-haproxy, …) with versions, for the early warning'],
     steps: [
-      'System → Access → Users → Add: a user <code>vulnwatch</code> without login shell, password scrambled.',
+      'System → Access → Users → Add: a user <code>lablantern</code> without login shell, password scrambled.',
       'Give it the privilege <strong>System: Firmware</strong> (Effective Privileges). For the port forwards under Settings → Exposure it also needs <strong>Firewall: NAT: Destination NAT</strong>; the same key works for both.',
       'In the user, under API keys, click <strong>+</strong>: OPNsense downloads a file with <code>key=</code> and <code>secret=</code>.',
-      'Enter <code>https://&lt;firewall&gt;</code>, the key and the secret. vulnwatch does not start an update check itself: it reads the result of the last check on the firewall (System → Firmware → Status → Check for updates). A regular check can be scheduled under System → Settings → Cron.',
+      'Enter <code>https://&lt;firewall&gt;</code>, the key and the secret. LabLantern does not start an update check itself: it reads the result of the last check on the firewall (System → Firmware → Status → Check for updates). A regular check can be scheduled under System → Settings → Cron.',
     ],
     url: 'https://opnsense.lan', secret: 'API secret', account: 'API key',
     api: [
@@ -58,7 +58,7 @@ const GUIDES = {
       'Apps with a newer version or image', 'Open alerts (CRITICAL → high, ERROR and WARNING → medium)', 'Pending reboot after an update',
       'Pools with layout and fill level, every drive with model, size and temperature: a faulted drive → high, read/write/checksum errors → medium'],
     steps: [
-      'Credentials → Users → Add: a user named <code>vulnwatch</code> with the role <strong>Read-only Administrator</strong>.',
+      'Credentials → Users → Add: a user named <code>lablantern</code> with the role <strong>Read-only Administrator</strong>.',
       'Create an API key for that user (TrueNAS 24.10 and newer: Credentials → Users → the user → API keys). Older versions issue keys with full admin rights; update first if you can.',
       'Enter the address with <code>https://</code>. TrueNAS revokes a key that was ever sent over plain HTTP.',
     ],
@@ -77,10 +77,10 @@ const GUIDES = {
       'Drives per node with S.M.A.R.T. health and ZFS pools with their drives: a failed drive or degraded pool → high, a pool 90 % full → medium',
       'Every VM and LXC with name, state and tags: each one is matched to an agent host by name, else by IP. Guests without an agent are gaps in the coverage; stopped ones can be excluded with a reason. Templates do not count.'],
     steps: [
-      'Datacenter → Permissions → Users → Add: <code>vulnwatch@pve</code> (realm Proxmox VE authentication server), no password needed.',
-      'Datacenter → Permissions → API Tokens → Add: user <code>vulnwatch@pve</code>, token ID <code>vulnwatch</code>, <strong>Privilege Separation off</strong>. Copy the secret.',
-      'Datacenter → Permissions → Add → User Permission: path <code>/</code>, user <code>vulnwatch@pve</code>, role <strong>PVEAuditor</strong> (read-only).',
-      'Enter <code>https://&lt;host&gt;:8006</code> and as token <code>vulnwatch@pve!vulnwatch=&lt;secret&gt;</code>. Older PVE releases only list pending updates with Sys.Modify; vulnwatch does not ask for it and shows that check as n/a.',
+      'Datacenter → Permissions → Users → Add: <code>lablantern@pve</code> (realm Proxmox VE authentication server), no password needed.',
+      'Datacenter → Permissions → API Tokens → Add: user <code>lablantern@pve</code>, token ID <code>lablantern</code>, <strong>Privilege Separation off</strong>. Copy the secret.',
+      'Datacenter → Permissions → Add → User Permission: path <code>/</code>, user <code>lablantern@pve</code>, role <strong>PVEAuditor</strong> (read-only).',
+      'Enter <code>https://&lt;host&gt;:8006</code> and as token <code>lablantern@pve!lablantern=&lt;secret&gt;</code>. Older PVE releases only list pending updates with Sys.Modify; LabLantern does not ask for it and shows that check as n/a.',
     ],
     url: 'https://pve.lan:8006', secret: 'API token (user@realm!id=secret)',
     api: [
@@ -98,7 +98,7 @@ const GUIDES = {
       'Disk usage from System Monitor and the Supervisor (from 90 % medium, from 95 % high)',
       'Low batteries below 15 % (info), and the loaded integrations for the AI early warning'],
     steps: [
-      'Settings → People → Users → Add user: <code>vulnwatch</code>, administrator off.',
+      'Settings → People → Users → Add user: <code>lablantern</code>, administrator off.',
       'Log in as that user, then Profile → Security → Long-lived access tokens → Create token.',
       'Enter the address with port, e.g. <code>http://homeassistant.lan:8123</code>. If the test says the token was rejected for a non-admin user, use an admin user instead.',
     ],
@@ -139,10 +139,10 @@ async function save() {
 <template>
   <div class="guide">
     <section>
-      <h3>What vulnwatch reads</h3>
+      <h3>What LabLantern reads</h3>
       <ul class="reads"><li v-for="r in g.reads" :key="r">{{ r }}</li></ul>
-      <p class="subtext">The device becomes a host of its own: findings, a row on the overview, read every 6 hours. vulnwatch only reads; it never
-        changes anything on the device and the device never connects to vulnwatch.</p>
+      <p class="subtext">The device becomes a host of its own: findings, a row on the overview, read every 6 hours. LabLantern only reads; it never
+        changes anything on the device and the device never connects to LabLantern.</p>
     </section>
 
     <section>
@@ -158,7 +158,7 @@ async function save() {
         <label v-if="g.account"><span class="field-label">{{ g.account }}</span><input v-model="form.account" name="appliance_account" autocomplete="off" required /></label>
         <SecretField v-model="form.token" name="appliance_token" :label="g.secret" :set="!!entry?.token?.set" :required="!entry" />
       </div>
-      <p class="subtext">Over HTTPS vulnwatch pins the certificate it sees now and sends the {{ g.secret.toLowerCase() }} only to that certificate.
+      <p class="subtext">Over HTTPS LabLantern pins the certificate it sees now and sends the {{ g.secret.toLowerCase() }} only to that certificate.
         The {{ g.secret.toLowerCase() }} is stored encrypted and never shown again.</p>
       <p v-if="message" class="message" :class="message.kind" role="status">{{ message.text }}</p>
       <div class="actions">
@@ -168,7 +168,7 @@ async function save() {
     </form>
 
     <details class="api">
-      <summary>API specification: what vulnwatch calls</summary>
+      <summary>API specification: what LabLantern calls</summary>
       <table>
         <tr v-for="[k, v] in g.api" :key="k"><th>{{ k }}</th><td class="mono" v-html="v" /></tr>
       </table>

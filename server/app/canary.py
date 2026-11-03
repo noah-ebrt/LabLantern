@@ -5,7 +5,7 @@ from typing import Callable
 from .rules import classify_severity
 from .scanner import ScanError, scan_sbom_grype
 
-log = logging.getLogger("vulnwatch.canary")
+log = logging.getLogger("lablantern.canary")
 
 CANARY_CVE = "CVE-2021-44228"
 

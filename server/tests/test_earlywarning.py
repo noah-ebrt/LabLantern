@@ -1094,7 +1094,7 @@ def test_failures_alert_once_and_recovery_is_reported(ctx, gitlab_host):
         s.query(EarlyWarning).delete()
         s.commit()
     ew.run_pass(ctx, fetch=rss)
-    alerts = [(t, b) for t, b in ctx.notifier.sent if t == "vulnwatch: early warning has a problem"]
+    alerts = [(t, b) for t, b in ctx.notifier.sent if t == "LabLantern: early warning has a problem"]
     assert len(alerts) == 1 and "Reading advisories failed 2 passes in a row" in alerts[0][1]
     with ctx.session_factory() as s:
         s.query(EarlyWarning).delete()
@@ -1107,7 +1107,7 @@ def test_failures_alert_once_and_recovery_is_reported(ctx, gitlab_host):
         s.commit()
     claude.status = 200
     ew.run_pass(ctx, fetch=rss)
-    assert ctx.notifier.sent[-1][0] == "vulnwatch: early warning works again"
+    assert ctx.notifier.sent[-1][0] == "LabLantern: early warning works again"
     with ctx.session_factory() as s:
         assert ew.health_problems(s) == []
         # Abgeschaltet: Probleme stehen in der Oberfläche, aber keine Nachricht
@@ -1172,7 +1172,7 @@ def test_run_miss_check_stores_reports_and_survives_a_dead_source(ctx, gitlab_ho
         raise ew.FeedError("GitHub advisories: HTTP 403")
     got = ew.run_miss_check(ctx, fetch=lambda url: ew.parse_kev(KEV) if url == ew.KEV_URL else [], advisories=down)
     assert got["errors"] == {"ghsa": "GitHub advisories: HTTP 403"} and got["counts"]["missed"] == 1
-    assert ctx.notifier.sent[-1][0] == "vulnwatch: early warning coverage check" and ctx.notifier.kinds[-1] == "report"
+    assert ctx.notifier.sent[-1][0] == "LabLantern: early warning coverage check" and ctx.notifier.kinds[-1] == "report"
     with ctx.session_factory() as s:
         assert setting(s, ew.MISS_KEY)["counts"]["missed"] == 1 and not ew.miss_due(s)
         assert ew.miss_due(s, now=time.time() + 7 * 86400)
