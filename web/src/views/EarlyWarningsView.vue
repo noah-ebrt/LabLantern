@@ -48,6 +48,17 @@ async function load() {
   }
 }
 
+// Gleicher Schritt auf mehreren Hosts: eine Zeile, alle Hosts davor
+function steps(w) {
+  const out = []
+  for (const a of w.actions || []) {
+    const same = out.find(x => x.text === a.text && x.command === a.command)
+    if (same) same.system += `, ${a.system}`
+    else out.push({ ...a })
+  }
+  return out
+}
+
 function setFilter(v) {
   filter.value = v
   load()
@@ -332,7 +343,7 @@ useLive(['findings', 'settings'], load, 3000)
           <p v-if="w.summary" class="ew-summary">{{ w.summary }}</p>
           <p class="ew-detail">{{ w.status === 'pending' ? 'Waiting for the next pass (at most 20 entries go to the AI provider per pass).' : w.detail }}</p>
           <ul v-if="w.actions?.length && w.status !== 'nicht_betroffen'" class="ew-steps" aria-label="Recommended steps">
-            <li v-for="(a, i) in w.actions" :key="i">
+            <li v-for="(a, i) in steps(w)" :key="i">
               <span class="ew-step-text"><strong>{{ a.system }}</strong> {{ a.text }}</span>
               <span v-if="a.command" class="ew-cmd">
                 <code class="mono">{{ a.command }}</code>

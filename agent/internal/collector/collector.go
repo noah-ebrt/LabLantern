@@ -242,6 +242,14 @@ var aptInst = regexp.MustCompile(`^Inst (\S+) (?:\[([^\]]*)\] )?\((\S+) ([^)]*)\
 
 const maxUpdates = 500
 
+// Raspbian hat keine eigene Security-Suite: Debians Korrekturen kommen als +debNNuM in "Raspbian:…/stable"
+var debStableUpdate = regexp.MustCompile(`\+deb\d+u\d+`)
+
+func isSecurityUpdate(version, sources string) bool {
+	src := strings.ToLower(sources)
+	return strings.Contains(src, "security") || (strings.Contains(src, "raspbian") && debStableUpdate.MatchString(version))
+}
+
 // aptSecurityUpdates: Sicherheitsupdates laut apt-Simulation (Liste gekürzt, Anzahl vollständig)
 func aptSecurityUpdates(env Env) (list []UpdateInfo, n int, ok bool) {
 	if !lookPath(env, "apt-get") {
@@ -254,7 +262,7 @@ func aptSecurityUpdates(env Env) (list []UpdateInfo, n int, ok bool) {
 	list = []UpdateInfo{}
 	for _, line := range strings.Split(string(out), "\n") {
 		m := aptInst.FindStringSubmatch(line)
-		if m == nil || !strings.Contains(strings.ToLower(m[4]), "security") {
+		if m == nil || !isSecurityUpdate(m[3], m[4]) {
 			continue
 		}
 		n++

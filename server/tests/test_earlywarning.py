@@ -78,6 +78,33 @@ def test_classify_is_plain_code():
     assert ew.classify({**ai, "products": []}, [gl])[0] == "unklar"
 
 
+TAILSCALE = {"products": [{"product": "Tailscale", "affected": [{"introduced": "1.62.0", "fixed": "1.104.4"}],
+                           "fixed_versions": ["1.104.4"]}], "cves": [], "exploited": "no", "fix_available": "yes"}
+
+
+def test_home_assistant_addon_version_is_not_the_bundled_products_version():
+    addon = {"keyword": "tailscale", "product": "Tailscale", "version": "0.30.4", "system": "ha", "system_id": 1,
+             "target": "update:update.tailscale_update", "kind": "appliance"}
+    status, detail, hits = ew.classify(TAILSCALE, [addon])
+    assert status == "unklar" and "add-on's own version" in detail and hits[0]["confirmed"] is False
+    step = ew.recommend(TAILSCALE, hits)[0]["text"]
+    assert step.startswith("Update the Tailscale add-on") and "fixed in 1.104.4" in step and " to 1.104.4" not in step
+    # gleiche Hauptversion (ESPHome, Zigbee2MQTT führen die des Produkts): normal verglichen
+    assert ew.classify(TAILSCALE, [{**addon, "version": "1.100.0"}])[0] == "betroffen"
+    # TrueNAS-App mit echter Produktversion bleibt betroffen
+    app = {**addon, "version": "v1.104.2", "target": "app:tailscale", "system": "nas"}
+    assert ew.classify(TAILSCALE, [addon, app])[0] == "betroffen"
+
+
+def test_same_reason_on_several_hosts_is_stated_once():
+    hosts = [{"keyword": "dnsmasq", "product": "dnsmasq", "version": "2.90", "system": n, "system_id": i,
+              "target": "host", "kind": "package"} for i, n in enumerate(("g6", "mini"), 1)]
+    ai = {"products": [{"product": "dnsmasq", "affected": [], "fixed_versions": []}], "cves": []}
+    detail = ew.classify(ai, hosts)[1]
+    assert detail == ("dnsmasq 2.90 on g6, dnsmasq 2.90 on mini: the advisory names no affected versions, "
+                      "check the vendor's own advisory")
+
+
 def sdk_error(status):
     import anthropic
     import httpx2

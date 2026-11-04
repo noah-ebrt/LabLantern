@@ -657,6 +657,32 @@ def _label(p: dict) -> str:
     return f"{p['product']} {p['version'] or '(version unknown)'} on {p['system']}"
 
 
+# Home Assistant selbst: Core, Betriebssystem und Supervisor tragen die Version des Produkts
+HA_OWN_UPDATES = frozenset(("update.home_assistant_core_update", "update.home_assistant_operating_system_update",
+                            "update.home_assistant_supervisor_update"))
+
+
+def _packaging_version(p: dict, ranges: list[dict]) -> bool:
+    """Add-ons in Home Assistant zählen eigene Versionen (Tailscale-Add-on 0.30.4 bringt Tailscale 1.10x mit).
+    Passt die Hauptversion zu keiner Version der Meldung, ist die installierte nicht die des Produkts.
+    ESPHome oder Zigbee2MQTT führen die Version des Produkts und werden normal verglichen."""
+    target = p.get("target") or ""
+    if not target.startswith("update:") or target.removeprefix("update:") in HA_OWN_UPDATES:
+        return False
+    mine = vkey(p["version"])
+    majors = {k[0] for r in ranges for v in (r.get("introduced"), r.get("fixed"), r.get("last_affected"))
+              if v and v != "0" and (k := vkey(v))}
+    return bool(mine and majors and mine[0] not in majors)
+
+
+def _join_reasons(unclear: list[tuple[str, str]]) -> str:
+    """Gleicher Grund für mehrere Hosts: einmal nennen, die Hosts davor ("dnsmasq … on g6, … on mini: …")."""
+    grouped: dict[str, list[str]] = {}
+    for label, reason in unclear:
+        grouped.setdefault(reason, []).append(label)
+    return "; ".join(f"{', '.join(labels)}: {reason}" for reason, labels in grouped.items())
+
+
 def classify(ai: dict, matched: list[dict]) -> tuple[str, str, list[dict]]:
     """(Status, Begründung, Treffer). Reiner Code: gleiche Antwort, gleiche Einstufung.
     Treffer: bestätigt betroffene Einträge (`confirmed`), sonst die, die die Meldung als betroffenes Produkt nennt,
@@ -666,16 +692,21 @@ def classify(ai: dict, matched: list[dict]) -> tuple[str, str, list[dict]]:
         prods = [x for x in ai["products"] if _matches(x["product"], p["keyword"])]
         label = _label(p)
         if not prods:
-            unclear.append(f"{label}: the advisory mentions it but does not list it as an affected product")
+            unclear.append((label, "the advisory mentions it but does not list it as an affected product"))
             continue
         ranges = [r for x in prods for r in x["affected"]]
         if not ranges:
             review.append(p)
-            unclear.append(f"{label}: the advisory names no affected versions, check the vendor's own advisory")
+            unclear.append((label, "the advisory names no affected versions, check the vendor's own advisory"))
             continue
         if not p["version"]:
             review.append(p)
-            unclear.append(f"{label}: installed version not known yet (latest tag, registry check pending)")
+            unclear.append((label, "installed version not known yet (latest tag, registry check pending)"))
+            continue
+        if _packaging_version(p, ranges):
+            review.append(p)
+            unclear.append((label, "that is the add-on's own version, not the version of the software it bundles; "
+                                   "the add-on's changelog names the bundled version"))
             continue
         # „Ab Version X“ ohne Ende ist nur eindeutig, wenn es laut Meldung noch keinen Fix gibt; sonst fehlt dem Text
         # (oft nur ein Anreißer) die gefixte Version, und „betroffen“ wäre geraten
@@ -684,20 +715,20 @@ def classify(ai: dict, matched: list[dict]) -> tuple[str, str, list[dict]]:
                    for r in ranges]
         if p.get("backport") and any(x is not False for x in results):
             review.append(p)
-            unclear.append(f"{label}: distribution build, the distribution backports fixes without changing the "
-                           f"upstream version; the next scan checks it against the distribution's advisories")
+            unclear.append((label, "distribution build, the distribution backports fixes without changing the "
+                                   "upstream version; the next scan checks it against the distribution's advisories"))
         elif any(x is True for x in results):
             affected.append(p)
         elif any(x is None for x in results):
             review.append(p)
-            unclear.append(f"{label}: the advisory's version numbers cannot be compared with the installed one")
+            unclear.append((label, "the advisory's version numbers cannot be compared with the installed one"))
         else:
             checked.append(label)
     if affected:
         return ("betroffen", "affected: " + ", ".join(_label(p) for p in affected),
                 [{**p, "confirmed": True} for p in affected])
     if unclear:
-        return "unklar", "; ".join(unclear)[:2000], [{**p, "confirmed": False} for p in review]
+        return "unklar", _join_reasons(unclear)[:2000], [{**p, "confirmed": False} for p in review]
     return "nicht_betroffen", "installed versions outside the affected ranges: " + "; ".join(checked)[:2000], []
 
 
@@ -712,7 +743,9 @@ def recommend(ai: dict, hits: list[dict]) -> list[dict]:
         fixed = line or fixed
         fix = "yes" if fixed else ai.get("fix_available", "unknown")
         # Distributionen liefern den Fix unter ihrer eigenen Versionsnummer: dort keine Upstream-Version nennen
-        to = f" to {', '.join(fixed[:3])}" if fixed and not p.get("backport") else ""
+        addon = _packaging_version(p, [r for x in ai["products"] if _matches(x["product"], p["keyword"])
+                                       for r in x["affected"]])
+        to = f" to {', '.join(fixed[:3])}" if fixed and not p.get("backport") and not addon else ""
         cmds = UPGRADE.get(p.get("pm") or "")
         kind, command = p.get("kind"), ""
         if fix == "no":
@@ -736,6 +769,9 @@ def recommend(ai: dict, hits: list[dict]) -> list[dict]:
             if cmds:
                 pkgs = " ".join(p.get("packages") or [p["product"]])
                 command = {"package": cmds[0].format(pkgs=pkgs), "os": cmds[1], "kernel": cmds[2]}[kind]
+        elif addon:
+            text = (f"Update the {p['product']} add-on (Settings → System → Updates); its changelog names the "
+                    f"bundled version" + (f", fixed in {', '.join(fixed[:3])}" if fixed else ""))
         else:
             text = f"Update {p['product']}{to}"
         key = (p["system"], text, command)

@@ -190,6 +190,21 @@ func TestSecurityUpdatesFallBackToAptSimulationAndCountOnlySecurityInstLines(t *
 	}
 }
 
+func TestRaspbianCountsDebianStableUpdatesBecauseItHasNoSecuritySuite(t *testing.T) {
+	f := ubuntu()
+	f.exists["/usr/lib/update-notifier/apt-check"] = false
+	f.bins["apt-get"] = true
+	f.cmds["apt-get"] = result{out: `Inst libbrotli1 [1.0.9-2+b3] (1.0.9-2+deb12u1 Raspbian:12/stable [armhf])
+Inst libwbclient0 [2:4.17.8+dfsg-2] (2:4.17.12+dfsg-0+deb12u4 Raspbian:12/stable [armhf])
+Inst raspi-config [20250101] (20251001 Raspberry Pi Foundation:stable [all])
+Inst vim [2:9.0.1378-2] (2:9.0.1378-2+b1 Raspbian:12/stable [armhf])
+`}
+	r := Collect(f.env(), "x")
+	if r.SecurityUpdatesCount != 2 || len(r.SecurityUpdates) != 2 || r.SecurityUpdates[1].Name != "libwbclient0" {
+		t.Fatalf("count=%d list=%+v", r.SecurityUpdatesCount, r.SecurityUpdates)
+	}
+}
+
 func TestSecurityUpdatesAreListedWhileAptCheckKeepsTheCount(t *testing.T) {
 	f := ubuntu()
 	f.cmds["/usr/lib/update-notifier/apt-check"] = result{out: "9;3"}

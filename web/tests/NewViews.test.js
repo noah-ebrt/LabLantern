@@ -9,7 +9,10 @@ const json = (b, s = 200) => new Response(JSON.stringify(b), { status: s, header
 const WARNING = { id: 1, title: 'GitLab Critical Patch Release', link: 'https://example.org/gl', feed: 'https://f', published: '',
   status: 'betroffen', exploited: 'ja', cves: ['CVE-2026-110264'], detail: 'affected: gitlab 19.5.1 on host-b',
   matched: [{ product: 'gitlab/gitlab-ce:19.5.1-ce.0', version: '19.5.1-ce.0', system: 'host-b' }], affected: [],
-  source: 'about.gitlab.com', published: '2026-10-25T00:00:00+00:00', retryable: false }
+  source: 'about.gitlab.com', published: '2026-10-25T00:00:00+00:00', retryable: false,
+  actions: [{ system: 'g6', text: 'Update gitlab', command: 'apt install gitlab' },
+            { system: 'mini', text: 'Update gitlab', command: 'apt install gitlab' },
+            { system: 'pi', text: 'Fixed version not confirmed yet', command: '' }] }
 
 beforeEach(() => {
   setCsrf('tok')
@@ -71,6 +74,13 @@ describe('EarlyWarningsView', () => {
     await w.get('.ew-actions button.btn-sm').trigger('click')
     await flushPromises()
     expect(calls.some((c) => c.url === '/api/early-warnings/2/retry' && c.method === 'POST')).toBe(true)
+  })
+
+  it('fasst gleiche Schritte mehrerer Hosts in einer Zeile zusammen', async () => {
+    const w = mount(EarlyWarningsView)
+    await flushPromises()
+    const steps = w.findAll('.ew-steps li').map((li) => li.get('.ew-step-text').text())
+    expect(steps.slice(0, 2)).toEqual(['g6, mini Update gitlab', 'pi Fixed version not confirmed yet'])
   })
 })
 
