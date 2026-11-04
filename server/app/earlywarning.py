@@ -676,7 +676,7 @@ def _packaging_version(p: dict, ranges: list[dict]) -> bool:
 
 
 def _join_reasons(unclear: list[tuple[str, str]]) -> str:
-    """Gleicher Grund für mehrere Hosts: einmal nennen, die Hosts davor ("dnsmasq … on g6, … on mini: …")."""
+    """Gleicher Grund für mehrere Hosts: einmal nennen, die Hosts davor ("dnsmasq … on host-a, … on host-b: …")."""
     grouped: dict[str, list[str]] = {}
     for label, reason in unclear:
         grouped.setdefault(reason, []).append(label)

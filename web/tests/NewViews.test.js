@@ -10,8 +10,8 @@ const WARNING = { id: 1, title: 'GitLab Critical Patch Release', link: 'https://
   status: 'betroffen', exploited: 'ja', cves: ['CVE-2026-110264'], detail: 'affected: gitlab 19.5.1 on host-b',
   matched: [{ product: 'gitlab/gitlab-ce:19.5.1-ce.0', version: '19.5.1-ce.0', system: 'host-b' }], affected: [],
   source: 'about.gitlab.com', published: '2026-10-25T00:00:00+00:00', retryable: false,
-  actions: [{ system: 'g6', text: 'Update gitlab', command: 'apt install gitlab' },
-            { system: 'mini', text: 'Update gitlab', command: 'apt install gitlab' },
+  actions: [{ system: 'host-a', text: 'Update gitlab', command: 'apt install gitlab' },
+            { system: 'host-b', text: 'Update gitlab', command: 'apt install gitlab' },
             { system: 'pi', text: 'Fixed version not confirmed yet', command: '' }] }
 
 beforeEach(() => {
@@ -80,7 +80,7 @@ describe('EarlyWarningsView', () => {
     const w = mount(EarlyWarningsView)
     await flushPromises()
     const steps = w.findAll('.ew-steps li').map((li) => li.get('.ew-step-text').text())
-    expect(steps.slice(0, 2)).toEqual(['g6, mini Update gitlab', 'pi Fixed version not confirmed yet'])
+    expect(steps.slice(0, 2)).toEqual(['host-a, host-b Update gitlab', 'pi Fixed version not confirmed yet'])
   })
 })
 

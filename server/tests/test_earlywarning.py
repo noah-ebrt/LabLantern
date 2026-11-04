@@ -98,10 +98,10 @@ def test_home_assistant_addon_version_is_not_the_bundled_products_version():
 
 def test_same_reason_on_several_hosts_is_stated_once():
     hosts = [{"keyword": "dnsmasq", "product": "dnsmasq", "version": "2.90", "system": n, "system_id": i,
-              "target": "host", "kind": "package"} for i, n in enumerate(("g6", "mini"), 1)]
+              "target": "host", "kind": "package"} for i, n in enumerate(("host-a", "host-b"), 1)]
     ai = {"products": [{"product": "dnsmasq", "affected": [], "fixed_versions": []}], "cves": []}
     detail = ew.classify(ai, hosts)[1]
-    assert detail == ("dnsmasq 2.90 on g6, dnsmasq 2.90 on mini: the advisory names no affected versions, "
+    assert detail == ("dnsmasq 2.90 on host-a, dnsmasq 2.90 on host-b: the advisory names no affected versions, "
                       "check the vendor's own advisory")
 
 
