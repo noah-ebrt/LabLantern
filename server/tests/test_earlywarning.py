@@ -649,6 +649,18 @@ def test_a_shared_finding_stays_when_one_advisory_is_reclassified(ctx, pi_host):
         assert [f.title for f in s.scalars(select(Finding))] == [f"Early warning: {second.title}"]
 
 
+def test_reclassifying_after_a_host_is_gone_creates_no_finding_for_it(ctx, pi_host):
+    use(ctx, Claude(tool_input=TAILWORM_FACTS))
+    ew.run_pass(ctx, fetch=lambda url: ew.parse_feed(TAILWORM))
+    with ctx.session_factory() as s:
+        w = s.scalar(select(EarlyWarning))
+        matched = [{**p, "system_id": 999} for p in json.loads(w.matched)]   # Host gelöscht oder neu nummeriert
+        ew._remove_ai_findings(s, w)
+        ew.apply(s, w, TAILWORM_FACTS, matched)
+        s.commit()
+        assert w.status == "betroffen" and s.scalar(select(Finding)) is None
+
+
 def test_backported_distro_packages_are_never_compared_but_critical_ones_alert(ctx, pi_host):
     feed = TAILWORM.replace(b"Tailworm: 11 Tailscale Flaws", b"OpenSSH 10.1 fixes critical flaw")
     use(ctx, Claude(tool_input={**TAILWORM_FACTS, "products": [{"product": "OpenSSH", "affected": [

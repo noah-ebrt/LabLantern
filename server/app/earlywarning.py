@@ -789,7 +789,8 @@ def _ai_finding(s, w: EarlyWarning, ai: dict, affected: list[dict]) -> None:
     cve = ai["cves"][0] if ai["cves"] else f"LL-ADVISORY-{w.item_key[:12]}"
     fixed = ", ".join(x for prod in ai["products"] for x in prod["fixed_versions"])[:300]
     for p in affected:
-        if p["system_id"] is None:
+        # gespeicherte Treffer überdauern das Löschen eines Hosts (und die Migration vom 3. 11.): kein Fund ohne Host
+        if p["system_id"] is None or s.get(System, p["system_id"]) is None:
             continue
         same = s.scalar(select(Finding).where(Finding.system_id == p["system_id"], Finding.source == "ai",
                                               Finding.target == p["target"], Finding.status.in_(("open", "accepted")),
