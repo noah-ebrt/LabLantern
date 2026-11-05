@@ -13,15 +13,19 @@ const STATUS = {
   betroffen: { cls: 'danger', text: 'Affected' },
   unklar: { cls: 'warning', text: 'Needs review' },
   pending: { cls: 'neutral', text: 'Queued' },
+  behoben: { cls: 'ok', text: 'Fixed' },
   nicht_betroffen: { cls: 'ok', text: 'Not affected' },
 }
-const FILTERS = [['', 'All'], ['betroffen', 'Affected'], ['unklar', 'Needs review'], ['nicht_betroffen', 'Not affected']]
+const FILTERS = [['', 'All'], ['betroffen', 'Affected'], ['unklar', 'Needs review'], ['behoben', 'Fixed'], ['nicht_betroffen', 'Not affected']]
 const EMPTY = {
   '': 'No early warnings yet. They appear when a feed mentions one of your products in the last 30 days.',
   betroffen: 'Nothing in the feeds affects your installed versions.',
   unklar: 'Nothing to review: every matched advisory could be compared with your installed versions.',
+  behoben: 'Nothing fixed yet. An affected advisory moves here once every host runs a version outside its range.',
   nicht_betroffen: 'No advisory has been ruled out yet.',
 }
+// Behoben oder nicht betroffen: keine Stufe, keine Schritte, keine Abhilfe mehr
+const done = (w) => w.status === 'nicht_betroffen' || w.status === 'behoben'
 
 const filter = ref(useRoute()?.query.status || '')   // Link aus „What to do“ (/fruehwarnungen?status=betroffen)
 const data = ref(null)
@@ -332,7 +336,7 @@ useLive(['findings', 'settings'], load, 3000)
       <li v-for="w in data.items" :key="w.id" class="ew">
         <div class="ew-status">
           <span :class="['badge', STATUS[w.status]?.cls || 'neutral']">{{ STATUS[w.status]?.text || w.status }}</span>
-          <span v-if="w.severity && w.severity !== 'info' && w.status !== 'nicht_betroffen'" :class="['badge-sev', w.severity]"
+          <span v-if="w.severity && w.severity !== 'info' && !done(w)" :class="['badge-sev', w.severity]"
                 title="Early warnings are rated at most high; the scanner confirms the rest">{{ label(w.severity) }}</span>
           <span v-if="w.exploited === 'ja'" class="badge danger" title="The advisory says the vulnerability is exploited">Exploited</span>
           <span v-else-if="w.public_exploit === 'yes'" class="badge danger" title="A public exploit or proof of concept exists">Public exploit</span>
@@ -342,7 +346,7 @@ useLive(['findings', 'settings'], load, 3000)
           <a :href="w.link" target="_blank" rel="noopener" class="ew-title">{{ w.title }}<Icon name="external" :size="12" /></a>
           <p v-if="w.summary" class="ew-summary">{{ w.summary }}</p>
           <p class="ew-detail">{{ w.status === 'pending' ? 'Waiting for the next pass (at most 20 entries go to the AI provider per pass).' : w.detail }}</p>
-          <ul v-if="w.actions?.length && w.status !== 'nicht_betroffen'" class="ew-steps" aria-label="Recommended steps">
+          <ul v-if="w.actions?.length && !done(w)" class="ew-steps" aria-label="Recommended steps">
             <li v-for="(a, i) in steps(w)" :key="i">
               <span class="ew-step-text"><strong>{{ a.system }}</strong> {{ a.text }}</span>
               <span v-if="a.command" class="ew-cmd">
@@ -353,7 +357,7 @@ useLive(['findings', 'settings'], load, 3000)
               </span>
             </li>
           </ul>
-          <div v-if="w.mitigations?.length && w.status !== 'nicht_betroffen'" class="ew-mitigations">
+          <div v-if="w.mitigations?.length && !done(w)" class="ew-mitigations">
             <span class="field-label">Mitigation from the advisory</span>
             <p v-for="(m, i) in w.mitigations" :key="i">{{ m }}</p>
           </div>
@@ -438,6 +442,7 @@ useLive(['findings', 'settings'], load, 3000)
 .toolbar { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
 .seg-btn.betroffen .dot { background: var(--crit); }
 .seg-btn.unklar .dot { background: var(--med); }
+.seg-btn.behoben .dot,
 .seg-btn.nicht_betroffen .dot { background: var(--ok); }
 
 .ew-list { list-style: none; margin: 0; padding: 0; transition: opacity 0.2s; }

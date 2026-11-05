@@ -322,7 +322,7 @@ class EarlyWarning(Base):
     link: Mapped[str] = mapped_column(String, default="")
     published: Mapped[str] = mapped_column(String, default="")
     matched: Mapped[str] = mapped_column(Text, default="[]")       # Produkte aus dem Inventar, die der Vorfilter fand
-    status: Mapped[str] = mapped_column(String, default="pending")  # pending, betroffen, nicht_betroffen, unklar
+    status: Mapped[str] = mapped_column(String, default="pending")  # pending, betroffen, nicht_betroffen, unklar, behoben
     exploited: Mapped[str] = mapped_column(String, default="unbekannt")
     cves: Mapped[str] = mapped_column(Text, default="[]")
     detail: Mapped[str] = mapped_column(Text, default="")           # Begründung der Einstufung (Code, nicht KI)

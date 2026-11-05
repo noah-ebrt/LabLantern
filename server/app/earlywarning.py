@@ -436,6 +436,24 @@ def appliance_products(s) -> list[dict]:
     return out
 
 
+def image_version(folder: Path, image_id: str, keyword: str, line: str = "") -> str:
+    """Version des Hauptprogramms aus der SBOM des Images (python:3.11-slim -> Komponente „python“ 3.11.18).
+    Ein Linien-Tag zieht mit jedem Pull die nächste Patch-Version nach, der Tag allein sagt also nicht, ob der Fix
+    drin ist. Bei einem Linien-Tag zählt die SBOM nur, wenn ihre Version zur Linie passt (3.11 -> 3.11.x)."""
+    m = re.match(r"^v?(\d+(?:\.\d+)*)", line)
+    if not image_id or (line and not m):
+        return ""
+    try:
+        doc = json.loads((folder / f"{image_id.removeprefix('sha256:')}.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    found = sorted({str(c.get("version") or "") for c in doc.get("components") or []
+                    if isinstance(c, dict) and (c.get("name") or "").lower() == keyword and c.get("version")})
+    if line:
+        found = [v for v in found if v == m.group(1) or v.startswith(m.group(1) + ".")]
+    return found[0] if len(found) == 1 else ""   # mehrdeutig: lieber keine als eine falsche Version
+
+
 def inventory_products(s, data_dir: Path | None = None) -> list[dict]:
     """[{keyword, product, version, system_id, system, target, kind, ...}] aus Inventar, SBOMs und Handliste.
     kind: image, os, kernel, package, manual. `backport`: Distributionsbau, Upstream-Versionen nicht vergleichbar."""
@@ -460,6 +478,9 @@ def inventory_products(s, data_dir: Path | None = None) -> list[dict]:
             # Nur ein vollständiger Tag (x.y.z) bleibt beim Pull gleich; 3.11-slim wandert mit der Linie mit
             versioned, pinned = bool(re.match(r"^v?\d", tag)), bool(re.match(r"^v?\d+\.\d+\.\d+", tag))
             version = tag if versioned else (rows.get(ref) or {}).get("running", "")
+            if not pinned and data_dir is not None:   # 3.11-slim, latest: die Version aus der SBOM des Images
+                version = image_version(data_dir / "images" / str(sys.id), c.get("image_id", ""),
+                                        _keyword(ref), tag if versioned else "") or version
             out.append({**base, "keyword": _keyword(ref), "product": ref, "version": version, "kind": "image",
                         "target": f"image:{ref[:200]}"[:300], "pinned": pinned,
                         "project_dir": (c.get("labels") or {}).get("com.docker.compose.project.working_dir", ""),
@@ -836,6 +857,72 @@ def apply(s, w: EarlyWarning, ai: dict, matched: list[dict]) -> None:
     w.actions = json.dumps(recommend(ai, hits))
     if status == "betroffen":
         _ai_finding(s, w, ai, hits)
+
+
+def _current(p: dict, index: dict) -> dict:
+    """Der Treffer mit der Version, die das Inventar jetzt meldet. Ein Image-Update ändert die Referenz (…:v1.104.4),
+    darum gilt auch der einzige Eintrag mit demselben Stichwort und derselben Art auf dem Host. Ohne bekannte Version
+    (Host offline, Registry noch nicht gefragt) bleibt der alte Treffer: ein fehlender Wert ist kein Update."""
+    # neu registrierte Hosts bekommen eine neue ID (VMSSD 3 -> 10 am 3. 11.): dann gilt der Name
+    cands = index.get((p.get("system_id"), p.get("keyword"), p.get("kind"))) \
+        or index.get((p.get("system"), p.get("keyword"), p.get("kind")), [])
+    same = [c for c in cands if c["product"] == p["product"]] or (cands if len(cands) == 1 else [])
+    return same[0] if same and same[0].get("version") else p
+
+
+def _resolve_ai_findings(s, w: EarlyWarning, hits: list[dict], now: datetime) -> None:
+    """Offene Funde dieser Frühwarnung, deren Host, Produkt und Version nicht mehr betroffen sind: erledigt."""
+    keep = {(p["system_id"], p["product"][:300], p["version"][:300]) for p in hits}
+    for f in s.scalars(select(Finding).where(Finding.source == "ai", Finding.status == "open",
+                                             Finding.title == f"Early warning: {w.title}"[:500])):
+        if (f.system_id, f.component, f.installed_version) not in keep:
+            f.status, f.resolved_at = "resolved", now
+
+
+def recheck(s, products: list[dict], now: datetime | None = None) -> int:
+    """Betroffene (und schon behobene) Meldungen gegen die aktuellen Versionen halten, ohne KI: die gespeicherte
+    Antwort wird mit den neuen Versionen neu eingestuft. Bleibt ein Host betroffen, gelten nur noch seine Treffer.
+    Liegt keiner der bestätigt betroffenen mehr im Bereich, ist die Meldung `behoben`; Einträge, die schon vorher nur
+    zu prüfen waren (Add-on-Version, Distributionsbau), hält das nicht auf, ihr Grund steht in der Begründung.
+    Ist ein bestätigter Eintrag jetzt nicht vergleichbar, bleibt alles, wie es war. Liefert die neu behobenen."""
+    now = now or datetime.now(timezone.utc)
+    index: dict[tuple, list[dict]] = {}
+    for p in products:
+        index.setdefault((p["system_id"], p["keyword"], p.get("kind")), []).append(p)
+        if p["system_id"] is not None:
+            index.setdefault((p["system"], p["keyword"], p.get("kind")), []).append(p)
+    alone =lambda result, p: classify(result, [p])[0]   # noqa: E731
+    fixed = 0
+    for w in s.scalars(select(EarlyWarning).where(EarlyWarning.status.in_(("betroffen", "behoben")))):
+        result = json.loads(w.ai_json or "{}").get("result")
+        if not isinstance(result, dict):
+            continue
+        old = json.loads(w.matched)
+        new = [_current(p, index) for p in old]
+        if [(p["product"], p["version"]) for p in new] == [(p["product"], p["version"]) for p in old]:
+            continue   # nur eine geänderte Version stuft neu ein, nicht ein neues Feld im Inventar
+        status, detail, hits = classify(result, new)
+        if status == "betroffen":
+            w.matched = json.dumps(new)
+            _resolve_ai_findings(s, w, hits, now)
+            apply(s, w, result, new)
+            continue
+        # die Einträge, um die es geht: bei „betroffen“ die bestätigten, bei „behoben“ die behobenen
+        was = {(a.get("system_id"), a["product"], a["version"]) for a in json.loads(w.affected or "[]")}
+        # nur, was nach heutigen Regeln mit der alten Version betroffen war: ältere Regeln bestätigten auch die
+        # Add-on-Version von Home Assistant (0.30.4 gegen 1.104.x), heute ist sie nur zu prüfen
+        keys = [i for i, o in enumerate(old) if ((o.get("system_id"), o["product"], o["version"]) in was
+                                                 and alone(result, o) == "betroffen"
+                                                 if w.status == "betroffen" else alone(result, o) == "nicht_betroffen")]
+        if not keys or any(alone(result, new[i]) != "nicht_betroffen" for i in keys):
+            continue
+        fixed += w.status == "betroffen"
+        w.matched = json.dumps(new)
+        _resolve_ai_findings(s, w, [], now)
+        w.detail = ("fixed: " + ", ".join(_label(new[i]) for i in keys)
+                    + (f"; still to check: {detail}" if status == "unklar" else ""))[:2000]
+        w.status, w.affected, w.actions = "behoben", "[]", "[]"
+    return fixed
 
 
 def _alarming(w: EarlyWarning) -> bool:
@@ -1282,6 +1369,9 @@ def run_pass(ctx: Context, fetch=fetch_feed, force_research: bool = False, looku
         if due:
             state["research"] = run_research(ctx, products, cfg["max_searches"])
         with ctx.session_factory() as s:
+            # vor der Prüfung beim Hersteller: eine behobene Meldung braucht keinen Aufruf mehr
+            state["fixed"] = recheck(s, products)
+            s.commit()
             verify_on = research_config(s)["verify"]
             v_provider = v_model = verify_error = None
             ai_checks = 0
@@ -1632,7 +1722,7 @@ class ResearchIn(BaseModel):
     verify: bool | None = None
 
 
-STATUS_ORDER = {"betroffen": 0, "unklar": 1, "pending": 2, "nicht_betroffen": 3}
+STATUS_ORDER = {"betroffen": 0, "unklar": 1, "pending": 2, "behoben": 3, "nicht_betroffen": 4}
 SEVERITY_ORDER = {"hoch": 0, "mittel": 1, "info": 2}
 
 
@@ -1642,7 +1732,7 @@ def _row(w: EarlyWarning) -> dict:
     stored = json.loads(w.ai_json or "{}")
     result = stored.get("result") if isinstance(stored.get("result"), dict) else None
     detail = w.detail
-    if result:   # Begründung ist Code: aus der gespeicherten KI-Antwort neu formulieren
+    if result and w.status != "behoben":   # Begründung ist Code: aus der gespeicherten KI-Antwort neu formulieren
         detail = classify({"public_exploit": "unknown", "severity": "unknown", "mitigations": [], **result}, matched)[1]
     research_row = w.origin == "research"
     return {"id": w.id, "title": w.title, "link": w.link, "feed": w.feed, "origin": w.origin or "feed",

@@ -1230,3 +1230,69 @@ def test_release_security_filter_on_real_release_notes(text, want):
 def test_cached_tokens_count_at_their_price():
     assert ew._use({"input_tokens": 1000, "cache_creation_input_tokens": 1000, "cache_read_input_tokens": 10000,
                     "output_tokens": 5}) == (3250, 5, 0)
+
+
+def test_an_update_marks_the_advisory_fixed_and_resolves_its_finding(ctx, pi_host):
+    """Nach dem Update auf 1.104.4 liegt kein Host mehr im Bereich: die Meldung ist behoben, ohne neuen KI-Aufruf."""
+    facts = {**TAILWORM_FACTS, "fix_available": "yes", "products": [{"product": "Tailscale", "affected": [
+        {"introduced": "", "fixed": "1.104.4", "last_affected": ""}], "fixed_versions": ["1.104.4"]}]}
+    claude = use(ctx, Claude(tool_input=facts))
+    ew.run_pass(ctx, fetch=lambda url: ew.parse_feed(TAILWORM))
+    with ctx.session_factory() as s:
+        assert s.scalar(select(EarlyWarning)).status == "betroffen"
+    ew.run_pass(ctx, fetch=lambda url: ew.parse_feed(TAILWORM))   # unverändert: bleibt betroffen
+    sbom(ctx, pi_host, [{"name": "tailscale", "version": "1.104.4", "purl": "pkg:deb/debian/tailscale@1.104.4"}])
+    state = ew.run_pass(ctx, fetch=lambda url: ew.parse_feed(TAILWORM))
+    assert state["fixed"] == 1 and len(claude.calls) == 1
+    with ctx.session_factory() as s:
+        w = s.scalar(select(EarlyWarning))
+        f = s.scalar(select(Finding))
+        assert (w.status, w.detail, w.affected, w.actions) == ("behoben", "fixed: tailscale 1.104.4 on raspberrypi", "[]", "[]")
+        assert json.loads(w.matched)[0]["version"] == "1.104.4"
+        assert f.status == "resolved" and f.resolved_at is not None
+        assert ew._row(w)["detail"] == "fixed: tailscale 1.104.4 on raspberrypi"
+    sbom(ctx, pi_host, [{"name": "tailscale", "version": "1.104.2", "purl": "pkg:deb/debian/tailscale@1.104.2"}])
+    ew.run_pass(ctx, fetch=lambda url: ew.parse_feed(TAILWORM))   # zurück auf die alte Version: wieder betroffen
+    with ctx.session_factory() as s:
+        assert s.scalar(select(EarlyWarning)).status == "betroffen"
+
+
+def test_an_addon_that_only_needs_a_check_does_not_keep_a_fixed_advisory_open():
+    """Wie Tailworm im Screenshot: Raspberry Pi bestätigt betroffen, das Home-Assistant-Add-on nur zu prüfen."""
+    facts = {**TAILWORM_FACTS, "fix_available": "yes", "products": [{"product": "Tailscale", "affected": [
+        {"introduced": "", "fixed": "1.104.4", "last_affected": ""}], "fixed_versions": ["1.104.4"]}]}
+    pi = {"system_id": 1, "system": "raspberrypi", "keyword": "tailscale", "product": "tailscale", "version": "1.104.2",
+          "kind": "package", "target": "host", "pm": "apt"}
+    ha = {"system_id": 2, "system": "homeassistant", "keyword": "tailscale", "product": "Tailscale", "version": "0.30.4",
+          "kind": "appliance", "target": "update:update.tailscale_update", "pm": ""}
+    w = EarlyWarning(item_key="k", feed="f", title="Tailworm", matched=json.dumps([pi, ha]), status="pending",
+                     ai_json=json.dumps({"result": facts}))
+
+    class S:   # nur, was recheck braucht: die eine Meldung, keine Funde
+        def scalars(self, q):
+            return [w] if "early_warnings" in str(q) else []
+
+    # ältere Regeln hatten auch das Add-on bestätigt: das hält „behoben“ heute nicht auf
+    w.status, w.affected = "betroffen", json.dumps([{**pi, "confirmed": True}, {**ha, "confirmed": True}])
+    # Raspberry Pi neu registriert: neue ID, gleicher Name
+    assert ew.recheck(S(), [{**pi, "system_id": 10, "version": "1.104.4"}, ha]) == 1
+    assert w.status == "behoben" and w.detail.startswith("fixed: tailscale 1.104.4 on raspberrypi; still to check: ")
+    assert "add-on's own version" in w.detail
+
+
+def test_a_line_tag_takes_the_version_from_the_image_sbom(ctx):
+    """python:3.11-slim zieht mit jedem Pull die nächste 3.11.x: zählt die Version des Programms im Image."""
+    sid = make_system(ctx, "VMSSD")
+    folder = ctx.settings.data_dir / "images" / str(sid)
+    folder.mkdir(parents=True)
+    (folder / "aaa.json").write_text(json.dumps({"components": [{"name": "python", "version": "3.11.18"},
+                                                                {"name": "pip", "version": "24.0"}]}))
+    (folder / "bbb.json").write_text(json.dumps({"components": [{"name": "python", "version": "3.12.4"}]}))
+    with ctx.session_factory() as s:
+        s.get(System, sid).inventory_json = json.dumps({"containers": [
+            {"name": "app", "image": "python:3.11-slim", "image_id": "sha256:aaa", "state": "running"},
+            {"name": "odd", "image": "python:3.11", "image_id": "sha256:bbb", "state": "running"},   # passt nicht zur Linie
+            {"name": "pin", "image": "python:3.11.9-slim", "image_id": "sha256:aaa", "state": "running"}]})
+        s.commit()
+        got = {p["product"]: p["version"] for p in ew.inventory_products(s, ctx.settings.data_dir)}
+    assert got == {"python:3.11-slim": "3.11.18", "python:3.11": "3.11", "python:3.11.9-slim": "3.11.9-slim"}
