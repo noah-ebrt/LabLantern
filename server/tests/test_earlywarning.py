@@ -1282,7 +1282,7 @@ def test_an_addon_that_only_needs_a_check_does_not_keep_a_fixed_advisory_open():
 
 def test_a_line_tag_takes_the_version_from_the_image_sbom(ctx):
     """python:3.11-slim zieht mit jedem Pull die nächste 3.11.x: zählt die Version des Programms im Image."""
-    sid = make_system(ctx, "VMSSD")
+    sid = make_system(ctx, "host-a")
     folder = ctx.settings.data_dir / "images" / str(sid)
     folder.mkdir(parents=True)
     (folder / "aaa.json").write_text(json.dumps({"components": [{"name": "python", "version": "3.11.18"},

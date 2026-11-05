@@ -863,7 +863,7 @@ def _current(p: dict, index: dict) -> dict:
     """Der Treffer mit der Version, die das Inventar jetzt meldet. Ein Image-Update ändert die Referenz (…:v1.104.4),
     darum gilt auch der einzige Eintrag mit demselben Stichwort und derselben Art auf dem Host. Ohne bekannte Version
     (Host offline, Registry noch nicht gefragt) bleibt der alte Treffer: ein fehlender Wert ist kein Update."""
-    # neu registrierte Hosts bekommen eine neue ID (VMSSD 3 -> 10 am 3. 11.): dann gilt der Name
+    # neu registrierte Hosts bekommen eine neue ID (host-a 3 -> 10): dann gilt der Name
     cands = index.get((p.get("system_id"), p.get("keyword"), p.get("kind"))) \
         or index.get((p.get("system"), p.get("keyword"), p.get("kind")), [])
     same = [c for c in cands if c["product"] == p["product"]] or (cands if len(cands) == 1 else [])
