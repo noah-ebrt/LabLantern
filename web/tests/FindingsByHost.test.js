@@ -16,8 +16,8 @@ beforeEach(() => {
   urls = []
   vi.stubGlobal('fetch', vi.fn(async (url) => {
     urls.push(url)
-    if (url.startsWith('/api/findings/by-host')) return json([{ system_id: 7, system_name: 'g6', total: 3, kritisch: 1, hoch: 2, mittel: 0, info: 0, kev: 1, fixable: 3, images: 1 }])
-    if (url.startsWith('/api/findings/groups')) return json({ system_id: 7, system_name: 'g6', groups: [group(), group({ key: 'image:y:latest', title: 'Container y', state: 'waiting', command: '', text: 'pulling changes nothing' })] })
+    if (url.startsWith('/api/findings/by-host')) return json([{ system_id: 7, system_name: 'host-a', total: 3, kritisch: 1, hoch: 2, mittel: 0, info: 0, kev: 1, fixable: 3, images: 1 }])
+    if (url.startsWith('/api/findings/groups')) return json({ system_id: 7, system_name: 'host-a', groups: [group(), group({ key: 'image:y:latest', title: 'Container y', state: 'waiting', command: '', text: 'pulling changes nothing' })] })
     if (url.startsWith('/api/findings')) return json([], { 'X-Total-Count': '0' })
     return json({})
   }))
@@ -30,7 +30,7 @@ describe('Findings by host', () => {
     await flushPromises()   // By host ist die Standardansicht
     expect(w.findAll('[role=tablist][aria-label=View] button')[0].text()).toBe('By host')
     expect(urls.some((u) => u.startsWith('/api/findings/by-host?status=open'))).toBe(true)
-    expect(w.text()).toContain('g6')
+    expect(w.text()).toContain('host-a')
     await w.get('tr.clickable').trigger('click')
     await flushPromises()
     expect(urls.some((u) => u.startsWith('/api/findings/groups?') && u.includes('system_id=7'))).toBe(true)
