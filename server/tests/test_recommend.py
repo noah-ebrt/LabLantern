@@ -35,6 +35,7 @@ def test_images_and_other_sources_never_contain_installation_paths():
     r = recommend(f(target="image:openspeedtest/latest", component="libcurl"), UBUNTU)
     assert r["command"] == "docker compose pull speed && docker compose up -d speed"
     assert "/home/user" not in json.dumps(r)
+    assert "in the directory of the Compose project speed." in r["text"]
     assert recommend(f(target="image:hub:1"), UBUNTU)["command"] == "docker compose build --pull"
     assert recommend(f(target="image:other:2", component="x"), UBUNTU)["command"] == "docker pull other:2"
     assert "change the image tag" in recommend(f(target="image:openspeedtest/latest", source="registry",
@@ -43,3 +44,18 @@ def test_images_and_other_sources_never_contain_installation_paths():
                            ("eol", "host"), ("ai", "host")):
         r = recommend(f(source=source, target=target, cve_id="LL-X"), UBUNTU)
         assert r["text"] and r["command"] == ""
+
+
+def test_portainer_stacks_and_pinned_tags_get_no_useless_pull():
+    """Portainer-Stacks: kein Compose-Verzeichnis auf dem Host; fester Versions-Tag: pull holt dasselbe Image."""
+    sys = SimpleNamespace(inventory_json=json.dumps({"os_id": "ubuntu", "containers": [
+        {"name": "n8n", "image": "n8nio/n8n:latest", "repo_digests": ["x@sha256:1"],
+         "labels": {"com.docker.compose.project.working_dir": "/data/compose/1", "com.docker.compose.project": "n8n",
+                    "com.docker.compose.service": "n8n"}},
+        {"name": "gitlab", "image": "gitlab/gitlab-ce:19.5.3-ce.0", "repo_digests": ["x@sha256:2"],
+         "labels": {"com.docker.compose.project.working_dir": "/srv/gitlab", "com.docker.compose.project": "gitlab",
+                    "com.docker.compose.service": "gitlab"}}]}))
+    r = recommend(f(target="image:n8nio/n8n:latest", component="libcurl"), sys)
+    assert r["command"] == "" and "Portainer: Stacks → n8n → Pull and redeploy" in r["text"]
+    r = recommend(f(target="image:gitlab/gitlab-ce:19.5.3-ce.0", component="x/net"), sys)
+    assert r["command"] == "" and "19.5.3-ce.0 is pinned" in r["text"] and "/srv/gitlab" not in json.dumps(r)

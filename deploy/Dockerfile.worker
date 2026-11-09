@@ -1,10 +1,10 @@
 # Der Worker verarbeitet nicht vertrauenswürdige SBOMs. Deshalb: nur Python-Standardbibliothek (keine pip-Pakete),
 # Grype und OSV-Scanner in fester Version und kein Zugriff auf Datenbank, Master-Schlüssel oder Daten des Servers.
-# grype v0.121.1 (go1.27.3)
-FROM anchore/grype@sha256:6b06708b036f74b2cd70e94b706b4586af96d1932e6ac46255940b2e39dd44a9 AS grype-bin
+# grype v0.121.2
+FROM anchore/grype@sha256:6a36234da13f9faa327306ac0b3dab3405cfa2b4eb20c8f904125a8707863913 AS grype-bin
 # osv-scanner v2.7.0 (2026-10-12), statisch gelinkt
 FROM ghcr.io/google/osv-scanner@sha256:4f3b7e2c64b9d38a5febc5a7e4a3dfef1d1362f726dea7a2ef4762b46469fcd0 AS osv-bin
-FROM python:3.12-slim@sha256:b18b261e1b4974b4f321451ad5251ded85abb22c2b8b262da527dda1d031ab30
+FROM python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 HOME=/home/lablantern
 WORKDIR /app
 COPY --from=grype-bin /grype /usr/local/bin/grype

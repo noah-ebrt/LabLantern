@@ -5,7 +5,7 @@ des Pakets, Image oder Compose-Dienst aus dem Fund; nie Pfade oder Eigenheiten e
 import json
 import re
 
-from .earlywarning import PACKAGE_MANAGERS, UPGRADE, purge_kernels
+from .earlywarning import PACKAGE_MANAGERS, PORTAINER_DIR, UPGRADE, purge_kernels
 
 KERNEL = re.compile(r"^linux-(image|modules|headers|tools)")
 APPLIANCE_TEXT = {
@@ -65,13 +65,28 @@ def recommend(f, sys) -> dict:
     if f.target.startswith("image:"):
         ref = f.target.removeprefix("image:")
         c = _container(inv, ref)
-        service = (c.get("labels") or {}).get("com.docker.compose.service", "")
+        labels = c.get("labels") or {}
+        service = labels.get("com.docker.compose.service", "")
+        project = labels.get("com.docker.compose.project", "") or service
+        portainer = bool(PORTAINER_DIR.match(labels.get("com.docker.compose.project.working_dir", "")))
+        tag = ref.rsplit(":", 1)[1] if ":" in ref.rsplit("/", 1)[-1] else "latest"
+        pinned = bool(re.match(r"^v?\d+\.\d+\.\d+", tag))   # pull holt bei festem Versions-Tag dasselbe Image
+        # Compose-Befehle laufen nur im Verzeichnis des Projekts: dessen Name in den Text, nie der Pfad der Installation
+        where = f" Run it in the directory of the Compose project {project}." if service else ""
         if c and not c.get("repo_digests"):
-            return {"text": urgent + f"The image {ref} is built locally. Rebuild it on a current base image and redeploy.",
+            return {"text": urgent + f"The image {ref} is built locally. Rebuild it on a current base image and "
+                            "redeploy." + where,
                     "command": "docker compose build --pull" + (f" {service}" if service else "")}
-        pull = f"docker compose pull {service} && docker compose up -d {service}" if service else f"docker pull {ref}"
+        if portainer:
+            pull, where = "", f" In Portainer: Stacks → {project or 'the stack'} → " + (
+                "Editor, change the tag, Update the stack." if pinned else "Pull and redeploy.")
+        elif pinned:
+            pull, where = "", ""
+        else:
+            pull = f"docker compose pull {service} && docker compose up -d {service}" if service else f"docker pull {ref}"
         if f.cve_id == "LL-IMAGE-OUTDATED":   # gleicher Tag, neueres Image in der Registry
-            return {"text": "The registry has a newer image for this tag. Pull it and recreate the container.", "command": pull}
+            return {"text": "The registry has a newer image for this tag. Pull it and recreate the container." + where,
+                    "command": pull}
         if f.cve_id == "LL-IMAGE-NEWER":
             return {"text": f"Version {f.fixed_version} is available. Read its release notes, change the image tag, then "
                             "recreate the container.", "command": ""}
@@ -79,9 +94,10 @@ def recommend(f, sys) -> dict:
             return {"text": urgent + f"{f.component} inside the image {ref} has no fixed version yet. Watch for a new "
                             "image; until then avoid exposing the service, or accept the risk with an expiry if the "
                             "component is not used.", "command": ""}
-        return {"text": urgent + f"{f.component} inside the image {ref} is fixed in {f.fixed_version}. Pull a newer image "
-                        "(the maintainer has to rebuild it; if the tag is pinned, move to a newer tag) and recreate the "
-                        "container.",
+        return {"text": urgent + f"{f.component} inside the image {ref} is fixed in {f.fixed_version}. " + (
+                            f"The tag {tag} is pinned, so pulling it again changes nothing: move to a newer tag and "
+                            "recreate the container." if pinned else
+                            "Pull a newer image (the maintainer has to rebuild it) and recreate the container.") + where,
                 "command": pull}
 
     # Paket auf dem Host

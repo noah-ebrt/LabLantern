@@ -12,7 +12,7 @@ x-agent-job: &agent-job
 
 services:
   proxy:
-    image: caddy@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f  # 2.11.7-alpine
+    image: caddy@sha256:0bbb055bda6793c999bde78b1b5ce3e89f829fb031af2cf50056ea1246559fee  # 2.11.9-alpine
     restart: unless-stopped
     read_only: true
     cap_drop: [ALL]
