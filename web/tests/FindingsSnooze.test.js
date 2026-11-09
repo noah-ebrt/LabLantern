@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import FindingsView from '../src/views/FindingsView.vue'
 import { setCsrf } from '../src/api.js'
 
-vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }), useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }))
+vi.mock('vue-router', () => ({ useRoute: () => ({ query: { view: 'list' } }), useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }))
 
 let calls
 const json = (b, s = 200, headers = {}) => new Response(JSON.stringify(b), { status: s, headers: { 'content-type': 'application/json', ...headers } })

@@ -6,6 +6,7 @@ import { api } from '../api.js'
 import { useLive } from '../live.js'
 import Icon from '../components/Icon.vue'
 import Modal from '../components/Modal.vue'
+import FindingsByHost from '../components/FindingsByHost.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -29,12 +30,30 @@ const onlyFix = ref(route.query.has_fix === 'true')
 const onlyFixable = ref(route.query.fixable === 'true')
 // Aus „What to do“ auf der Übersicht: Funde eines Hosts (ohne eigenes Auswahlfeld, bleibt bis zum nächsten Filter)
 const systemId = ref(route.query.system_id || '')
+const filterTarget = ref(route.query.target || '')
+// Ansicht: „By host“ (Standard: Zahlen je Host, dann Gruppen eines Hosts) oder die Liste aller Funde;
+// die Liste nur auf Wunsch oder wenn ein Link auf einen Host/ein Ziel zeigt
+const mode = ref(route.query.view === 'list' || route.query.system_id || route.query.target ? 'list' : 'hosts')
+const hostId = ref(route.query.host || '')
+const byHost = ref(null)
+function currentParams() {
+  const p = { status: filterStatus.value }
+  if (filterSeverity.value) p.severity = filterSeverity.value
+  if (query.value) p.q = query.value
+  if (filterSource.value) p.source = filterSource.value
+  if (onlyKev.value) p.kev = 'true'
+  if (onlyExposed.value) p.exposed = 'true'
+  if (onlyFix.value) p.has_fix = 'true'
+  if (onlyFixable.value) p.fixable = 'true'
+  return p
+}
 const SOURCES = [['', 'All sources'], ['scanner', 'Scanners (Grype/OSV)'], ['osv', 'OSV only'], ['both', 'Both scanners'],
   ['products', 'Versions & EOL'], ['appliances', 'Devices via API'], ['npm', 'TLS certificates'], ['ai', 'AI early warning']]
 const SOURCE_LABELS = { grype: 'Grype', osv: 'OSV only', both: 'Grype + OSV', registry: 'Registry', eol: 'endoflife.date', npm: 'NPM certificate', ai: 'AI', truenas: 'TrueNAS', homeassistant: 'Home Assistant', proxmox: 'Proxmox VE', synology: 'Synology DSM', opnsense: 'OPNsense' }
 // Eigene Funde haben keine NVD-Seite: Registry/EOL/Frühwarnung verlinken nicht auf NVD
 const nvdLink = (f) => (f.cve_id.startsWith('CVE-') ? `https://nvd.nist.gov/vuln/detail/${f.cve_id}` : null)
 const query = ref(route.query.q || '')
+const hostParams = ref(currentParams())
 
 // Empfohlene Maßnahme je Fund (vom Server, feste Regeln): aufklappbar unter der Zeile
 const openAction = ref(null)
@@ -61,15 +80,9 @@ async function loadFindings() {
   loading.value = true
   error.value = ''
   try {
-    const params = new URLSearchParams({ status: filterStatus.value, limit: PAGE, offset: offset.value })
-    if (filterSeverity.value) params.set('severity', filterSeverity.value)
-    if (query.value) params.set('q', query.value)
-    if (filterSource.value) params.set('source', filterSource.value)
+    const params = new URLSearchParams({ ...currentParams(), limit: PAGE, offset: offset.value })
     if (systemId.value) params.set('system_id', systemId.value)
-    if (onlyKev.value) params.set('kev', 'true')
-    if (onlyExposed.value) params.set('exposed', 'true')
-    if (onlyFix.value) params.set('has_fix', 'true')
-    if (onlyFixable.value) params.set('fixable', 'true')
+    if (filterTarget.value) params.set('target', filterTarget.value)
     const res = await api.page(`/api/findings?${params}`)
     findings.value = res.items
     total.value = res.total
@@ -115,11 +128,47 @@ function sevBadge(sev) {
   return `badge-sev ${sev}`
 }
 
+function syncRoute() {
+  router.replace({ query: { ...(filterSeverity.value && { severity: filterSeverity.value }), ...(query.value && { q: query.value }),
+    ...(filterSource.value && { source: filterSource.value }), ...(mode.value === 'list' && { view: 'list' }),
+    ...(mode.value === 'hosts' && hostId.value && { host: hostId.value }),
+    ...(mode.value === 'list' && systemId.value && { system_id: systemId.value }),
+    ...(mode.value === 'list' && filterTarget.value && { target: filterTarget.value }) } })
+}
+
 function applyFilters() {
   offset.value = 0
   systemId.value = ''
-  router.replace({ query: { ...(filterSeverity.value && { severity: filterSeverity.value }), ...(query.value && { q: query.value }),
-    ...(filterSource.value && { source: filterSource.value }) } })
+  filterTarget.value = ''
+  syncRoute()
+  if (mode.value === 'hosts') hostParams.value = currentParams()
+  else loadFindings()
+}
+
+function setMode(m) {
+  mode.value = m
+  hostId.value = ''
+  systemId.value = ''
+  filterTarget.value = ''
+  offset.value = 0
+  syncRoute()
+  if (m === 'hosts') hostParams.value = currentParams()
+  else loadFindings()
+}
+
+function openHost(id) {
+  hostId.value = String(id)
+  syncRoute()
+}
+
+// Aus einer Gruppe: alle Funde dieses Ziels in der Liste
+function showFindings({ systemId: sid, target }) {
+  mode.value = 'list'
+  hostId.value = ''
+  systemId.value = String(sid)
+  filterTarget.value = target
+  offset.value = 0
+  syncRoute()
   loadFindings()
 }
 
@@ -144,10 +193,10 @@ watch(() => route.query.q, (q) => {
 
 const targetLabel = (t) => (t === 'host' ? 'Host packages' : t.replace(/^image:/, ''))
 
-useLive(['findings'], () => loadFindings(), 1500)
+useLive(['findings'], () => (mode.value === 'hosts' ? byHost.value?.load() : loadFindings()), 1500)
 
 onMounted(async () => {
-  loadFindings()
+  if (mode.value === 'list') loadFindings()
   try { counts.value = (await api.get('/api/overview')).findings } catch { /* Zähler sind optional */ }
 })
 </script>
@@ -157,6 +206,10 @@ onMounted(async () => {
     <div>
       <h1>Findings</h1>
       <p class="subtitle">Vulnerabilities in host packages and container images, most urgent first</p>
+    </div>
+    <div class="seg" role="tablist" aria-label="View">
+      <button role="tab" :aria-selected="mode === 'hosts'" :class="['seg-btn', { active: mode === 'hosts' }]" data-test="view-hosts" @click="setMode('hosts')">By host</button>
+      <button role="tab" :aria-selected="mode === 'list'" :class="['seg-btn', { active: mode === 'list' }]" data-test="view-list" @click="setMode('list')">List</button>
     </div>
   </div>
 
@@ -188,6 +241,12 @@ onMounted(async () => {
       <label class="chk" title="An update fixes it now: host package update or a newer image for the tag"><input v-model="onlyFixable" type="checkbox" @change="applyFilters" />Fixable now</label>
     </div>
 
+    <template v-if="mode === 'hosts'">
+      <button v-if="hostId" class="btn-sm back" @click="openHost('')">← All hosts</button>
+      <FindingsByHost ref="byHost" :params="hostParams" :host-id="hostId" @open-host="openHost" @show-findings="showFindings" />
+    </template>
+    <template v-else>
+    <p v-if="filterTarget" class="subtext scope">Only {{ targetLabel(filterTarget) }} on this host. <button class="btn-sm" @click="applyFilters">Show all</button></p>
     <div v-if="loading && !findings.length" class="empty">Loading findings…</div>
     <div v-else-if="findings.length" class="table-wrap" :class="{ stale: loading }">
       <table class="data-table">
@@ -267,6 +326,7 @@ onMounted(async () => {
         <button class="btn-sm" :disabled="offset + PAGE >= total || loading" @click="page(1)">Next</button>
       </div>
     </footer>
+    </template>
   </section>
 
   <!-- Snooze -->
@@ -342,5 +402,7 @@ tr.expanded td { border-bottom-color: transparent; }
 td .truncate { max-width: 28ch; }
 .stale { opacity: 0.55; transition: opacity 0.2s; }
 .pager { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding-top: 1rem; margin-top: 0.5rem; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.8125rem; }
+.back { margin-bottom: 0.75rem; }
+.scope { margin: 0 0 0.75rem; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 </style>

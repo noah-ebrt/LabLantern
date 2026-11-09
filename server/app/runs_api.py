@@ -88,53 +88,96 @@ def build_runs_router(ctx: Context, guards: Guards) -> APIRouter:
 
     # --- Findings ---
 
+    class FindingFilters:
+        """Filter der Fundliste; gelten gleich für Liste, „By host“ und die Gruppen eines Hosts."""
+
+        def __init__(
+            self,
+            severity: str | None = Query(None),
+            system_id: int | None = Query(None),
+            status: str = Query("open"),
+            q: str | None = Query(None, max_length=100),
+            source: str | None = Query(None, pattern=r"^(grype|osv|both|registry|eol|ai|npm|scanner|products|appliances|truenas|homeassistant|proxmox|synology|opnsense)$"),
+            kev: bool | None = Query(None),
+            exposed: bool | None = Query(None),
+            has_fix: bool | None = Query(None),
+            fixable: bool | None = Query(None),
+            target: str | None = Query(None, max_length=300),
+        ):
+            self.severity, self.system_id, self.status, self.q, self.source = severity, system_id, status, q, source
+            self.kev, self.exposed, self.has_fix, self.fixable, self.target = kev, exposed, has_fix, fixable, target
+
+        def apply(self, stmt):
+            if self.status != "all":
+                stmt = stmt.where(Finding.status == self.status)
+            if self.severity:
+                stmt = stmt.where(Finding.severity == self.severity)
+            if self.system_id:
+                stmt = stmt.where(Finding.system_id == self.system_id)
+            if self.target:
+                stmt = stmt.where(Finding.target == self.target)
+            groups = {"scanner": ("grype", "osv", "both"), "products": ("registry", "eol"),
+                      "appliances": ("truenas", "homeassistant", "proxmox", "synology", "opnsense")}
+            if self.source:
+                stmt = stmt.where(Finding.source.in_(groups.get(self.source, (self.source,))))
+            if self.kev is not None:
+                stmt = stmt.where(Finding.kev == self.kev)
+            if self.exposed is not None:
+                stmt = stmt.where(Finding.internet_exposed == self.exposed)
+            if self.has_fix is not None:
+                stmt = stmt.where((Finding.fixed_version != "") if self.has_fix else (Finding.fixed_version == ""))
+            if self.fixable is not None:
+                stmt = stmt.where(fixable_now() if self.fixable else ~fixable_now())
+            if self.q and self.q.strip():
+                like = f"%{self.q.strip()}%"
+                stmt = stmt.where(Finding.cve_id.ilike(like) | Finding.component.ilike(like)
+                                  | Finding.target.ilike(like) | System.name.ilike(like))
+            return stmt
+
+    def _base(flt: FindingFilters):
+        return flt.apply(select(Finding).join(System, Finding.system_id == System.id))
+
+    @router.get("/findings/by-host")
+    def findings_by_host(flt: FindingFilters = Depends(), _found=Depends(guards.require_session)):
+        from .findgroups import host_summaries
+        with ctx.session_factory() as s:
+            return host_summaries(s, _base(flt), fixable_now())
+
+    @router.get("/findings/groups")
+    def findings_groups(system_id: int = Query(...), flt: FindingFilters = Depends(),
+                        _found=Depends(guards.require_session)):
+        from .findgroups import host_groups, image_statuses
+        from .products import load_state
+        with ctx.session_factory() as s:
+            system = s.get(System, system_id)
+            if system is None:
+                raise HTTPException(404, "system not found")
+            flt.system_id = None   # host_groups grenzt selbst ein
+            return {"system_id": system.id, "system_name": system.name,
+                    "groups": host_groups(s, system, _base(flt), image_statuses(load_state(s), system.id),
+                                          fixable_now())}
+
     @router.get("/findings")
     def list_findings(
         response: Response,
-        severity: str | None = Query(None),
-        system_id: int | None = Query(None),
-        status: str = Query("open"),
-        q: str | None = Query(None, max_length=100),
-        source: str | None = Query(None, pattern=r"^(grype|osv|both|registry|eol|ai|npm|scanner|products|appliances|truenas|homeassistant|proxmox|synology|opnsense)$"),
-        kev: bool | None = Query(None),
-        exposed: bool | None = Query(None),
-        has_fix: bool | None = Query(None),
-        fixable: bool | None = Query(None),
+        flt: FindingFilters = Depends(),
         limit: int = Query(200, ge=1, le=1000),
         offset: int = Query(0, ge=0),
         _found=Depends(guards.require_session),
     ):
         with ctx.session_factory() as s:
-            stmt = select(Finding, System.name.label("system_name")).join(System, Finding.system_id == System.id)
-            if status != "all":
-                stmt = stmt.where(Finding.status == status)
-            if severity:
-                stmt = stmt.where(Finding.severity == severity)
-            if system_id:
-                stmt = stmt.where(Finding.system_id == system_id)
-            groups = {"scanner": ("grype", "osv", "both"), "products": ("registry", "eol"),
-                      "appliances": ("truenas", "homeassistant", "proxmox", "synology", "opnsense")}
-            if source:
-                stmt = stmt.where(Finding.source.in_(groups.get(source, (source,))))
-            if kev is not None:
-                stmt = stmt.where(Finding.kev == kev)
-            if exposed is not None:
-                stmt = stmt.where(Finding.internet_exposed == exposed)
-            if has_fix is not None:
-                stmt = stmt.where((Finding.fixed_version != "") if has_fix else (Finding.fixed_version == ""))
-            if fixable is not None:
-                stmt = stmt.where(fixable_now() if fixable else ~fixable_now())
-            if q and q.strip():
-                like = f"%{q.strip()}%"
-                stmt = stmt.where(Finding.cve_id.ilike(like) | Finding.component.ilike(like)
-                                  | Finding.target.ilike(like) | System.name.ilike(like))
+            stmt = flt.apply(select(Finding, System.name.label("system_name")).join(System, Finding.system_id == System.id))
             total = s.scalar(select(func.count()).select_from(stmt.subquery()))
             response.headers["X-Total-Count"] = str(total)
             rank = case({"kritisch": 0, "hoch": 1, "mittel": 2}, value=Finding.severity, else_=3)
             rows = s.execute(stmt.order_by(rank, Finding.kev.desc(), Finding.cvss_score.desc(), Finding.id.desc())
                              .limit(limit).offset(offset)).all()
+            from .findgroups import image_statuses
+            from .products import load_state
             from .recommend import recommend
             systems = {x.id: x for x in s.scalars(select(System).where(System.id.in_({f.system_id for f, _ in rows})))}
+            state = load_state(s) if any(f.target.startswith("image:") for f, _ in rows) else None
+            statuses = {sid: image_statuses(state, sid) for sid in systems}
             return [
                 {
                     "id": f.id, "cve_id": f.cve_id, "title": f.title, "target": f.target, "severity": f.severity,
@@ -145,7 +188,8 @@ def build_runs_router(ctx: Context, guards: Guards) -> APIRouter:
                     "accepted_reason": f.accepted_reason,
                     "accepted_until": f.accepted_until.isoformat() if f.accepted_until else None,
                     "created_at": f.created_at.isoformat() if f.created_at else None,
-                    "action": recommend(f, systems.get(f.system_id)),   # Text und Befehl, siehe recommend.py
+                    "action": recommend(f, systems.get(f.system_id),
+                                        statuses.get(f.system_id, {}).get(f.target.removeprefix("image:"))),   # Text und Befehl, siehe recommend.py
                 }
                 for f, name in rows
             ]

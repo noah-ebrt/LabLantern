@@ -4,7 +4,7 @@ import OverviewView from '../src/views/OverviewView.vue'
 import FindingsView from '../src/views/FindingsView.vue'
 import { setCsrf } from '../src/api.js'
 
-vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }), useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }))
+vi.mock('vue-router', () => ({ useRoute: () => ({ query: { view: 'list' } }), useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }))
 
 let calls
 let steps
