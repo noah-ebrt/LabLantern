@@ -2,17 +2,21 @@
 
 Gleiche Regeln wie overview.compute_ampel (jeder Grund für Rot oder Gelb ergibt einen Schritt), dazu konkret je Host
 und Ziel: welches Image oder welche Paketgruppe die kritischen Funde trägt, ob es einen Fix gibt, und wie man ihn
-einspielt (Paketbefehl, Compose, Portainer, alte Kernel). Reiner Code aus Inventar und Funden, keine KI."""
+einspielt (Paketbefehl, Compose, Portainer, alte Kernel). Der Rat zu einem Image ist derselbe wie unter Findings → By
+host (recommend.image_action mit der Registry-Prüfung): ist es schon das neueste, steht das da statt „neuerer Tag“.
+Reiner Code aus Inventar und Funden, keine KI."""
 import json
 import re
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import case, func, select
 
-from .containers import containers_of
 from .coverage import SCAN_MAX_AGE_HOURS
-from .earlywarning import PACKAGE_MANAGERS, PORTAINER_DIR, UPGRADE, purge_kernels
+from .earlywarning import PACKAGE_MANAGERS, UPGRADE, purge_kernels
+from .findgroups import image_statuses
 from .models import EarlyWarning, Finding, ScanRun, System, put_setting, setting
+from .products import load_state
+from .recommend import _inventory, image_action
 
 CHECK_NAMES = {"paket_cve": "Package CVEs", "sicherheitsupdates": "Security updates", "reboot": "Reboot",
                "container": "Containers", "images": "Container images", "versionen": "Versions"}
@@ -63,26 +67,6 @@ def _findings_link(severity: str, system_id: int | None = None, q: str = "", kev
     query = {"severity": severity, **({"system_id": str(system_id)} if system_id else {}), **({"q": q} if q else {}),
              **({"kev": "true"} if kev else {})}
     return {"path": "/funde", "query": query}
-
-
-def _image_step(sys: System, ref: str) -> tuple[str, str]:
-    """(Text, Befehl) zum Aktualisieren eines Images, aus den Compose-Labels des Containers."""
-    c = next((c for c in containers_of(sys) if c.get("image") == ref), {})
-    labels = c.get("labels") or {}
-    tag = ref.rsplit(":", 1)[1] if ":" in ref.rsplit("/", 1)[-1] else "latest"
-    workdir, project = labels.get("com.docker.compose.project.working_dir", ""), labels.get("com.docker.compose.project", "")
-    if c and not c.get("repo_digests"):
-        return "Built locally: rebuild it on a current base image (docker build --pull) and redeploy.", ""
-    pinned = bool(re.match(r"^v?\d+\.\d+\.\d+", tag))
-    what = "Move to a newer version tag" if pinned else "Pull the newest image"
-    if PORTAINER_DIR.match(workdir):
-        return f"{what}: in Portainer, Stacks → {project or 'the stack'} → " + (
-            "Editor, change the tag, Update the stack." if pinned else "Pull and redeploy."), ""
-    service = labels.get("com.docker.compose.service", "")
-    if service and not pinned:   # allgemein gültig: im Verzeichnis des Compose-Projekts, ohne dessen Pfad
-        return (f"{what} and recreate the container, in the directory of the Compose project {project or service}:",
-                f"docker compose pull {service} && docker compose up -d {service}")
-    return f"{what} and recreate the container.", ""
 
 
 def _host_step(s, sys: System, rows: list[tuple]) -> tuple[str, str]:
@@ -142,6 +126,7 @@ def next_steps(s, counts: dict, cov: dict, last: ScanRun | None, now: datetime) 
                            command=cmd.group(0).strip() if cmd else "", link={"path": "/systeme"}, cta="Open systems"))
 
     systems = {sys.id: sys for sys in s.scalars(select(System))}
+    registry = load_state(s)   # letzter Versionsdurchgang: ob es für ein Image überhaupt etwas Neueres gibt
     for severity, level in (("kritisch", "rot"), ("hoch", "gelb")):
         if not counts.get(severity):
             continue
@@ -172,7 +157,8 @@ def next_steps(s, counts: dict, cov: dict, last: ScanRun | None, now: datetime) 
                     Finding.severity == "kritisch")).all()
                 text, command = _host_step(s, sys, rows)
             else:
-                text, command = _image_step(sys, target.removeprefix("image:"))
+                ref = target.removeprefix("image:")
+                _, text, command = image_action(_inventory(sys), ref, image_statuses(registry, sid).get(ref))
             steps.append(_step(level, f"{sys.name} · {where}", f"{facts}. {text}", command=command,
                                link=_findings_link("kritisch", sid, target), cta="Show findings"))
         if len(groups) > MAX_GROUPS:

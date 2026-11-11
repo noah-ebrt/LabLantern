@@ -44,9 +44,35 @@ def test_critical_findings_become_steps_per_host_and_image_kev_first(ctx):
     assert speed["command"] == "docker compose pull speed && docker compose up -d speed"   # ohne Pfad der Installation
     assert "/home/user" not in json.dumps(steps) and "Compose project openspeedtest" in speed["detail"]
     gitlab = next(st for st in steps if "gitlab" in st["title"])
-    assert gitlab["command"] == "" and "Portainer, Stacks → gitlab-light → Editor, change the tag" in gitlab["detail"]
+    assert gitlab["command"] == "" and "In Portainer: Stacks → gitlab-light → Editor, change the tag" in gitlab["detail"]
     hub = next(st for st in steps if "traininghub" in st["title"])
-    assert "Built locally" in hub["detail"]
+    assert "built locally" in hub["detail"]
+
+
+def test_an_image_that_is_already_the_newest_is_not_told_to_move_to_a_newer_tag(ctx):
+    """Wie unter Findings → By host: die Registry-Prüfung entscheidet, ob ein neuerer Tag oder ein Pull hilft."""
+    from app.models import put_setting
+    from app.products import STATE_KEY
+
+    sid = make_system(ctx, "host-b")
+    with ctx.session_factory() as s:
+        s.get(System, sid).inventory_json = json.dumps({"os_id": "ubuntu", "containers": [
+            {"name": "gl", "image": "gitlab/gitlab-ce:19.5.4-ce.0", "repo_digests": ["x@sha256:2"],
+             "labels": {"com.docker.compose.project.working_dir": "/data/compose/2", "com.docker.compose.project": "gitlab-light"}},
+            {"name": "db", "image": "postgres:16", "repo_digests": ["x@sha256:3"],
+             "labels": {"com.docker.compose.project": "app", "com.docker.compose.service": "db"}}]})
+        put_setting(s, STATE_KEY, {"at": 0, "systems": {str(sid): {"rows": [
+            {"image": "gitlab/gitlab-ce:19.5.4-ce.0", "status": "current"}, {"image": "postgres:16", "status": "outdated"}]}}})
+        s.add_all([finding(sid, "ruby", target="image:gitlab/gitlab-ce:19.5.4-ce.0", fix="3.4"),
+                   finding(sid, "openssl", target="image:postgres:16", fix="3.0.2")])
+        s.commit()
+        steps = next_steps(s, {"kritisch": 2, "hoch": 0}, COV, RUN, NOW)
+    gitlab = next(st for st in steps if "gitlab" in st["title"])
+    assert "already run the newest image" in gitlab["detail"] and "newer" not in gitlab["detail"].split("newest image")[1]
+    assert gitlab["command"] == ""
+    db = next(st for st in steps if "postgres" in st["title"])
+    assert "The registry has a newer image for this tag" in db["detail"]
+    assert db["command"] == "docker compose pull db && docker compose up -d db"
 
 
 def test_run_problems_and_affected_early_warnings_are_red(ctx):
