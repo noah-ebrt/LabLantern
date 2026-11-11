@@ -21,7 +21,7 @@ const EMPTY = {
   '': 'No early warnings yet. They appear when a feed mentions one of your products in the last 30 days.',
   betroffen: 'Nothing in the feeds affects your installed versions.',
   unklar: 'Nothing to review: every matched advisory could be compared with your installed versions.',
-  behoben: 'Nothing fixed yet. An affected advisory moves here once every host runs a version outside its range.',
+  behoben: 'Nothing fixed yet. An affected advisory moves here once every host runs a version outside its range, or when you mark it as fixed.',
   nicht_betroffen: 'No advisory has been ruled out yet.',
 }
 // Behoben oder nicht betroffen: keine Stufe, keine Schritte, keine Abhilfe mehr
@@ -162,6 +162,20 @@ async function retry(w) {
     await load()
   } catch (e) {
     error.value = e.message
+  }
+}
+
+// Gilt sofort; der nächste Bericht des Hosts bestätigt es oder holt die Meldung als betroffen zurück
+const fixing = ref(null)
+async function markFixed(w, fixed = true) {
+  fixing.value = w.id
+  try {
+    await api.post(`/api/early-warnings/${w.id}/fixed`, { fixed })
+    await load()
+  } catch (e) {
+    error.value = e.message
+  } finally {
+    fixing.value = null
   }
 }
 
@@ -365,6 +379,8 @@ useLive(['findings', 'settings'], load, 3000)
             <time :datetime="w.published" :title="w.published ? fmtDateTime(w.published) : ''">{{ w.published ? fmtDay(w.published) : 'no date' }}</time>
             <span :title="w.origin === 'research' ? 'Found by the web research' : w.feed">{{ w.source }}<template v-if="w.origin === 'research'"> · web research</template></span>
             <span v-if="w.verified" title="Versions and mitigations checked against the vendor's advisory by a web search">checked with vendor</span>
+            <span v-if="w.fix_claimed_at" data-test="fix-claimed" :title="`Marked as fixed by hand ${fmtDateTime(w.fix_claimed_at)}. The host's next report confirms it or brings the advisory back as affected.`">marked fixed {{ timeAgo(w.fix_claimed_at) }}, not confirmed yet</span>
+            <span v-else-if="w.fix_refuted_at && w.status === 'betroffen'" class="ew-refuted" data-test="fix-refuted" :title="`Marked as fixed by hand, but a later report still showed an affected version (${fmtDateTime(w.fix_refuted_at)})`">marked fixed, but the host still reports an affected version</span>
             <span v-if="w.notified_at" :title="fmtDateTime(w.notified_at)">notified {{ timeAgo(w.notified_at) }}</span>
             <span v-else-if="w.duplicate_of" class="truncate" :title="`Same hosts, product and version as an advisory already notified, with no new host, higher severity or newer fix: ${data.items.find(x => x.id === w.duplicate_of)?.title || 'earlier advisory'}`">not notified again, already reported</span>
             <span v-for="m in where(w)" :key="m.product + m.system" class="ew-product" :title="`${m.product} on ${m.system}`">
@@ -378,7 +394,11 @@ useLive(['findings', 'settings'], load, 3000)
 
         <div class="ew-actions">
           <RouterLink v-if="w.status === 'betroffen'" class="btn-sm" :to="{ path: '/funde', query: { source: 'ai', ...(w.cves[0] && { q: w.cves[0] }) } }">Open finding</RouterLink>
-          <button v-if="w.retryable" class="btn-sm" title="The AI provider could not be asked last time; ask again in the next pass" @click="retry(w)">Ask again</button>
+          <button v-if="w.status === 'betroffen' || w.status === 'unklar'" class="btn-sm" data-test="mark-fixed" :disabled="fixing === w.id"
+                  title="Moves to Fixed right away. The host's next report is checked: if it still shows an affected version, the advisory comes back." @click="markFixed(w)">Mark fixed</button>
+          <button v-if="w.fix_claimed_at" class="btn-sm" data-test="reopen" :disabled="fixing === w.id"
+                  title="Take back the manual mark and return to the automatic rating" @click="markFixed(w, false)">Reopen</button>
+          <button v-if="w.retryable" class="btn-sm" data-test="retry" title="The AI provider could not be asked last time; ask again in the next pass" @click="retry(w)">Ask again</button>
         </div>
       </li>
     </ol>
@@ -470,6 +490,7 @@ useLive(['findings', 'settings'], load, 3000)
 .research-config .subtext { flex-basis: 100%; }
 .ew-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 1rem; font-size: 0.75rem; color: var(--muted); }
 .ew-meta time { font-variant-numeric: tabular-nums; }
+.ew-refuted { color: var(--warn); }
 .ew-product { display: inline-flex; align-items: center; gap: 0.5rem; max-width: 100%; padding: 0.125rem 0.5rem; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); }
 .ew-product .mono { font-size: 0.75rem; color: var(--text-2); max-width: 28ch; }
 .ew-cves { display: flex; flex-wrap: wrap; gap: 0.25rem 0.75rem; font-size: 0.75rem; }

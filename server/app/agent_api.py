@@ -15,6 +15,7 @@ from . import auth
 from .connectors import connector_exposed
 from .containers import container_diff, exposed_names, learn_baseline, running_names, set_expected
 from .context import Context
+from .earlywarning import recheck_after_report
 from .guards import Guards, client_ip
 from .models import AgentCommand, EnrollmentToken, ImageSbom, System
 from .sbom import build_cyclonedx
@@ -595,6 +596,7 @@ def build_agent_router(ctx: Context, guards: Guards) -> APIRouter:
                 os.replace(tmp, path)
                 system.sbom_updated_at = now
             s.commit()
+            recheck_after_report(ctx, s)   # ein Update gilt gleich als behoben, nicht erst im nächsten Durchgang
             ids = [i["id"] for i in system_images(system)]
             system_id = system.id
             ok_ids = {r.image_id for r in s.scalars(select(ImageSbom).where(

@@ -17,6 +17,7 @@ from . import auth
 from .agent_api import MAX_HOST_SBOM_BYTES, sbom_room
 from .containers import learn_baseline
 from .context import Context
+from .earlywarning import recheck_after_report
 from .guards import Guards, client_ip
 from .models import ImageSbom, System
 from .sbom import packages_to_sbom
@@ -134,6 +135,7 @@ def build_collector_router(ctx: Context, guards: Guards) -> APIRouter:
             if containers:
                 learn_baseline(system)
             s.commit()
+            recheck_after_report(ctx, s)
         advance_collecting_runs(ctx)
 
     @router.post("/collector/v1/report")

@@ -335,6 +335,10 @@ class EarlyWarning(Base):
     classified_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True, default=None)
     notified_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True, default=None)
     duplicate_of: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)  # schon gemeldetes Problem
+    # Von Hand als behoben gemeldet: gilt sofort (`behoben`), geprüft wird gegen den nächsten Bericht des Hosts.
+    # Widerlegt der Bericht die Angabe, ist die Meldung wieder betroffen und `fix_refuted_at` hält fest, seit wann.
+    fix_claimed_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True, default=None)
+    fix_refuted_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True, default=None)
 
 
 class HealthMonitor(Base):

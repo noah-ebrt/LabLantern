@@ -38,6 +38,7 @@ beforeEach(() => {
         { id: 2, started_at: '2026-10-25T03:00:00+00:00', counts: { kritisch: 1, hoch: 3 }, coverage_percent: 100, duration_min: 20 },
       ], time_to_fix: [] })
     }
+    if (url.endsWith('/fixed')) return json({ ok: true, status: 'behoben', confirmed: false })
     return json({}, 404)
   }))
 })
@@ -68,12 +69,39 @@ describe('EarlyWarningsView', () => {
     await w.get('[data-test="coverage-now"]').trigger('click')
     expect(calls.some((x) => x.url === '/api/early-warnings/coverage-check' && x.method === 'POST')).toBe(true)
     expect(w.text()).toContain('Affected1')
-    expect(w.findAll('.ew-actions button.btn-sm')).toHaveLength(1)   // nur der KI-Fehler bekommt einen neuen Versuch
-    expect(w.get('.ew-actions button.btn-sm').text()).toBe('Ask again')   // anbieterneutral
+    expect(w.findAll('[data-test="retry"]')).toHaveLength(1)   // nur der KI-Fehler bekommt einen neuen Versuch
+    expect(w.get('[data-test="retry"]').text()).toBe('Ask again')   // anbieterneutral
     expect(w.text()).not.toMatch(/Ask Claude|No Claude|Claude API key/)
-    await w.get('.ew-actions button.btn-sm').trigger('click')
+    await w.get('[data-test="retry"]').trigger('click')
     await flushPromises()
     expect(calls.some((c) => c.url === '/api/early-warnings/2/retry' && c.method === 'POST')).toBe(true)
+  })
+
+  it('meldet eine Meldung als behoben und zeigt, was noch nicht bestätigt oder widerlegt ist', async () => {
+    const w = mount(EarlyWarningsView)
+    await flushPromises()
+    expect(w.findAll('[data-test="mark-fixed"]')).toHaveLength(2)   // betroffen und zu prüfen
+    expect(w.find('[data-test="reopen"]').exists()).toBe(false)
+    await w.get('[data-test="mark-fixed"]').trigger('click')
+    await flushPromises()
+    expect(calls.find((c) => c.url === '/api/early-warnings/1/fixed')).toMatchObject({ method: 'POST', body: { fixed: true } })
+    expect(calls.filter((c) => c.url === '/api/early-warnings' && c.method === 'GET')).toHaveLength(2)   // neu geladen
+
+    fetch.mockImplementation(async (url, init = {}) => {
+      calls.push({ url, method: init.method || 'GET', body: init.body ? JSON.parse(init.body) : null })
+      return json({ items: [
+        { ...WARNING, status: 'behoben', actions: [], fix_claimed_at: '2026-11-11T10:00:00+00:00' },
+        { ...WARNING, id: 2, fix_refuted_at: '2026-11-11T11:00:00+00:00' }], counts: { behoben: 1, betroffen: 1 },
+        state: {}, feeds: [], products: [], ai_configured: true })
+    })
+    const v = mount(EarlyWarningsView)
+    await flushPromises()
+    expect(v.get('[data-test="fix-claimed"]').text()).toContain('not confirmed yet')
+    expect(v.get('[data-test="fix-refuted"]').text()).toContain('still reports an affected version')
+    expect(v.findAll('[data-test="mark-fixed"]')).toHaveLength(1)   // die widerlegte lässt sich erneut melden
+    await v.get('[data-test="reopen"]').trigger('click')
+    await flushPromises()
+    expect(calls.find((c) => c.url === '/api/early-warnings/1/fixed' && c.body.fixed === false)).toBeTruthy()
   })
 
   it('fasst gleiche Schritte mehrerer Hosts in einer Zeile zusammen', async () => {

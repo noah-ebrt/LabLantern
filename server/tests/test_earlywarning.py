@@ -1257,6 +1257,90 @@ def test_an_update_marks_the_advisory_fixed_and_resolves_its_finding(ctx, pi_hos
         assert s.scalar(select(EarlyWarning)).status == "betroffen"
 
 
+TAILWORM_FIXED = {**TAILWORM_FACTS, "fix_available": "yes", "products": [{"product": "Tailscale", "affected": [
+    {"introduced": "", "fixed": "1.104.4", "last_affected": ""}], "fixed_versions": ["1.104.4"]}]}
+
+
+def reported(ctx, sid, minutes=1):
+    """Der Host hat (später) berichtet."""
+    from datetime import datetime, timedelta, timezone
+    with ctx.session_factory() as s:
+        s.get(System, sid).last_seen = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+        s.commit()
+
+
+def test_marked_fixed_counts_at_once_and_comes_back_when_the_host_still_reports_the_version(ctx, pi_host):
+    """Von Hand als behoben gemeldet: sofort behoben. Der nächste Bericht mit der alten Version holt die Meldung zurück."""
+    use(ctx, Claude(tool_input=TAILWORM_FIXED))
+    ew.run_pass(ctx, fetch=lambda url: ew.parse_feed(TAILWORM))
+    with ctx.session_factory() as s:
+        w = s.scalar(select(EarlyWarning))
+        ew.claim_fixed(s, w, ew.inventory_products(s, ctx.settings.data_dir))
+        s.commit()
+        assert (w.status, w.affected, w.actions) == ("behoben", "[]", "[]") and w.fix_claimed_at is not None
+        assert w.detail == "marked as fixed by hand; checked against the next report from raspberrypi"
+        assert s.scalar(select(Finding)).status == "open"   # der Fund bleibt, bis der Host es bestätigt
+    with ctx.session_factory() as s:   # kein Bericht seit der Angabe: sie gilt weiter, auch über einen Durchgang
+        ew.recheck_after_report(ctx, s)
+        assert s.scalar(select(EarlyWarning)).status == "behoben"
+    reported(ctx, pi_host)
+    with ctx.session_factory() as s:
+        ew.recheck_after_report(ctx, s)
+    with ctx.session_factory() as s:
+        w = s.scalar(select(EarlyWarning))
+        assert w.status == "betroffen" and w.fix_claimed_at is None and w.fix_refuted_at is not None
+        assert json.loads(w.affected)[0]["version"] == "1.104.2" and json.loads(w.actions)
+        assert [f.status for f in s.scalars(select(Finding))] == ["open"]
+        row = ew._row(w)
+        assert row["fix_refuted_at"] and row["fix_claimed_at"] is None
+
+
+def test_marked_fixed_is_confirmed_by_the_update_without_waiting_for_the_pass(ctx, pi_host):
+    use(ctx, Claude(tool_input=TAILWORM_FIXED))
+    ew.run_pass(ctx, fetch=lambda url: ew.parse_feed(TAILWORM))
+    with ctx.session_factory() as s:
+        ew.claim_fixed(s, s.scalar(select(EarlyWarning)), ew.inventory_products(s, ctx.settings.data_dir))
+        s.commit()
+    sbom(ctx, pi_host, [{"name": "tailscale", "version": "1.104.4", "purl": "pkg:deb/debian/tailscale@1.104.4"}])
+    reported(ctx, pi_host)
+    with ctx.session_factory() as s:
+        ew.recheck_after_report(ctx, s)
+    with ctx.session_factory() as s:
+        w = s.scalar(select(EarlyWarning))
+        assert (w.status, w.detail, w.fix_claimed_at) == ("behoben", "fixed: tailscale 1.104.4 on raspberrypi", None)
+        assert s.scalar(select(Finding)).status == "resolved"
+
+
+def test_an_update_is_fixed_with_the_report_not_only_in_the_next_pass(ctx, pi_host):
+    """Wie GitLab 19.5.4 am 11. 11.: der Host meldete die neue Version, die Meldung blieb bis zum Durchgang betroffen."""
+    use(ctx, Claude(tool_input=TAILWORM_FIXED))
+    ew.run_pass(ctx, fetch=lambda url: ew.parse_feed(TAILWORM))
+    sbom(ctx, pi_host, [{"name": "tailscale", "version": "1.104.4", "purl": "pkg:deb/debian/tailscale@1.104.4"}])
+    with ctx.session_factory() as s:
+        ew.recheck_after_report(ctx, s)
+    with ctx.session_factory() as s:
+        assert s.scalar(select(EarlyWarning)).status == "behoben"
+
+
+def test_fixed_api_marks_reopens_and_refuses_what_is_not_open(admin):
+    env, client, h = admin
+    with env.app.state.ctx.session_factory() as s:
+        s.add(EarlyWarning(item_key="k", feed="f", title="Advisory", status="unklar", detail="needs a check",
+                           ai_json=json.dumps({"error": "HTTP 401"})))
+        s.commit()
+        wid = s.scalar(select(EarlyWarning.id))
+    assert client.post("/api/early-warnings/999/fixed", headers=h, json={}).status_code == 404
+    assert client.post(f"/api/early-warnings/{wid}/fixed", headers=h, json={"fixed": False}).status_code == 409
+    r = client.post(f"/api/early-warnings/{wid}/fixed", headers=h, json={"fixed": True})
+    assert r.status_code == 200 and r.json() == {"ok": True, "status": "behoben", "confirmed": False}
+    item = client.get("/api/early-warnings").json()["items"][0]
+    assert item["status"] == "behoben" and item["fix_claimed_at"]
+    assert item["detail"] == "marked as fixed by hand; the installed version cannot be compared with the advisory"
+    assert client.post(f"/api/early-warnings/{wid}/fixed", headers=h, json={"fixed": True}).status_code == 409
+    r = client.post(f"/api/early-warnings/{wid}/fixed", headers=h, json={"fixed": False})
+    assert r.json()["status"] == "pending"   # ohne gespeicherte Antwort stuft der nächste Durchgang neu ein
+
+
 def test_an_addon_that_only_needs_a_check_does_not_keep_a_fixed_advisory_open():
     """Wie Tailworm im Screenshot: Raspberry Pi bestätigt betroffen, das Home-Assistant-Add-on nur zu prüfen."""
     facts = {**TAILWORM_FACTS, "fix_available": "yes", "products": [{"product": "Tailscale", "affected": [

@@ -33,7 +33,7 @@ from urllib.parse import unquote, urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from .aibase import AiError, Provider
 from .aiproviders import any_configured, record_use, resolve
@@ -899,21 +899,30 @@ def recheck(s, products: list[dict], now: datetime | None = None) -> int:
             continue
         old = json.loads(w.matched)
         new = [_current(p, index) for p in old]
-        if [(p["product"], p["version"]) for p in new] == [(p["product"], p["version"]) for p in old]:
+        claimed = w.fix_claimed_at is not None   # von Hand als behoben gemeldet, noch nicht bestätigt
+        if not claimed and [(p["product"], p["version"]) for p in new] == [(p["product"], p["version"]) for p in old]:
             continue   # nur eine geänderte Version stuft neu ein, nicht ein neues Feld im Inventar
         status, detail, hits = classify(result, new)
         if status == "betroffen":
+            if claimed:
+                # die Angabe gilt, bis ein Bericht nach ihr dieselbe Version noch einmal meldet
+                if not _reported_since(s, hits, w.fix_claimed_at):
+                    continue
+                w.fix_claimed_at, w.fix_refuted_at = None, now
             w.matched = json.dumps(new)
             _resolve_ai_findings(s, w, hits, now)
             apply(s, w, result, new)
             continue
-        # die Einträge, um die es geht: bei „betroffen“ die bestätigten, bei „behoben“ die behobenen
-        was = {(a.get("system_id"), a["product"], a["version"]) for a in json.loads(w.affected or "[]")}
-        # nur, was nach heutigen Regeln mit der alten Version betroffen war: ältere Regeln bestätigten auch die
-        # Add-on-Version von Home Assistant (0.30.4 gegen 1.104.x), heute ist sie nur zu prüfen
-        keys = [i for i, o in enumerate(old) if ((o.get("system_id"), o["product"], o["version"]) in was
-                                                 and alone(result, o) == "betroffen"
-                                                 if w.status == "betroffen" else alone(result, o) == "nicht_betroffen")]
+        if claimed:   # was beim Melden nach heutigen Regeln betroffen war; nur zu Prüfendes bestätigt nichts
+            keys = [i for i, o in enumerate(old) if alone(result, o) == "betroffen"]
+        else:
+            # die Einträge, um die es geht: bei „betroffen“ die bestätigten, bei „behoben“ die behobenen
+            was = {(a.get("system_id"), a["product"], a["version"]) for a in json.loads(w.affected or "[]")}
+            # nur, was nach heutigen Regeln mit der alten Version betroffen war: ältere Regeln bestätigten auch die
+            # Add-on-Version von Home Assistant (0.30.4 gegen 1.104.x), heute ist sie nur zu prüfen
+            keys = [i for i, o in enumerate(old) if ((o.get("system_id"), o["product"], o["version"]) in was
+                                                     and alone(result, o) == "betroffen"
+                                                     if w.status == "betroffen" else alone(result, o) == "nicht_betroffen")]
         if not keys or any(alone(result, new[i]) != "nicht_betroffen" for i in keys):
             continue
         fixed += w.status == "betroffen"
@@ -921,8 +930,56 @@ def recheck(s, products: list[dict], now: datetime | None = None) -> int:
         _resolve_ai_findings(s, w, [], now)
         w.detail = ("fixed: " + ", ".join(_label(new[i]) for i in keys)
                     + (f"; still to check: {detail}" if status == "unklar" else ""))[:2000]
-        w.status, w.affected, w.actions = "behoben", "[]", "[]"
+        w.status, w.affected, w.actions, w.fix_claimed_at = "behoben", "[]", "[]", None
     return fixed
+
+
+def _reported_since(s, hits: list[dict], since: datetime) -> bool:
+    """Hat einer der noch betroffenen Hosts seit `since` berichtet? Ohne Host (Handliste) gibt es keinen Bericht."""
+    for sid in {p["system_id"] for p in hits if p.get("system_id") is not None}:
+        system = s.get(System, sid)
+        if system is not None and system.last_seen is not None and system.last_seen > since:
+            return True
+    return False
+
+
+def claim_fixed(s, w: EarlyWarning, products: list[dict], now: datetime | None = None) -> None:
+    """Von Hand als behoben melden: gilt sofort, ohne auf den Host zu warten. `recheck` prüft es danach: kennt das
+    Inventar die neue Version schon, ist es gleich bestätigt; meldet der Host nach der Angabe noch die betroffene
+    Version, ist die Meldung wieder betroffen. Nicht vergleichbare Versionen prüft niemand: dort gilt die Angabe."""
+    now = now or datetime.now(timezone.utc)
+    hosts = sorted({a["system"] for a in json.loads(w.affected or "[]")}) if w.status == "betroffen" else []
+    w.detail = ("marked as fixed by hand; checked against the next report from " + ", ".join(hosts) if hosts
+                else "marked as fixed by hand; the installed version cannot be compared with the advisory")[:2000]
+    w.status, w.affected, w.actions = "behoben", "[]", "[]"
+    w.fix_claimed_at, w.fix_refuted_at = now, None
+    s.flush()
+    recheck(s, products, now)
+
+
+def reopen(s, w: EarlyWarning) -> None:
+    """Eine von Hand gemeldete, noch nicht bestätigte Behebung zurücknehmen: zurück zur Einstufung aus dem Code."""
+    w.fix_claimed_at = None
+    result = json.loads(w.ai_json or "{}").get("result")
+    if isinstance(result, dict):
+        apply(s, w, result, json.loads(w.matched))
+    else:
+        w.status = "pending"   # ohne gespeicherte Antwort (KI-Fehler): der nächste Durchgang stuft neu ein
+
+
+def recheck_after_report(ctx: Context, s) -> None:
+    """Gleich nach einem Bericht statt erst im nächsten Durchgang (Vorgabe alle 8 h): ein Update steht sonst stundenlang
+    als betroffen da. Nur wenn eine Meldung betroffen ist oder auf Bestätigung wartet, sonst liest kein Bericht SBOMs.
+    Ein Fehler hier darf den Bericht nie scheitern lassen."""
+    try:
+        if s.scalar(select(EarlyWarning.id).where(or_(EarlyWarning.status == "betroffen",
+                                                      EarlyWarning.fix_claimed_at.is_not(None))).limit(1)) is None:
+            return
+        recheck(s, inventory_products(s, ctx.settings.data_dir))
+        s.commit()
+    except Exception:
+        s.rollback()
+        log.exception("Early warning re-check after a report failed")
 
 
 def _alarming(w: EarlyWarning) -> bool:
@@ -1715,6 +1772,10 @@ class FeedsIn(BaseModel):
     products: list[dict] = Field(default_factory=list, max_length=200)
 
 
+class FixedIn(BaseModel):
+    fixed: bool = True
+
+
 class ResearchIn(BaseModel):
     """Ein altes `model` im Body wird ignoriert (Pydantic verwirft unbekannte Felder); gewählt wird unter KI.
     Fehlt `verify` (alter Client, alter Export), bleibt der gespeicherte Wert, sonst gilt `enabled`."""
@@ -1747,6 +1808,8 @@ def _row(w: EarlyWarning) -> dict:
             "verified": bool((stored.get("verified") or {}).get("model")),
             "retryable": w.status == "unklar" and "error" in stored,   # nur ein KI-Fehler kann ein neuer Versuch lösen
             "notified_at": w.notified_at.isoformat() if w.notified_at else None, "duplicate_of": w.duplicate_of,
+            "fix_claimed_at": w.fix_claimed_at.isoformat() if w.fix_claimed_at else None,
+            "fix_refuted_at": w.fix_refuted_at.isoformat() if w.fix_refuted_at else None,
             "classified_at": w.classified_at.isoformat() if w.classified_at else None}
 
 
@@ -1877,5 +1940,24 @@ def build_earlywarning_router(ctx: Context, guards: Guards) -> APIRouter:
             ctx.audit(s, found[0].username, "earlywarning.retry", w.title[:200])
             s.commit()
         return {"ok": True}
+
+    @router.post("/early-warnings/{warning_id}/fixed")
+    def mark_fixed(warning_id: int, body: FixedIn, found=Depends(guards.require_admin)):
+        """Als behoben melden (gilt sofort, der nächste Bericht des Hosts prüft es) oder die Angabe zurücknehmen."""
+        with ctx.session_factory() as s:
+            w = s.get(EarlyWarning, warning_id)
+            if w is None:
+                raise HTTPException(404, "Early warning not found")
+            if body.fixed:
+                if w.status not in ("betroffen", "unklar"):
+                    raise HTTPException(409, "Only an affected advisory or one that needs review can be marked as fixed")
+                claim_fixed(s, w, inventory_products(s, ctx.settings.data_dir))
+            else:
+                if w.fix_claimed_at is None:
+                    raise HTTPException(409, "This advisory was not marked as fixed by hand")
+                reopen(s, w)
+            ctx.audit(s, found[0].username, "earlywarning.fixed" if body.fixed else "earlywarning.reopen", w.title[:200])
+            s.commit()
+            return {"ok": True, "status": w.status, "confirmed": w.status == "behoben" and w.fix_claimed_at is None}
 
     return router
