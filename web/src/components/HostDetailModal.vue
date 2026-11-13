@@ -145,13 +145,6 @@ useLive(['commands'], loadCommands)
       <p class="subtitle">{{ system.inventory?.os_name }} · Kernel {{ system.inventory?.kernel }} ({{ system.inventory?.arch }})</p>
       <p class="subtext">Problems also appear as <RouterLink :to="{ path: '/funde', query: { q: system.name } }" @click="emit('close')">findings</RouterLink>.</p>
 
-      <HostCoverage :system-id="systemId" />
-
-      <template v-if="system.inventory?.storage">
-        <h3>Storage</h3>
-        <StorageView :storage="system.inventory.storage" />
-      </template>
-
       <template v-if="system.status === 'active' && system.host_type !== 'collector'">
         <h3>Actions</h3>
         <div class="cmd-bar">
@@ -176,6 +169,13 @@ useLive(['commands'], loadCommands)
           </div>
           <pre v-if="c.output" class="cmd">{{ c.output }}</pre>
         </div>
+      </template>
+
+      <HostCoverage :system-id="systemId" />
+
+      <template v-if="system.inventory?.storage">
+        <h3>Storage</h3>
+        <StorageView :storage="system.inventory.storage" />
       </template>
 
       <h3>Containers ({{ system.inventory?.containers?.length || 0 }})</h3>

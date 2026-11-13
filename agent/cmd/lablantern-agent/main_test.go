@@ -549,3 +549,32 @@ func TestSetupStopsWhenRejected(t *testing.T) {
 		t.Fatal("config written although rejected")
 	}
 }
+
+func TestPackageChangesTriggerOneReportOnceTheDatabaseIsQuiet(t *testing.T) {
+	db := filepath.Join(t.TempDir(), "status")
+	at := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	touch := func(when time.Time) {
+		if err := os.WriteFile(db, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(db, when, when); err != nil {
+			t.Fatal(err)
+		}
+	}
+	touch(at)
+	paths := []string{db, filepath.Join(t.TempDir(), "missing")}
+	w := pkgWatch{paths: paths, seen: pkgStamp(paths)}
+	if w.changed(at.Add(time.Hour)) {
+		t.Fatal("unverändert: kein Report")
+	}
+	touch(at.Add(2 * time.Hour)) // apt hat Pakete geändert
+	if w.changed(at.Add(2*time.Hour + pkgSettle/2)) {
+		t.Fatal("noch in Bewegung: erst melden, wenn apt fertig ist")
+	}
+	if !w.changed(at.Add(2*time.Hour + pkgSettle)) {
+		t.Fatal("geändert und ruhig: Report fällig")
+	}
+	if w.changed(at.Add(3 * time.Hour)) {
+		t.Fatal("dieselbe Änderung nur einmal melden")
+	}
+}

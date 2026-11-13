@@ -174,8 +174,10 @@ h3 { margin-top: 1.25rem; }
 .detail-table th { text-transform: none; letter-spacing: 0; font-size: 0.8125rem; color: var(--text); white-space: nowrap; vertical-align: top; }
 .problem { margin: 0.5rem 0 0.75rem; }
 .detail-table td { vertical-align: top; }
-.fix-cmd { display: flex; align-items: center; gap: 0.25rem; max-width: 100%; margin-top: 0.5rem; padding: 0.25rem 0.25rem 0.25rem 0.5rem; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--ground); }
-.fix-cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-size: 0.75rem; color: var(--text); }
+.detail-text { overflow-wrap: anywhere; }
+.fix-cmd { display: flex; align-items: flex-start; gap: 0.25rem; max-width: 100%; margin-top: 0.5rem; padding: 0.25rem 0.25rem 0.25rem 0.5rem; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--ground); }
+/* Umbrechen statt nowrap: Eine lange Paketliste machte sonst die Tabelle breiter als den Dialog */
+.fix-cmd code { flex: 1; min-width: 0; align-self: center; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.75rem; color: var(--text); }
 .fix-cmd .btn-sm { flex: none; }
 /* Schmal: Prüfung und Status in einer Zeile, die Begründung darunter über die volle Breite */
 @media (max-width: 640px) {

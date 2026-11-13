@@ -1,6 +1,7 @@
 import hashlib
 import ipaddress
 import json
+import logging
 import os
 import re
 from datetime import datetime, timezone
@@ -9,18 +10,19 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, update
 
 from . import auth
 from .connectors import connector_exposed
 from .containers import container_diff, exposed_names, learn_baseline, running_names, set_expected
 from .context import Context
+from .coverage import SCANNER_SOURCES
 from .earlywarning import recheck_after_report
 from .guards import Guards, client_ip
-from .models import AgentCommand, EnrollmentToken, ImageSbom, System
+from .models import AgentCommand, EnrollmentToken, Finding, ImageSbom, ScanRun, System
 from .sbom import build_cyclonedx
 from .storage import from_agent
-from .scanrun import (IMAGE_ID, advance_collecting_runs, agent_should_report, image_sbom_path, remove_system_files,
+from .scanrun import (ACTIVE, IMAGE_ID, advance_collecting_runs, agent_should_report, image_sbom_path, remove_system_files,
                       system_images)
 from .trust import ca_fingerprint
 
@@ -36,6 +38,8 @@ INIT_WINDOW = 180.0     # so lange darf ein frisch freigegebener Agent bis zum e
 STALE_HOURS = 24
 ONLINE_WINDOW = 120.0   # letzter Long-Poll jünger als das: verbunden
 MAX_HOST_SBOM_BYTES = 2 << 30   # alle Image-SBOMs eines Hosts zusammen: ein übernommener Agent füllt nicht die Platte
+
+log = logging.getLogger(__name__)
 
 
 def system_state(ctx: Context, r: System) -> str:
@@ -172,6 +176,28 @@ class AgentReportIn(BaseModel):
     packages: list[PackageIn] = Field(default_factory=list, max_length=100_000)
     storage: StorageIn | None = None   # Laufwerke und Pools, nur auf echter Hardware (ab 0.18)
     collection_errors: dict[str, str] = Field(default_factory=dict)
+
+
+def resolve_removed_packages(s, system_id: int, sbom: dict, now: datetime) -> None:
+    """Scanner-Funde des Hosts, deren Paket in dieser Version nicht mehr installiert ist, gleich mit dem Bericht
+    erledigen statt erst im nächsten Lauf: Nach `apt purge` oder einem Update stand sonst stundenlang ein Befehl da,
+    der nichts mehr findet. Nicht während eines Laufs: Der gleicht selbst ab, und ein Ergebnis aus der älteren SBOM
+    käme sonst als „neu“ zurück. Ein Fehler hier darf den Bericht nie scheitern lassen."""
+    try:
+        if s.scalar(select(ScanRun.id).where(ScanRun.status.in_(ACTIVE)).limit(1)) is not None:
+            return
+        installed = {(c["name"], c["version"]) for c in sbom["components"] if c["type"] == "library"}
+        scope = (Finding.system_id == system_id, Finding.target == "host", Finding.status.in_(("open", "accepted")),
+                 Finding.source.in_(SCANNER_SOURCES))
+        pairs = s.execute(select(Finding.component, Finding.installed_version).where(*scope).distinct()).tuples()
+        for component, version in [p for p in pairs if p not in installed]:
+            s.execute(update(Finding).where(*scope, Finding.component == component,
+                                            Finding.installed_version == version)
+                      .values(status="resolved", resolved_at=now))
+        s.commit()
+    except Exception:
+        s.rollback()
+        log.exception("Resolving findings of removed packages after a report failed")
 
 
 def agent_packages(ctx: Context) -> dict[str, str | None]:
@@ -597,6 +623,8 @@ def build_agent_router(ctx: Context, guards: Guards) -> APIRouter:
                 system.sbom_updated_at = now
             s.commit()
             recheck_after_report(ctx, s)   # ein Update gilt gleich als behoben, nicht erst im nächsten Durchgang
+            if sbom is not None:
+                resolve_removed_packages(s, system.id, sbom, now)
             ids = [i["id"] for i in system_images(system)]
             system_id = system.id
             ok_ids = {r.image_id for r in s.scalars(select(ImageSbom).where(

@@ -356,3 +356,49 @@ def test_agent_storage_becomes_the_common_shape(admin):
     assert disks["sdb"]["state"] == "bad" and disks["sdc"]["state"] == "unknown"
     assert agent.post("/api/agent/report", headers=bearer, json=report()).json()["ok"] is True   # VM: kein Speicher
     assert "storage" not in client.get(f"/api/systems/{sid}").json()["inventory"]
+
+
+# ---------- Entfernte Pakete: Funde gleich mit dem Bericht erledigt, nicht erst im nächsten Lauf ----------
+
+def findings_by_cve(env, sid):
+    from app.models import Finding
+    with env.app.state.ctx.session_factory() as s:
+        return {f.cve_id: f for f in s.scalars(select(Finding).where(Finding.system_id == sid))}
+
+
+def add_findings(env, sid, *rows):
+    from app.models import Finding
+    with env.app.state.ctx.session_factory() as s:
+        for cve, component, version, kw in rows:
+            s.add(Finding(system_id=sid, cve_id=cve, severity="hoch", component=component, installed_version=version,
+                          **{"source": "grype", "status": "open", "target": "host", **kw}))
+        s.commit()
+
+
+def test_a_report_resolves_the_findings_of_packages_that_are_no_longer_installed(admin):
+    env, client, h = admin
+    sid, bearer = activate(env, client, h)
+    add_findings(env, sid,
+                 ("CVE-PURGED", "linux-modules-6.8.0-44-generic", "6.8.0-44.44", {}),
+                 ("CVE-PURGED-ACCEPTED", "linux-modules-6.8.0-44-generic", "6.8.0-44.44", {"status": "accepted"}),
+                 ("CVE-UPGRADED", "curl", "8.5.0-2ubuntu10.5", {"source": "both"}),
+                 ("CVE-INSTALLED", "curl", "8.5.0-2ubuntu10.6", {"source": "osv"}),
+                 ("CVE-IMAGE", "busybox", "1.36.1", {"target": "image:openspeedtest/latest"}),
+                 ("LL-EOL", "ubuntu", "24.04", {"source": "eol"}))
+    env.new_client().post("/api/agent/report", headers=bearer, json=report())
+    found = findings_by_cve(env, sid)
+    assert {cve: f.status for cve, f in found.items()} == {
+        "CVE-PURGED": "resolved", "CVE-PURGED-ACCEPTED": "resolved", "CVE-UPGRADED": "resolved",
+        "CVE-INSTALLED": "open",    # dieselbe Version ist noch installiert
+        "CVE-IMAGE": "open",        # Image-Funde hängen nicht an den Host-Paketen
+        "LL-EOL": "open"}           # kein Scanner-Fund
+    assert found["CVE-PURGED"].resolved_at is not None and found["CVE-INSTALLED"].resolved_at is None
+
+
+def test_a_report_without_a_usable_package_list_resolves_nothing(admin):
+    env, client, h = admin
+    sid, bearer = activate(env, client, h)
+    add_findings(env, sid, ("CVE-1", "linux-modules-6.8.0-44-generic", "6.8.0-44.44", {}))
+    env.new_client().post("/api/agent/report", headers=bearer, json=report(
+        packages=[], collection_errors={"packages": "dpkg-query failed"}))
+    assert findings_by_cve(env, sid)["CVE-1"].status == "open"   # unbekannt ist nicht entfernt

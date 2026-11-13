@@ -465,10 +465,14 @@ func runDaemon(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	force := true
+	watch := pkgWatch{seen: pkgStamp(pkgDBs)}
 	for {
 		if _, err := os.Stat(*configPath); err != nil {
 			time.Sleep(30 * time.Second) // noch nicht eingerichtet
 			continue
+		}
+		if watch.changed(time.Now()) {
+			force = true // Pakete installiert, aktualisiert oder entfernt: gleich melden statt erst zur vollen Stunde
 		}
 		if daemonStep(*configPath, jobs.Default(), force, longPollWait, stdout, stderr) {
 			force = false
@@ -480,6 +484,44 @@ func runDaemon(args []string, stdout, stderr io.Writer) int {
 			time.Sleep(retryDelay)
 		}
 	}
+}
+
+// pkgDBs: Paketdatenbanken von dpkg, rpm, apk und pacman. Ändert sich eine, hat sich der Paketstand geändert.
+// pkgSettle: so lange muss sie ruhig sein, bevor gemeldet wird (apt schreibt sie in einem Lauf mehrfach).
+var pkgDBs = []string{"/var/lib/dpkg/status", "/var/lib/rpm/rpmdb.sqlite", "/usr/lib/sysimage/rpm/rpmdb.sqlite",
+	"/var/lib/rpm/Packages", "/lib/apk/db/installed", "/var/lib/pacman/local"}
+var pkgSettle = 20 * time.Second
+
+// pkgStamp: jüngste Änderungszeit der vorhandenen Paketdatenbanken (Nullzeit, wenn keine da ist).
+func pkgStamp(paths []string) time.Time {
+	var newest time.Time
+	for _, path := range paths {
+		if fi, err := os.Stat(path); err == nil && fi.ModTime().After(newest) {
+			newest = fi.ModTime()
+		}
+	}
+	return newest
+}
+
+// pkgWatch merkt sich den Stand beim letzten Blick. Ohne das stünden nach einem Update oder `apt purge` bis zum
+// nächsten stündlichen Report noch die alten Pakete und ausstehenden Updates im Master.
+type pkgWatch struct {
+	paths []string // leer: pkgDBs
+	seen  time.Time
+}
+
+// changed meldet je Änderung einmal true, sobald die Datenbank pkgSettle lang ruhig ist.
+func (w *pkgWatch) changed(now time.Time) bool {
+	paths := w.paths
+	if paths == nil {
+		paths = pkgDBs
+	}
+	stamp := pkgStamp(paths)
+	if stamp.Equal(w.seen) || now.Sub(stamp) < pkgSettle {
+		return false
+	}
+	w.seen = stamp
+	return true
 }
 
 // Long-Poll-Dauer und Pause nach Fehlern; austauschbar für Tests.
