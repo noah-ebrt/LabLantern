@@ -41,7 +41,7 @@ def test_critical_findings_become_steps_per_host_and_image_kev_first(ctx):
     assert "2 of these are in 2 packages of kernel 6.8.0-136, which no longer runs" in host["detail"]
     assert host["command"] == "sudo apt-get purge $(dpkg-query -W -f='${Package}\\n' '*6.8.0-136*')"
     assert host["link"] == {"path": "/funde", "query": {"severity": "kritisch", "system_id": str(sid), "q": "host"}}
-    assert speed["command"] == "docker compose pull speed && docker compose up -d speed"   # ohne Pfad der Installation
+    assert speed["command"] == '(cd "$(docker inspect -f \'{{index .Config.Labels "com.docker.compose.project.working_dir"}}\' speed)" && docker compose pull speed && docker compose up -d speed)'   # ohne Pfad der Installation
     assert "/home/user" not in json.dumps(steps) and "Compose project openspeedtest" in speed["detail"]
     gitlab = next(st for st in steps if "gitlab" in st["title"])
     assert gitlab["command"] == "" and "In Portainer: Stacks → gitlab-light → Editor, change the tag" in gitlab["detail"]

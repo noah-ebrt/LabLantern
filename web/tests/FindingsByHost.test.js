@@ -17,7 +17,9 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async (url) => {
     urls.push(url)
     if (url.startsWith('/api/findings/by-host')) return json([{ system_id: 7, system_name: 'host-a', total: 3, kritisch: 1, hoch: 2, mittel: 0, info: 0, kev: 1, fixable: 3, images: 1 }])
-    if (url.startsWith('/api/findings/groups')) return json({ system_id: 7, system_name: 'host-a', groups: [group(), group({ key: 'image:y:latest', title: 'Container y', state: 'waiting', command: '', text: 'pulling changes nothing' })] })
+    if (url.startsWith('/api/findings/groups')) return json({ system_id: 7, system_name: 'host-a', groups: [group(), group({ key: 'image:y:latest', title: 'Container y', state: 'waiting', command: '', text: 'pulling changes nothing' }),
+      group({ key: 'image:z:latest', title: 'Container z', state: 'stuck', text: 'The last update (Nov 10) left all 3 fixable findings here in place' }),
+      group({ key: 'image:w:latest', title: 'Container w', counts: { kritisch: 0, hoch: 3, mittel: 0, info: 0, kev: 0, fixable: 3, stayed: 2, total: 3 } })] })
     if (url.startsWith('/api/findings')) return json([], { 'X-Total-Count': '0' })
     return json({})
   }))
@@ -36,6 +38,10 @@ describe('Findings by host', () => {
     expect(urls.some((u) => u.startsWith('/api/findings/groups?') && u.includes('system_id=7'))).toBe(true)
     expect(w.text()).toContain('Update fixes these')
     expect(w.text()).toContain('Waiting for a fix')
+    // der letzte Pull ließ dieselben Funde zurück: kein Versprechen mehr
+    expect(w.get('[data-test="group-image:z:latest"]').text()).toContain('Last update did not fix these')
+    expect(w.get('[data-test="group-image:z:latest"]').text()).not.toContain('fixable now')
+    expect(w.get('[data-test="group-image:w:latest"]').text()).toContain('Update may fix some of these · 2 of 3 stayed after the last update')
     expect(w.get('[data-test="group-image:x:latest"]').text()).toContain('docker compose pull x')
     await w.get('[data-test="group-image:x:latest"] .group-foot button').trigger('click')
     expect(w.text()).toContain('brotli')

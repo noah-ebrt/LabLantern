@@ -31,11 +31,27 @@ def test_host_packages_get_the_package_manager_command():
     assert "no longer runs" in recommend(f(component="linux-modules-6.8.0-146-generic"), SimpleNamespace(inventory_json=json.dumps({"os_id": "ubuntu", "kernel": "6.8.0-14-generic"})))["text"]
 
 
+def test_a_project_started_with_its_own_compose_files_keeps_the_plain_command():
+    """cd ins Projektverzeichnis fände eine mit -f übergebene Datei nicht: dann bleibt der Hinweis im Text."""
+    labels = {"com.docker.compose.project.working_dir": "/home/user/app", "com.docker.compose.service": "web",
+              "com.docker.compose.project.config_files": "/home/user/app/prod.yml"}
+    inv = {"os_id": "ubuntu", "containers": [{"name": "web", "image": "nginx:latest", "repo_digests": ["x@sha256:1"],
+                                              "labels": labels}]}
+    r = recommend(f(target="image:nginx:latest", component="libcurl"), SimpleNamespace(inventory_json=json.dumps(inv)))
+    assert r["command"] == "docker compose pull web && docker compose up -d web"
+    assert "Run it in the directory of the Compose project web." in r["text"]
+    labels["com.docker.compose.project.config_files"] = "/home/user/app/docker-compose.yml"
+    r = recommend(f(target="image:nginx:latest", component="libcurl"), SimpleNamespace(inventory_json=json.dumps(inv)))
+    assert r["command"].startswith('(cd "$(docker inspect -f ') and r["command"].endswith("up -d web)")
+    assert "/home/user" not in json.dumps(r)
+
+
 def test_images_and_other_sources_never_contain_installation_paths():
     r = recommend(f(target="image:openspeedtest/latest", component="libcurl"), UBUNTU)
-    assert r["command"] == "docker compose pull speed && docker compose up -d speed"
+    # läuft aus jedem Verzeichnis: der Pfad kommt zur Laufzeit aus dem Label, steht aber nie im Befehl
+    assert r["command"] == '(cd "$(docker inspect -f \'{{index .Config.Labels "com.docker.compose.project.working_dir"}}\' speed)" && docker compose pull speed && docker compose up -d speed)'
     assert "/home/user" not in json.dumps(r)
-    assert "in the directory of the Compose project speed." in r["text"]
+    assert "changes into the directory of the Compose project speed itself." in r["text"]
     assert recommend(f(target="image:hub:1"), UBUNTU)["command"] == "docker compose build --pull"
     assert recommend(f(target="image:other:2", component="x"), UBUNTU)["command"] == "docker pull other:2"
     assert "change the image tag" in recommend(f(target="image:openspeedtest/latest", source="registry",

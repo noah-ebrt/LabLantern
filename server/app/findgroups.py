@@ -2,19 +2,24 @@
 Geräte-Hinweise. Jede Gruppe hat eine Maßnahme (Text, Befehl) und einen Zustand, der ehrlich sagt, ob sie hilft:
 
 update   der Befehl behebt die Funde (Paketupdate, neueres Image für den Tag)
+stuck    neueres Image da, aber alle behebbaren Funde haben schon das letzte Update überstanden
 tag      neuere Version da, aber fester Tag: Tag ändern
 rebuild  lokal gebautes Image: neu bauen
 waiting  neuestes Image/kein Fix der Distribution: Pull oder Update ändert nichts
 manual   Gerät oder Hinweis: Schritte im Text
 unknown  nicht geprüft (Registry-Prüfung fehlt), allgemeiner Rat
 
-Welche Funde ein neues Image wirklich behebt, zeigt erst der nächste Scan; das Upstream-Image wird nicht geladen."""
+Welche Funde ein neues Image wirklich behebt, zeigt erst der nächste Scan; das Upstream-Image wird nicht geladen.
+Was das letzte Update stehen ließ, steht aber schon in den Funden (_stayed): Images, deren :latest täglich neu
+gebaut wird, melden sonst dauerhaft „Update fixes these“, obwohl jeder Pull dieselben Funde zurücklässt."""
 import re
+from datetime import datetime
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, select, tuple_
+from sqlalchemy.orm import aliased
 
 from .earlywarning import PACKAGE_MANAGERS, UPGRADE, purge_kernels
-from .models import Finding, System
+from .models import Finding, ScanRun, System
 from .recommend import APPLIANCE_TEXT, KERNEL, _inventory, image_action
 
 SCANNERS = ("grype", "osv", "both")
@@ -103,6 +108,31 @@ def _host_action(g: dict, pm: str, inv: dict) -> None:
                           "headless server, removing the desktop removes them.")
 
 
+def _stayed(s, system_id: int, target: str, sub, fixable_ids, created: list[str]) -> tuple[int, datetime | None]:
+    """(Anzahl, Zeitpunkt): behebbare Funde eines Images, die schon das letzte Update überstanden haben.
+    Zeitpunkt ist die jüngste Erstellung eines Containers mit dem Image. Sie zählt nur als Update, wenn der offene
+    Registry-Fund (LL-IMAGE-*) erst danach entstand: dann lief seither das damals neueste Image. Überstanden hat
+    ein Fund, dessen CVE an derselben Komponente schon vorher bekannt war und den ein Scan danach noch sah."""
+    try:
+        since = max(datetime.fromisoformat(c.replace("Z", "+00:00")) for c in created if c)
+    except ValueError:   # kein Container mit Zeitstempel (max über nichts) oder unlesbares Datum
+        return 0, None
+    if since.tzinfo is None:
+        return 0, None
+    newer = s.scalar(select(func.min(Finding.created_at)).where(
+        Finding.system_id == system_id, Finding.target == target, Finding.status != "resolved",
+        Finding.cve_id.in_(("LL-IMAGE-OUTDATED", "LL-IMAGE-NEWER"))))
+    if newer is None or newer <= since:
+        return 0, None
+    old = aliased(Finding)
+    n = s.scalar(select(func.count()).select_from(sub).where(
+        sub.c.target == target, sub.c.id.in_(fixable_ids),
+        sub.c.last_seen_run_id.in_(select(ScanRun.id).where(ScanRun.started_at > since)),
+        tuple_(sub.c.cve_id, sub.c.component).in_(select(old.cve_id, old.component).where(
+            old.system_id == system_id, old.target == target, old.created_at < since))))
+    return n or 0, since
+
+
 def host_groups(s, system: System, base_stmt, statuses: dict[str, str], fixable_expr) -> list[dict]:
     """Gruppen eines Hosts. `base_stmt` ist die gefilterte Fundabfrage (select Finding … where …), wie die Liste."""
     inv = _inventory(system)
@@ -157,6 +187,20 @@ def host_groups(s, system: System, base_stmt, statuses: dict[str, str], fixable_
             project = labels.get("com.docker.compose.project", "")
             g["subtitle"] = ref + (f" · Compose project {project}" if project else "")
             g["containers"] = names
+            fixable = g["counts"]["fixable"]
+            if g["state"] == "update" and fixable:
+                stayed, since = _stayed(s, system.id, g["target"], sub, fixable_ids, [
+                    c.get("created") or "" for c in inv.get("containers") or [] if c.get("image") == ref])
+                g["counts"]["stayed"] = stayed
+                when = f"{since:%b} {since.day}" if since else ""
+                if stayed >= fixable:
+                    g["state"] = "stuck"
+                    g["text"] = (f"The last update ({when}) left all {fixable} fixable findings here in place: the image "
+                                 "still ships the affected versions, so they likely stay until the maintainer moves to "
+                                 "fixed ones. ") + g["text"]
+                elif stayed:
+                    g["text"] = (f"{stayed} of the {fixable} fixable findings were already there before the last update "
+                                 f"({when}) and stayed; the newer image likely fixes only the rest. ") + g["text"]
         elif g["kind"] == "device":
             if g["key"].startswith("npm:"):
                 g["text"] = "Renew the certificates in Nginx Proxy Manager (SSL Certificates → Renew)."

@@ -18,6 +18,7 @@ const copied = ref(null)
 
 const STATES = {
   update: ['Update fixes these', 'ok'],
+  stuck: ['Last update did not fix these', 'wait'],   // neueres Image da, aber dieselben Funde blieben schon einmal
   tag: ['Change the tag', 'warn'],
   rebuild: ['Rebuild the image', 'warn'],
   waiting: ['Waiting for a fix', 'wait'],
@@ -113,7 +114,7 @@ defineExpose({ load })
           </div>
         </header>
         <div class="group-action" :class="STATES[g.state]?.[1]">
-          <span class="state">{{ STATES[g.state]?.[0] || g.state }}<template v-if="g.counts.fixable && g.state === 'update'"> · {{ fmt(g.counts.fixable) }} fixable now</template></span>
+          <span class="state">{{ g.state === 'update' && g.counts.stayed ? 'Update may fix some of these' : STATES[g.state]?.[0] || g.state }}<template v-if="g.counts.fixable && g.state === 'update'"> · {{ g.counts.stayed ? `${fmt(g.counts.stayed)} of ${fmt(g.counts.fixable)} stayed after the last update` : `${fmt(g.counts.fixable)} fixable now` }}</template></span>
           <p class="action-text">{{ g.text }}</p>
           <span v-if="g.command" class="action-cmd">
             <code class="mono">{{ g.command }}</code>

@@ -45,6 +45,25 @@ def _container(inv: dict, ref: str) -> dict:
     return next((c for c in inv.get("containers") or [] if c.get("image") == ref), {})
 
 
+COMPOSE_FILES = ("compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml")
+WORKDIR_LABEL = "com.docker.compose.project.working_dir"
+
+
+def _in_project(c: dict, labels: dict):
+    """Hülle, die einen Compose-Befehl aus jedem Verzeichnis lauffähig macht: eine Subshell wechselt in das
+    Projektverzeichnis, das `docker inspect` aus dem Label des Containers liest (kopiert aus ~ scheiterte der
+    blanke Befehl mit "no configuration file provided"). None, wenn das nicht sicher trägt: kein Name oder Label,
+    oder das Projekt wurde mit eigenen Compose-Dateien (-f) gestartet, die im Verzeichnis nicht gefunden würden."""
+    name, workdir = c.get("name") or "", labels.get(WORKDIR_LABEL, "")
+    if not workdir or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", name):
+        return None
+    files = [f for f in labels.get("com.docker.compose.project.config_files", "").split(",") if f]
+    if len(files) > 1 or (files and files[0] not in {f"{workdir.rstrip('/')}/{n}" for n in COMPOSE_FILES}):
+        return None
+    find = f"""docker inspect -f '{{{{index .Config.Labels "{WORKDIR_LABEL}"}}}}' {name}"""
+    return lambda cmd: f'(cd "$({find})" && {cmd})'
+
+
 def image_action(inv: dict, ref: str, status: str | None = None) -> tuple[str, str, str]:
     """(Zustand, Text, Befehl) zum Aktualisieren eines Images. `status` ist das Ergebnis der Registry-Prüfung
     (products/freshness: outdated, newer-version, current, local, unknown, pending; None = nicht geprüft).
@@ -58,11 +77,17 @@ def image_action(inv: dict, ref: str, status: str | None = None) -> tuple[str, s
     by_digest = "@sha256:" in ref
     tag = "" if by_digest else (ref.rsplit(":", 1)[1] if ":" in ref.rsplit("/", 1)[-1] else "latest")
     pinned = by_digest or bool(re.match(r"^v?\d+\.\d+\.\d+", tag))   # pull holt bei festem Tag dasselbe Image
-    # Compose-Befehle laufen nur im Verzeichnis des Projekts: dessen Name in den Text, nie der Pfad der Installation
+    # Compose-Befehle laufen nur im Verzeichnis des Projekts. Der Pfad der Installation steht nie in Text oder
+    # Befehl: der Befehl liest ihn zur Laufzeit aus dem Label des Containers und läuft so aus jedem Verzeichnis.
     where = f" Run it in the directory of the Compose project {project}." if service else ""
+    wrap = _in_project(c, labels) if service else None
+    if wrap:
+        where_cmd = f" The command changes into the directory of the Compose project {project} itself."
+    else:
+        wrap, where_cmd = (lambda cmd: cmd), where
     if status == "local" or (c and not c.get("repo_digests")):
-        return ("rebuild", f"The image {ref} is built locally. Rebuild it on a current base image and redeploy." + where,
-                "docker compose build --pull" + (f" {service} && docker compose up -d {service}" if service else ""))
+        return ("rebuild", f"The image {ref} is built locally. Rebuild it on a current base image and redeploy." + where_cmd,
+                wrap("docker compose build --pull" + (f" {service} && docker compose up -d {service}" if service else "")))
     stack = f" In Portainer: Stacks → {project or 'the stack'} → "
     if status == "current":
         if by_digest:
@@ -78,12 +103,12 @@ def image_action(inv: dict, ref: str, status: str | None = None) -> tuple[str, s
     if portainer:
         return ("update" if status == "outdated" else "unknown",
                 "Pull the newer image and recreate the container." + stack + "Pull and redeploy.", "")
-    pull = f"docker compose pull {service} && docker compose up -d {service}" if service else f"docker pull {ref}"
+    pull = wrap(f"docker compose pull {service} && docker compose up -d {service}") if service else f"docker pull {ref}"
     if status == "outdated":
         return ("update", "The registry has a newer image for this tag. Pull it and recreate the container; the next "
-                          "scan shows what it fixed." + where, pull)
+                          "scan shows what it fixed." + where_cmd, pull)
     return ("unknown", "Pull a newer image (the maintainer has to rebuild it) and recreate the container. The registry "
-                       "check has not confirmed a newer image yet." + where, pull)
+                       "check has not confirmed a newer image yet." + where_cmd, pull)
 
 
 def recommend(f, sys, image_status: str | None = None) -> dict:
