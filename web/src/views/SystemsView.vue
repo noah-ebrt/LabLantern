@@ -170,7 +170,7 @@ const HOST_KINDS = [
   { kind: 'proxmox', title: 'Proxmox VE', text: 'Read through the PVE API: version and updates per node, and which VMs and LXCs have no agent yet.' },
   { kind: 'synology', title: 'Synology DSM', text: 'Read through the DSM API: DSM update, storage pools, volumes and drives, packages. No script on the NAS.' },
   { kind: 'opnsense', title: 'OPNsense', text: 'Read through the OPNsense API: firmware updates, major upgrades, end of life, plugins.' },
-  { kind: 'collector', title: 'Other device (collector script)', text: 'Unraid, UGREEN, Synology, OpenWrt …: a small cron script sends packages and containers. No agent, no commands.' },
+  { kind: 'collector', title: 'Other device (collector script)', text: 'Linux servers, Unraid, UGREEN, Synology, OpenWrt …: a small cron script sends packages and containers. No agent, no commands.' },
 ]
 const addKind = ref(null)
 const connectorId = ref(null)   // Detailansicht eines Geräts ohne Agent
@@ -500,7 +500,7 @@ onMounted(() => {
       <h2>Add a device with a collector script</h2>
       <p class="subtitle">For devices where the agent can't run. A cron script on the device sends its OS version, packages
         and containers to LabLantern. LabLantern never sends anything back: no commands, no updates.
-        Examples for Unraid, Synology and OpenWrt are in <code>collectors/</code> in the repository; the format is
+        Scripts for Linux servers, Unraid, UGREEN, Synology and OpenWrt are in <code>collectors/</code> in the repository; the format is
         <code>docs/collector-schema.json</code>.</p>
       <form v-if="!collector.data" class="collector-form" data-test="collector-form" @submit.prevent="createCollector">
         <label>Device name <input v-model="collector.name" name="collector_name" required maxlength="100" pattern="[A-Za-z0-9][A-Za-z0-9._\-]*" placeholder="unraid" /></label>

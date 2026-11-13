@@ -268,11 +268,12 @@ real firewall.
 
 ## Other devices: collector scripts
 
-For devices where neither the agent nor an API connector fits (Unraid, UGREEN UGOS Pro, Synology DSM, OpenWrt …), a cron script on the
+For devices where neither the agent nor an API connector fits (Unraid, UGREEN UGOS Pro, Synology DSM, OpenWrt …), or for a Linux server that should not run the agent, a cron script on the
 device reports OS version, packages and containers to LabLantern (`POST /api/collector/v1/report`, one token per
 device). LabLantern only receives and never answers with a command. Only what the report provides is rated; the rest
 is n/a. Scripts, setup and limits: [`collectors/README.md`](../collectors/README.md). The traffic stays in your
-network: the device talks to LabLantern, LabLantern contacts nothing for it.
+network: the device talks to LabLantern, LabLantern contacts nothing for it. A server elsewhere reports through your
+VPN, see "Servers outside your network" there.
 
 ## Sharp drop alarm
 
@@ -393,6 +394,6 @@ LabLantern has no telemetry and no update check of its own. These are the outbou
 | AI provider (Anthropic, OpenAI or your own endpoint; AI early warning, optional) | daily and per new feed entry | product names and versions, never secrets, addresses or host names |
 | Your notification channels and offsite watchdog (optional) | per report, alert, ping | the report or alert text, the ping |
 
-Inside the LAN only: agents, collector scripts, Nginx Proxy Manager, FRITZ!Box, OPNsense, UniFi, TrueNAS, Home
+Inside the LAN only (collector scripts of servers elsewhere: through your VPN): agents, collector scripts, Nginx Proxy Manager, FRITZ!Box, OPNsense, UniFi, TrueNAS, Home
 Assistant, Proxmox VE and Synology DSM. Building the images and the
 agent fetches packages from Docker Hub, PyPI, npm and the Go module proxy, at build time only.

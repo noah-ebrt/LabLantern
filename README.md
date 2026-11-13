@@ -47,7 +47,7 @@ and its web interface is reachable only in your LAN.
   OPNsense (version, pending updates, apps, alerts, storage health; for Proxmox also which VMs and containers have no
   agent yet).
 - **Anything else** that can run a small scheduled script reports through the collector API. Ready-made scripts exist
-  for Unraid, UGREEN, Synology and OpenWrt.
+  for Linux servers, Unraid, UGREEN, Synology and OpenWrt.
 
 ### Internet exposure
 
@@ -183,7 +183,7 @@ new version within a minute, and **Update all** installs it on every host with o
 | [docs/AGENTS.md](docs/AGENTS.md) | Adding hosts, what an agent collects, commands, updates, removal, changing the agent |
 | [docs/HEALTH.md](docs/HEALTH.md) | Health monitoring: checks, thresholds, alerts, router checks, heartbeat, API and webhooks |
 | [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) | Notifications, schedule, snooze and exclusions, watchdog, exposure sources, appliances, collectors, version check, AI early warning, configuration as JSON, Prometheus, what leaves your network |
-| [collectors/README.md](collectors/README.md) | Collector scripts for Unraid, UGREEN, Synology and OpenWrt, and the report format for your own |
+| [collectors/README.md](collectors/README.md) | Collector scripts for Linux servers, Unraid, UGREEN, Synology and OpenWrt, and the report format for your own |
 | [SECURITY.md](SECURITY.md) | Threat model and how to report a vulnerability |
 | [docs/INTERNALS.md](docs/INTERNALS.md) | Architecture and data flow of the master, for contributors |
 | [agent/docs/INTERNALS.md](agent/docs/INTERNALS.md) | The agent's roles, trust anchors and flows; [GO-GUIDE.md](agent/docs/GO-GUIDE.md) helps you read the Go code without knowing Go |
