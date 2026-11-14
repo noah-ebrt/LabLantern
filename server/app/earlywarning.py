@@ -3,7 +3,7 @@
 Zwei Quellen, ein Bewertungsweg:
 A. Feeds (RSS/Atom, weltweit): nur Einträge, die ein Produkt aus dem Inventar beim Namen nennen, gehen an die KI,
    die die Fakten über ein festes Schema meldet. Der Rest geht nie an die KI.
-B. Web-Recherche (höchstens einmal in RESEARCH_HOURS): die KI sucht selbst nach frischen Meldungen zu genau diesen
+B. Web-Recherche (höchstens alle `research_days` Tage): die KI sucht selbst nach frischen Meldungen zu genau diesen
    Produkten und meldet sie über das gleiche Schema.
 Jede der drei Aufgaben (classify, research, verify) läuft auf dem Anbieter und Modell, die unter „KI“ dafür gewählt
 sind (aiproviders.resolve); scheitert eine, wechselt nichts still zu einem anderen Anbieter.
@@ -90,16 +90,20 @@ MAX_FEED_BYTES = 10_000_000
 MAX_ITEM_DAYS = 30         # ältere Einträge (Feeds mit ganzer Historie) gehen nie an die KI
 MAX_ITEMS_PER_FEED = 200
 MAX_AI_CALLS = 20          # je Durchgang; der Rest bleibt `pending` und kommt im nächsten dran
-INTERVAL_HOURS = 2         # Vorgabe; einstellbar unter `earlywarning.ai`
-RESEARCH_HOURS = 20        # Vorgabe: Web-Recherche höchstens einmal am Tag (mit Sonnet etwa 0,20–0,40 $ je Durchgang)
+# Feed-Prüfungen zu festen Uhrzeiten (Zeitzone des Systems), zusätzlich zu der im vollständigen Lauf; jede abschaltbar
+PASS_TIMES = ["06:00", "15:00"]
+MAX_PASS_TIMES = 2
+PASS_GAP = 30 * 60         # lief gerade ein Durchgang (z. B. der des vollständigen Laufs), fällt der zur Uhrzeit aus
+RESEARCH_EVERY = 1         # Vorgabe: Web-Recherche jeden Tag (mit Sonnet etwa 0,20–0,40 $ je Durchgang)
+RESEARCH_EVERY_RANGE = (1, 14)
+RESEARCH_SLACK = 3 * 3600  # die Recherche läuft in der ersten Feed-Prüfung, die ihren Abstand (in Tagen) erreicht
+_HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 RESEARCH_DAYS = 3          # Suchfenster; der erste Lauf schaut 7 Tage zurück
-AI_KEY = "earlywarning.ai"   # {"level", "pass_hours", "research_hours", "max_searches", Schalter: SWITCHES}
+AI_KEY = "earlywarning.ai"   # {"level", "pass_times", "research_days", "max_searches", Schalter: SWITCHES}
 # KI-Stufen: full = alles mit KI (Recherche, Prüfung beim Hersteller per Websuche). balanced = Recherche seltener,
 # die Prüfung zuerst aus der NVD, KI nur ohne NVD-Daten; dazu der CISA-KEV-Katalog als Feed. minimal = keine
 # Recherche, Prüfung nur aus der NVD, KEV-Feed; die KI liest nur noch die Feed-Einträge (das günstige Modell).
 LEVELS = ("full", "balanced", "minimal")
-PASS_HOURS_RANGE = (1, 24)
-RESEARCH_HOURS_RANGE = (6, 336)
 MAX_SEARCHES_RANGE = (5, 30)   # Websuchen je Recherche (je 0,01 $); die gefundenen Seiten liest das Modell mit
 # Quellen und Sicherheitsnetze, unabhängig von der Stufe, alle standardmäßig an
 # Prüfung beim Hersteller: wann eine Meldung zu einer schon geprüften Produktversion erneut geprüft wird.
@@ -1119,7 +1123,7 @@ def notify_new(ctx: Context, s) -> int:
     if not rows or ctx.notifier is None:
         return 0
     rows.sort(key=lambda w: (w.status != "betroffen", w.severity != "hoch"))
-    ok, _ = ctx.notifier(*alert_text(rows), kind="alert")
+    ok, _ = ctx.notifier(*alert_text(rows), kind="early_warning")
     if not ok:
         return 0
     now = datetime.now(timezone.utc)
@@ -1321,13 +1325,23 @@ def research_config(s) -> dict:
     return {"enabled": bool(cfg.get("enabled", True)), "verify": bool(cfg.get("verify", True))}
 
 
+def pass_times(value) -> list[str]:
+    """Uhrzeiten der Feed-Prüfungen (HH:MM, höchstens zwei, sortiert); ohne gültige Angabe die Vorgabe."""
+    if not isinstance(value, list):
+        return list(PASS_TIMES)
+    return sorted({t for t in value if isinstance(t, str) and _HHMM.match(t)})[:MAX_PASS_TIMES]
+
+
 def ai_config(s) -> dict:
-    """KI-Stufe und Takte (Vorgabe: full, alle 2 h, Recherche alle 20 h)."""
+    """KI-Stufe und Takte (Vorgabe: full, Feeds um 06:00 und 15:00, Recherche täglich). Ein altes `research_hours`
+    zählt in ganzen Tagen (72 h = 3 Tage); das alte `pass_hours` gilt nicht mehr."""
     cfg = setting(s, AI_KEY) or {}
     clamp = lambda v, d, r: min(max(int(v), r[0]), r[1]) if isinstance(v, int) else d  # noqa: E731
+    old = cfg.get("research_hours")
+    days = cfg.get("research_days", max(1, round(old / 24)) if isinstance(old, int) else None)
     return {"level": cfg.get("level") if cfg.get("level") in LEVELS else "full",
-            "pass_hours": clamp(cfg.get("pass_hours"), INTERVAL_HOURS, PASS_HOURS_RANGE),
-            "research_hours": clamp(cfg.get("research_hours"), RESEARCH_HOURS, RESEARCH_HOURS_RANGE),
+            "pass_times": pass_times(cfg.get("pass_times")),
+            "research_days": clamp(days, RESEARCH_EVERY, RESEARCH_EVERY_RANGE),
             "max_searches": clamp(cfg.get("max_searches"), 15, MAX_SEARCHES_RANGE),
             "verify_repeat": cfg.get("verify_repeat") if cfg.get("verify_repeat") in VERIFY_REPEAT
             else VERIFY_DEFAULTS["verify_repeat"],
@@ -1340,13 +1354,13 @@ def research_due(s, now: float | None = None) -> bool:
     cfg = ai_config(s)
     last = (setting(s, RESEARCH_STATE_KEY) or {}).get("at") or 0
     return (research_config(s)["enabled"] and cfg["level"] != "minimal"
-            and (now or time.time()) - last > cfg["research_hours"] * 3600 - SLACK)
+            and (now or time.time()) - last > cfg["research_days"] * 86400 - RESEARCH_SLACK)
 
 
 def pass_due(s, now: float | None = None) -> bool:
-    """Der Zeitplan tickt stündlich; ein Durchgang läuft, wenn der letzte den eingestellten Takt zurückliegt."""
+    """Der Zeitplan startet Durchgänge zu den eingestellten Uhrzeiten; einer fällt nur aus, wenn gerade einer lief."""
     last = (setting(s, STATE_KEY) or {}).get("at") or 0
-    return (now or time.time()) - last > ai_config(s)["pass_hours"] * 3600 - SLACK
+    return (now or time.time()) - last > PASS_GAP
 
 
 def research_prompt(products: list[dict]) -> str:
@@ -1595,7 +1609,7 @@ def update_health(ctx: Context, s, state: dict, outcomes: dict, now: float | Non
         lines = ([f"- {p['text']}" for p in new] + (["", "Resolved:"] if new and resolved else [])
                  + [f"- {p['text']}" for p in resolved])
         title = ("LabLantern: early warning has a problem" if new else "LabLantern: early warning works again")
-        ok, _ = ctx.notifier(title, "\n".join(lines) + "\n\nDetails under Early warnings.", None, kind="alert")
+        ok, _ = ctx.notifier(title, "\n".join(lines) + "\n\nDetails under Early warnings.", None, kind="service")
         if ok:
             for p in new:
                 p["alerted"] = True
@@ -1736,14 +1750,15 @@ def run_miss_check(ctx: Context, fetch=fetch_feed, advisories=fetch_ghsa) -> dic
     gaps = [r for r in result["kev"] if r["status"] in ("missed", "late", "kev_only")]
     possible = [a for a in result["ghsa"] if a["status"] == "possible"]
     if (gaps or possible) and ctx.notifier is not None:
-        lines = [f"Exploited issues (CISA KEV) for your products in the last {MISS_WINDOW} days: {len(result['kev'])}; "
-                 f"warned early {c['early']}, late {c['late']}, same product without CVE {c['related']}, "
-                 f"only via KEV {c['kev_only']}, missed {c['missed']}."]
+        named = (("early", "warned early"), ("late", "late"), ("related", "same product without CVE"),
+                 ("kev_only", "only via KEV"), ("missed", "missed"))
+        lines = [f"{len(result['kev'])} exploited issues (CISA KEV) hit your products in {MISS_WINDOW} days: "
+                 + ", ".join(f"{c[k]} {label}" for k, label in named if c[k]) + "."]
         lines += [f"- {r['cve']} {r['title']}: {r['status'].replace('_', ' ')}" for r in gaps[:20]]
         if possible:
             lines += ["", "GitHub advisories (high/critical) for packages named like your products, not seen:"]
             lines += [f"- {a['id']} {a['cve']} {', '.join(a['products'])}: {a['summary']}" for a in possible[:20]]
-        ctx.notifier("LabLantern: early warning coverage check", "\n".join(lines), None, kind="report")
+        ctx.notifier("LabLantern: early warning coverage check", "\n".join(lines), None, kind="coverage")
     return result
 
 
@@ -1854,8 +1869,8 @@ def cost_basis(ctx: Context, s, now: float | None = None) -> dict:
 class AiLevelIn(BaseModel):
     """Fehlende Schalter (alter Client, alter Export) sind an."""
     level: str = Field(pattern="^(full|balanced|minimal)$")
-    pass_hours: int = Field(ge=PASS_HOURS_RANGE[0], le=PASS_HOURS_RANGE[1])
-    research_hours: int = Field(ge=RESEARCH_HOURS_RANGE[0], le=RESEARCH_HOURS_RANGE[1])
+    pass_times: list[str] = Field(default_factory=lambda: list(PASS_TIMES), max_length=MAX_PASS_TIMES)
+    research_days: int = Field(default=RESEARCH_EVERY, ge=RESEARCH_EVERY_RANGE[0], le=RESEARCH_EVERY_RANGE[1])
     max_searches: int = Field(default=15, ge=MAX_SEARCHES_RANGE[0], le=MAX_SEARCHES_RANGE[1])
     verify_repeat: str = Field(default=VERIFY_DEFAULTS["verify_repeat"], pattern="^(never|new_cve|always)$")
     verify_searches: int = Field(default=VERIFY_DEFAULTS["verify_searches"], ge=VERIFY_SEARCHES_RANGE[0],
@@ -1946,7 +1961,7 @@ def build_earlywarning_router(ctx: Context, guards: Guards) -> APIRouter:
                     "feeds": configured_feeds(s), "default_feeds": DEFAULT_FEEDS,
                     "products": setting(s, PRODUCTS_KEY, []),
                     "research": {**research_config(s), "state": setting(s, RESEARCH_STATE_KEY) or {},
-                                 "interval_hours": ai_config(s)["research_hours"], "level": ai_config(s)["level"]},
+                                 "interval_days": ai_config(s)["research_days"], "level": ai_config(s)["level"]},
                     "health": health_problems(s), "coverage": setting(s, MISS_KEY),
                     "ai_configured": any_configured(ctx)}
 
@@ -1995,20 +2010,28 @@ def build_earlywarning_router(ctx: Context, guards: Guards) -> APIRouter:
     def read_ai_level():
         with ctx.session_factory() as s:
             feeds = release_feeds(inventory_products(s, ctx.settings.data_dir))
-            return {**ai_config(s), "research": research_config(s), "basis": cost_basis(ctx, s),
-                    "release_feeds_found": [{"url": u, "keywords": k} for u, k in feeds.items()]}
+            out = {**ai_config(s), "research": research_config(s), "basis": cost_basis(ctx, s),
+                   "release_feeds_found": [{"url": u, "keywords": k} for u, k in feeds.items()]}
+        from .schedule import get_schedule, get_timezone   # die Feed-Prüfung des vollständigen Laufs zählt mit
+        return {**out, "full_scan": get_schedule(ctx), "timezone": get_timezone(ctx)}
 
     @router.put("/early-warnings/ai-level")
     def write_ai_level(body: AiLevelIn, found=Depends(guards.require_admin)):
+        bad = [t for t in body.pass_times if not _HHMM.match(t)]
+        if bad:
+            raise HTTPException(422, f"Times must be HH:MM (24 h): {bad[0][:20]}")
         with ctx.session_factory() as s:
-            put_setting(s, AI_KEY, body.model_dump())
+            put_setting(s, AI_KEY, {**body.model_dump(), "pass_times": pass_times(body.pass_times)})
             off = [k for k in SWITCHES if not getattr(body, k)]
             ctx.audit(s, found[0].username, "earlywarning.ai_level",
-                      f"level {body.level}, pass every {body.pass_hours} h, research every {body.research_hours} h "
+                      f"level {body.level}, feed checks at {', '.join(pass_times(body.pass_times)) or 'the full scan only'}, "
+                      f"research every {body.research_days} day(s) "
                       f"with up to {body.max_searches} searches, vendor check: repeat {body.verify_repeat}, "
                       f"{body.verify_searches} searches, {body.verify_per_pass} per pass"
                       + (f", off: {', '.join(off)}" if off else ""))
             s.commit()
+        if ctx.on_schedule_change:   # neue Uhrzeiten der Feed-Prüfung im Planer übernehmen
+            ctx.on_schedule_change()
         return {"ok": True}
 
     @router.post("/early-warnings/coverage-check")

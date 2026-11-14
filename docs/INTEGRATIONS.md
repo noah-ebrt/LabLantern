@@ -309,7 +309,7 @@ images, operating systems and kernels, network-facing host packages from the age
 OpenSSL, Docker, containerd, sudo, glibc, systemd, Samba, CUPS, nginx, Apache, WireGuard, …) and products you add by
 hand under **Early warnings → Feeds & products**.
 
-**Feeds**, every 2 hours and with every full run. The defaults are global:
+**Feeds**, with every full run and at up to two times of day you pick (default 06:00 and 15:00, system time zone). The defaults are global:
 
 - News: The Hacker News, BleepingComputer, SecurityWeek, heise Security, Help Net Security, The Register, Security
   Affairs, SANS Internet Storm Center
@@ -324,7 +324,7 @@ the last 30 days that name one of your products go to the AI. Host packages and 
 the title, because curl or Ubuntu are mentioned in passing all the time. On a vendor's own feed (the feed's domain is
 the product's name, e.g. `tailscale.com`) every entry counts.
 
-**Web research**, once a day (on by default, **Research now** starts one): the research model searches the web worldwide for
+**Web research**, once a day by default, or every few days up to every two weeks (on by default, **Research now** starts one): the research model searches the web worldwide for
 advisories, security releases and exploitation reports on your products from the last days, so you hear about an
 issue before any feed you added carries it. Default model: latest Sonnet (web search needs a capable model). A pass
 runs up to 15 searches and costs about $0.20–0.40 with Sonnet (roughly $6–12 a month); Haiku is cheaper but finds less. Results that a feed already brought (same link or CVE) are skipped.
@@ -398,7 +398,7 @@ LabLantern has no telemetry and no update check of its own. These are the outbou
 | endoflife.date | daily | product names (e.g. `debian`, `postgres`) |
 | api.cloudflare.com (with Cloudflare Tunnel connected) | every 6 hours | your API token and account ID; it reads the tunnel list and ingress rules |
 | cloudflare-dns.com (with NPM connected) | every 6 hours | the domain names of your proxy routes, except `.lan`, `.home.arpa`, `.local`, `.internal` |
-| Security feeds (AI early warning, optional) | every two hours | nothing: plain feed downloads |
+| Security feeds (AI early warning, optional) | with the full scan and at up to two set times a day | nothing: plain feed downloads |
 | AI provider (Anthropic, OpenAI or your own endpoint; AI early warning, optional) | daily and per new feed entry | product names and versions, never secrets, addresses or host names |
 | Your notification channels and offsite watchdog (optional) | per report, alert, ping | the report or alert text, the ping |
 

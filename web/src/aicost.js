@@ -10,7 +10,15 @@ export const LEVELS = [
     text: 'No web research. The vendor check uses only the NVD. AI only reads matched feed advisories (the cheap model).' },
 ]
 
-export const DEFAULT_RESEARCH_HOURS = { full: 20, balanced: 72, minimal: 72 }
+export const DEFAULT_RESEARCH_DAYS = { full: 1, balanced: 3, minimal: 3 }
+export const RESEARCH_DAYS = [
+  { days: 1, label: 'Every day' },
+  { days: 2, label: 'Every 2 days' },
+  { days: 3, label: 'Every 3 days' },
+  { days: 7, label: 'Once a week' },
+  { days: 14, label: 'Every 2 weeks' },
+]
+export const DEFAULT_PASS_TIMES = ['06:00', '15:00']
 export const MAX_VERIFY_PER_PASS = 3   // Vorgabe; einstellbar als verify_per_pass
 export const VERIFY_DEFAULTS = { verify_repeat: 'never', verify_searches: 4, verify_per_pass: 3 }
 export const VERIFY_REPEAT = [
@@ -23,9 +31,15 @@ export const VERIFY_REPEAT = [
 ]
 const DAYS = 30
 
-// Die Recherche läuft im ersten Durchgang nach Ablauf ihres Abstands
-export function researchRunsPerMonth(passHours, researchHours) {
-  return (DAYS * 24) / (Math.ceil(researchHours / passHours) * passHours)
+// Feed-Prüfungen am Tag: die eingestellten Uhrzeiten und die des vollständigen Laufs (dieselbe Uhrzeit zählt einmal)
+export function passesPerDay(cfg) {
+  const scan = cfg.full_scan?.enabled ? [cfg.full_scan.time] : []
+  return new Set([...(cfg.pass_times ?? DEFAULT_PASS_TIMES), ...scan]).size
+}
+
+// Die Recherche läuft in der ersten Feed-Prüfung, die ihren Abstand in Tagen erreicht; ohne Feed-Prüfung nie
+export function researchRunsPerMonth(passes, researchDays) {
+  return passes ? DAYS / researchDays : 0
 }
 
 // Anteil der Prüfungen, den die NVD beantwortet, solange nichts gemessen ist: im Nachspielen von 15 echten
@@ -73,8 +87,9 @@ export function taskMonthly(basis, cfg, research, task, model) {
 }
 
 export function estimate(basis, cfg, research = { enabled: true, verify: true }) {
-  const runs = cfg.level === 'minimal' || !research.enabled ? 0 : researchRunsPerMonth(cfg.pass_hours, cfg.research_hours)
-  const checksPerDay = Math.min(basis.verify.per_day, ((cfg.verify_per_pass ?? MAX_VERIFY_PER_PASS) * 24) / cfg.pass_hours)
+  const passes = passesPerDay(cfg)
+  const runs = cfg.level === 'minimal' || !research.enabled ? 0 : researchRunsPerMonth(passes, cfg.research_days ?? 1)
+  const checksPerDay = Math.min(basis.verify.per_day, (cfg.verify_per_pass ?? MAX_VERIFY_PER_PASS) * passes)
   const checks = research.verify ? checksPerDay * DAYS * aiCheckShare(cfg.level, basis.verify.nvd_share) : 0
   const rows = [
     { task: 'classify', label: 'Read feed advisories', count: basis.classify.per_day * DAYS, unit: 'calls' },

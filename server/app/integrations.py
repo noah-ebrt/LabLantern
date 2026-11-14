@@ -10,7 +10,8 @@ from .guards import Guards
 from .mail import MailError, SmtpConfig, send_mail
 from .models import put_setting, setting
 from . import notify as notify_mod
-from .notify import is_valid_url, load_channels, save_channels, scheme_of
+from .notify import (EVENTS, events_from_gets, is_valid_url, load_channels, load_defaults, save_channels,
+                     save_defaults, scheme_of)
 
 SMTP_CONFIG_KEY = "smtp.config"
 SMTP_PASSWORD_SECRET = "smtp.password"
@@ -31,11 +32,42 @@ class SmtpIn(BaseModel):
 class NotificationIn(BaseModel):
     name: str = Field(min_length=1, max_length=60, pattern=r"^[^\r\n\t]+$")
     url: str = Field(max_length=2000)  # bewusst ohne Muster: Fehlermeldungen von Pydantic würden die URL wiederholen
-    gets: Literal["both", "report", "alerts"] = "both"
+    enabled: bool = True
+    events: dict[str, bool] = {}
+    gets: Literal["both", "report", "alerts"] | None = None  # ältere Konfig-Dokumente
 
 
-class ChannelGetsIn(BaseModel):
-    gets: Literal["both", "report", "alerts"]
+EventId = Literal[tuple(EVENTS)]  # type: ignore[valid-type]
+
+
+class ChannelIn(BaseModel):
+    """Ein Kanal: an/aus und je Art an/aus; eine Art, die fehlt (oder null ist), folgt der Vorgabe."""
+    enabled: bool | None = None
+    events: dict[EventId, bool | None] | None = None
+    gets: Literal["both", "report", "alerts"] | None = None  # ältere Konfig-Dokumente
+
+
+class DefaultsIn(BaseModel):
+    defaults: dict[EventId, bool]
+
+
+class NtfyChannelIn(BaseModel):
+    name: str = Field(default="Push (ntfy)", min_length=1, max_length=60, pattern=r"^[^\r\n\t]+$")
+    server: str = Field(default="ntfy.sh", max_length=253, pattern=r"^(https?://)?[A-Za-z0-9.-]+(:\d{1,5})?/?$")
+    topic: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    token: str = Field(default="", max_length=256, pattern=r"^[A-Za-z0-9_.-]*$")
+    username: str = Field(default="", max_length=128)
+    password: str = Field(default="", max_length=256)
+
+
+def ntfy_apprise_url(c: NtfyChannelIn) -> str:
+    """ntfy über Apprise: Zugangs-Token (tk_…) oder Benutzer/Passwort, sonst offen. http:// nur, wenn so eingegeben."""
+    server = c.server.strip().rstrip("/")
+    scheme = "ntfy" if server.startswith("http://") else "ntfys"
+    host = server.split("://", 1)[-1]
+    q = lambda v: quote(v, safe="")  # noqa: E731
+    auth = f"{q(c.token)}@" if c.token else f"{q(c.username)}:{q(c.password)}@" if c.username else ""
+    return f"{scheme}://{auth}{host}/{c.topic}"
 
 
 class SmtpChannelIn(BaseModel):
@@ -122,9 +154,19 @@ def build_integrations_router(ctx: Context, guards: Guards) -> APIRouter:
 
     @router.get("/notifications", dependencies=[Depends(guards.require_session)])
     def get_notifications():
-        channels = [{"index": i, "name": c["name"], "scheme": scheme_of(c["url"]), "gets": c["gets"]}
-                    for i, c in enumerate(load_channels(ctx))]
-        return {"configured": bool(channels), "channels": channels}
+        channels = [{"index": i, "name": c["name"], "scheme": scheme_of(c["url"]), "enabled": c["enabled"],
+                     "events": c["events"]} for i, c in enumerate(load_channels(ctx))]
+        events = [{"id": k, "label": v["label"], "hint": v["hint"]} for k, v in EVENTS.items()]
+        return {"configured": bool(channels), "channels": channels, "events": events, "defaults": load_defaults(ctx)}
+
+    @router.put("/notifications/defaults")
+    def set_notification_defaults(body: DefaultsIn, found=Depends(guards.require_admin)):
+        merged = save_defaults(ctx, body.defaults)
+        with ctx.session_factory() as s:
+            ctx.audit(s, found[0].username, "integration.notifications.defaults",
+                      "off: " + (", ".join(k for k, v in merged.items() if not v) or "none"))
+            s.commit()
+        return {"ok": True, "defaults": merged}
 
     @router.post("/notifications")
     def add_notification(body: NotificationIn, found=Depends(guards.require_admin)):
@@ -134,7 +176,9 @@ def build_integrations_router(ctx: Context, guards: Guards) -> APIRouter:
         channels = load_channels(ctx)
         if any(c["url"] == url for c in channels):
             raise HTTPException(409, "This channel already exists")
-        channels.append({"name": body.name, "url": url, "gets": body.gets})
+        events = body.events if body.gets is None else events_from_gets(body.gets)
+        channels.append({"name": body.name, "url": url, "enabled": body.enabled,
+                         "events": {k: bool(v) for k, v in events.items() if k in EVENTS}})
         save_channels(ctx, channels)
         with ctx.session_factory() as s:
             ctx.audit(s, found[0].username, "integration.notifications.added", f"{body.name} ({scheme_of(url)})")
@@ -147,7 +191,7 @@ def build_integrations_router(ctx: Context, guards: Guards) -> APIRouter:
         if not is_valid_url(url):
             raise HTTPException(422, "These details do not form a valid mail configuration")
         channels = [c for c in load_channels(ctx) if c["url"] != url]
-        channels.insert(0, {"name": body.name, "url": url})  # Mail ist der primäre Kanal
+        channels.insert(0, {"name": body.name, "url": url, "enabled": True, "events": {}})  # Mail ist der primäre Kanal
         save_channels(ctx, channels)
         with ctx.session_factory() as s:
             ctx.audit(s, found[0].username, "integration.notifications.added",
@@ -155,18 +199,57 @@ def build_integrations_router(ctx: Context, guards: Guards) -> APIRouter:
             s.commit()
         return {"ok": True}
 
+    @router.post("/notifications/ntfy")
+    def add_ntfy_channel(body: NtfyChannelIn, found=Depends(guards.require_admin)):
+        url = ntfy_apprise_url(body)
+        if not is_valid_url(url):
+            raise HTTPException(422, "These details do not form a valid ntfy configuration")
+        channels = load_channels(ctx)
+        if any(c["url"] == url for c in channels):
+            raise HTTPException(409, "This channel already exists")
+        channels.append({"name": body.name, "url": url, "enabled": True, "events": {}})
+        save_channels(ctx, channels)
+        auth = "token" if body.token else "login" if body.username else "open topic"
+        with ctx.session_factory() as s:
+            ctx.audit(s, found[0].username, "integration.notifications.added", f"{body.name} (ntfy, {auth})")
+            s.commit()
+        return {"ok": True}
+
     @router.put("/notifications/{index}")
-    def set_notification_gets(index: int, body: ChannelGetsIn, found=Depends(guards.require_admin)):
+    def set_notification_channel(index: int, body: ChannelIn, found=Depends(guards.require_admin)):
         channels = load_channels(ctx)
         if not 0 <= index < len(channels):
             raise HTTPException(404, "Channel not found")
-        channels[index]["gets"] = body.gets
+        ch = channels[index]
+        if body.enabled is not None:
+            ch["enabled"] = body.enabled
+        if body.gets is not None:
+            ch["events"] = events_from_gets(body.gets)
+        for k, v in (body.events or {}).items():
+            if v is None:
+                ch["events"].pop(k, None)
+            else:
+                ch["events"][k] = v
         save_channels(ctx, channels)
+        own = ", ".join(f"{k} {'on' if v else 'off'}" for k, v in ch["events"].items()) or "defaults"
         with ctx.session_factory() as s:
             ctx.audit(s, found[0].username, "integration.notifications.changed",
-                      f"{channels[index]['name']} gets {body.gets}")
+                      f"{ch['name']}: {'on' if ch['enabled'] else 'off'}, {own}")
             s.commit()
         return {"ok": True}
+
+    @router.post("/notifications/{index}/test")
+    def test_notification_channel(index: int, found=Depends(guards.require_admin)):
+        channels = load_channels(ctx)
+        if not 0 <= index < len(channels):
+            raise HTTPException(404, "Channel not found")
+        ok, err = notify_mod.send_notification([channels[index]["url"]], "LabLantern: test notification",
+                                               "If you can read this, this LabLantern channel works.")
+        with ctx.session_factory() as s:
+            ctx.audit(s, found[0].username, "integration.notifications.tested",
+                      f"{channels[index]['name']}: {'ok' if ok else err}")
+            s.commit()
+        return {"ok": ok, "error": None if ok else f"Delivery to {channels[index]['name']} failed"}
 
     @router.delete("/notifications/{index}")
     def remove_notification(index: int, found=Depends(guards.require_admin)):

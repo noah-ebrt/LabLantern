@@ -153,6 +153,27 @@ def _coverage_check(ctx: Context) -> None:
         log.exception("Early warning coverage check failed")
 
 
+def early_warning_times(ctx: Context) -> list[str]:
+    from .earlywarning import ai_config
+
+    with ctx.session_factory() as s:
+        return ai_config(s)["pass_times"]
+
+
+def last_early_warning_slot(ctx: Context) -> float | None:
+    """Letzte geplante Feed-Prüfung vor jetzt (eingestellte Uhrzeiten und der vollständige Lauf), als Zeitstempel."""
+    times = list(early_warning_times(ctx))
+    sched = get_schedule(ctx)
+    if sched["enabled"]:
+        times.append(sched["time"])
+    tz = ZoneInfo(get_timezone(ctx))
+    now = datetime.fromtimestamp(ctx.clock(), tz=tz)
+    slots = [(now - timedelta(days=day)).replace(hour=int(t[:2]), minute=int(t[3:]), second=0, microsecond=0)
+             for t in times for day in (0, 1)]
+    past = [x for x in slots if x <= now]
+    return max(past).timestamp() if past else None
+
+
 def _early_warnings(ctx: Context) -> None:
     from .earlywarning import pass_due, run_pass
 
@@ -161,6 +182,20 @@ def _early_warnings(ctx: Context) -> None:
             if not pass_due(s):
                 return
         run_pass(ctx)
+    except Exception:
+        log.exception("Early warning pass failed")
+
+
+def _early_warnings_catchup(ctx: Context) -> None:
+    """Nach einem Neustart: lag eine Feed-Prüfung in der Zeit, in der der Server nicht lief, jetzt nachholen."""
+    from .earlywarning import STATE_KEY, run_pass
+
+    try:
+        with ctx.session_factory() as s:
+            last = (setting(s, STATE_KEY) or {}).get("at") or 0
+        slot = last_early_warning_slot(ctx)
+        if slot is not None and last < slot:   # seit der letzten geplanten Prüfung lief keine
+            run_pass(ctx)
     except Exception:
         log.exception("Early warning pass failed")
 
@@ -209,9 +244,13 @@ def _release_sync(ctx: Context) -> None:
 
 def apply_schedule(scheduler: BackgroundScheduler, ctx: Context) -> None:
     sched = get_schedule(ctx)
-    for job_id in ("daily-scan", "short-scan"):
-        if scheduler.get_job(job_id):
-            scheduler.remove_job(job_id)
+    for job in scheduler.get_jobs():
+        if job.id in ("daily-scan", "short-scan") or job.id.startswith("early-warnings-"):
+            scheduler.remove_job(job.id)
+    # KI-Frühwarnung zu den eingestellten Uhrzeiten; der vollständige Lauf stößt seine eigene an
+    for i, t in enumerate(early_warning_times(ctx)):
+        scheduler.add_job(_early_warnings, CronTrigger(hour=int(t[:2]), minute=int(t[3:]), timezone=ZoneInfo(get_timezone(ctx))),
+                          args=[ctx], id=f"early-warnings-{i}", max_instances=1, coalesce=True, misfire_grace_time=3600)
     from .watchdog import get_config as watchdog_config
     if scheduler.get_job("watchdog-heartbeat"):
         scheduler.reschedule_job("watchdog-heartbeat", trigger="interval", minutes=watchdog_config(ctx)["heartbeat_minutes"])
@@ -252,10 +291,10 @@ def build_scheduler(ctx: Context) -> BackgroundScheduler:
     from .products import INTERVAL_HOURS
     scheduler.add_job(_versions, "interval", hours=INTERVAL_HOURS, args=[ctx], id="versions",
                       max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(minutes=2))
-    # KI-Frühwarnung: stündlicher Takt, der Durchgang selbst läuft im eingestellten Abstand (Vorgabe 2 h; ohne
-    # KI-Anbieter wird alles `unklar`, nie still übergangen)
-    scheduler.add_job(_early_warnings, "interval", hours=1, args=[ctx], id="early-warnings",
-                      max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(minutes=5))
+    # KI-Frühwarnung: die Uhrzeiten setzt apply_schedule; hier nur das Nachholen einer verpassten nach dem Start
+    # (ohne KI-Anbieter wird alles `unklar`, nie still übergangen)
+    scheduler.add_job(_early_warnings_catchup, "date", args=[ctx], id="early-warnings-catchup",
+                      run_date=datetime.now(timezone.utc) + timedelta(minutes=5))
     # Wöchentliche Abdeckungsprüfung (KEV, GitHub-Advisories); der Takt prüft nur, ob sie fällig ist
     scheduler.add_job(_coverage_check, "interval", hours=6, args=[ctx], id="coverage-check",
                       max_instances=1, coalesce=True, next_run_time=datetime.now(timezone.utc) + timedelta(minutes=30))

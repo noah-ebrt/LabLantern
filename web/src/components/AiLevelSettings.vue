@@ -1,7 +1,7 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { api } from '../api.js'
-import { ASSUMED_NVD_SHARE, DEFAULT_RESEARCH_HOURS, LEVELS, SWITCHES, VERIFY_DEFAULTS, VERIFY_REPEAT, estimate, fmtUsd } from '../aicost.js'
+import { ASSUMED_NVD_SHARE, DEFAULT_PASS_TIMES, DEFAULT_RESEARCH_DAYS, LEVELS, RESEARCH_DAYS, SWITCHES, VERIFY_DEFAULTS, VERIFY_REPEAT, estimate, fmtUsd } from '../aicost.js'
 import Icon from './Icon.vue'
 import SettingsCard from './SettingsCard.vue'
 import SettingsEntry from './SettingsEntry.vue'
@@ -10,8 +10,17 @@ import SettingsList from './SettingsList.vue'
 import SettingsSection from './SettingsSection.vue'
 import ToggleSwitch from './ToggleSwitch.vue'
 
-const KEYS = ['level', 'pass_hours', 'research_hours', 'max_searches', ...Object.keys(VERIFY_DEFAULTS), ...SWITCHES.map((x) => x.id)]
-const cfg = reactive({ level: 'full', pass_hours: 2, research_hours: 20, max_searches: 15, ...VERIFY_DEFAULTS, kev: true, release_feeds: true, health_alerts: true, miss_check: true })
+const KEYS = ['level', 'pass_times', 'research_days', 'max_searches', ...Object.keys(VERIFY_DEFAULTS), ...SWITCHES.map((x) => x.id)]
+const cfg = reactive({ level: 'full', pass_times: [...DEFAULT_PASS_TIMES], research_days: 1, max_searches: 15, ...VERIFY_DEFAULTS, kev: true, release_feeds: true, health_alerts: true, miss_check: true })
+// Zwei Feed-Prüfungen zu festen Uhrzeiten, jede abschaltbar; die des vollständigen Laufs kommt immer dazu
+const slots = reactive(DEFAULT_PASS_TIMES.map((time) => ({ on: true, time })))
+const fullScan = ref({ enabled: true, time: '03:00' })
+const timezone = ref('')
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/
+watch(slots, () => { cfg.pass_times = [...new Set(slots.filter((x) => x.on).map((x) => x.time))].sort() }, { deep: true })
+function setSlots(times) {
+  DEFAULT_PASS_TIMES.forEach((d, i) => { slots[i].on = !!times[i]; slots[i].time = times[i] || d })
+}
 const releaseFeeds = ref([])
 const saved = ref(null)
 const basis = ref(null)
@@ -25,8 +34,11 @@ async function load() {
   try {
     const data = await api.get('/api/early-warnings/ai-level')
     for (const k of KEYS) if (data[k] !== undefined) cfg[k] = data[k]   // ein älterer Server kennt nicht jeden Wert
+    setSlots(cfg.pass_times)
+    if (data.full_scan) fullScan.value = data.full_scan
+    timezone.value = data.timezone || ''
     releaseFeeds.value = data.release_feeds_found || []
-    saved.value = { ...cfg }
+    saved.value = { ...cfg, pass_times: [...cfg.pass_times] }
     basis.value = data.basis
     research.value = data.research
   } catch (e) {
@@ -38,22 +50,33 @@ onMounted(load)
 function pick(level) {
   if (level === cfg.level) return
   cfg.level = level
-  cfg.research_hours = DEFAULT_RESEARCH_HOURS[level]
+  cfg.research_days = DEFAULT_RESEARCH_DAYS[level]
 }
+
+const researchOptions = computed(() => RESEARCH_DAYS.some((r) => r.days === cfg.research_days) ? RESEARCH_DAYS
+  : [...RESEARCH_DAYS, { days: cfg.research_days, label: `Every ${cfg.research_days} days` }].sort((a, b) => a.days - b.days))
+const researchLabel = computed(() => researchOptions.value.find((r) => r.days === cfg.research_days)?.label.toLowerCase() ?? '')
+// „Full scan 03:00 + 06:00 + 15:00“: die Prüfung im vollständigen Lauf zuerst, sie läuft ohnehin
+const schedule = computed(() => {
+  const parts = fullScan.value.enabled ? [`Full scan ${fullScan.value.time}`] : []
+  parts.push(...cfg.pass_times.filter((t) => !(fullScan.value.enabled && t === fullScan.value.time)))
+  return parts.join(' + ')
+})
 
 // Andere Stufen mit ihrem vorgeschlagenen Recherche-Abstand, die gewählte mit den eingegebenen Werten
 const perLevel = computed(() => {
   if (!basis.value) return {}
-  return Object.fromEntries(LEVELS.map((l) => [l.id, estimate(basis.value, l.id === cfg.level ? cfg
-    : { ...cfg, level: l.id, research_hours: DEFAULT_RESEARCH_HOURS[l.id] }, research.value)]))
+  const base = { ...cfg, full_scan: fullScan.value }
+  return Object.fromEntries(LEVELS.map((l) => [l.id, estimate(basis.value, l.id === cfg.level ? base
+    : { ...base, level: l.id, research_days: DEFAULT_RESEARCH_DAYS[l.id] }, research.value)]))
 })
 const current = computed(() => perLevel.value[cfg.level])
-const valid = computed(() => Number.isInteger(cfg.pass_hours) && cfg.pass_hours >= 1 && cfg.pass_hours <= 24
-  && Number.isInteger(cfg.research_hours) && cfg.research_hours >= 6 && cfg.research_hours <= 336
+const valid = computed(() => slots.every((x) => !x.on || HHMM.test(x.time))
+  && Number.isInteger(cfg.research_days) && cfg.research_days >= 1 && cfg.research_days <= 14
   && Number.isInteger(cfg.max_searches) && cfg.max_searches >= 5 && cfg.max_searches <= 30
   && [cfg.verify_searches, cfg.verify_per_pass].every((n) => Number.isInteger(n) && n >= 1 && n <= 10))
 const repeat = computed(() => VERIFY_REPEAT.find((r) => r.id === cfg.verify_repeat) || VERIFY_REPEAT[0])
-const dirty = computed(() => !!saved.value && KEYS.some((k) => cfg[k] !== saved.value[k]))
+const dirty = computed(() => !!saved.value && KEYS.some((k) => JSON.stringify(cfg[k]) !== JSON.stringify(saved.value[k])))
 const status = computed(() => ({ tone: 'neutral', text: LEVELS.find((l) => l.id === (saved.value?.level || 'full')).label }))
 const ICONS = { kev: 'shield', release_feeds: 'package', health_alerts: 'bell', miss_check: 'activity' }
 
@@ -76,7 +99,7 @@ async function save() {
   message.value = null
   try {
     await api.put('/api/early-warnings/ai-level', { ...cfg })
-    saved.value = { ...cfg }
+    saved.value = { ...cfg, pass_times: [...cfg.pass_times] }
     message.value = { kind: 'ok', text: 'Saved. The next early warning pass uses it.' }
   } catch (e) {
     message.value = { kind: 'error', text: e.message }
@@ -124,17 +147,27 @@ async function save() {
       </SettingsList>
     </SettingsSection>
 
-    <SettingsFold id="set-ai-tune" title="Fine-tune intervals"
-                  :hint="`feeds every ${cfg.pass_hours} h${cfg.level === 'minimal' ? '' : ` · research every ${cfg.research_hours} h · ${cfg.max_searches} searches`}`">
+    <SettingsFold id="set-ai-tune" title="When it checks"
+                  :hint="`${schedule || 'no automatic feed checks'}${cfg.level === 'minimal' ? '' : ` · research ${researchLabel} · ${cfg.max_searches} searches`}`">
+      <div class="field-label">Feed checks{{ timezone ? ` (${timezone})` : '' }}</div>
+      <ul class="slots">
+        <li data-test="slot-full-scan">
+          <template v-if="fullScan.enabled"><Icon name="check" :size="14" />With the full scan at <strong>{{ fullScan.time }}</strong></template>
+          <span v-else class="subtext">The full scan is switched off, so it adds no feed check.</span>
+        </li>
+        <li v-for="(x, i) in slots" :key="i">
+          <ToggleSwitch v-model="x.on" :name="`pass_slot_${i}`" :label="`Extra feed check ${i + 1}`" :data-test="`slot-on-${i}`" />
+          <span>Extra check at</span>
+          <input v-model="x.time" type="time" step="60" :disabled="!x.on" :aria-label="`Time of extra feed check ${i + 1}`" :data-test="`slot-time-${i}`" />
+        </li>
+      </ul>
+      <p class="schedule" data-test="schedule">{{ schedule ? `Runs at: ${schedule}` : 'No automatic feed checks: new advisories only arrive when you start a full scan by hand.' }}</p>
       <div class="intervals">
         <label>
-          <span class="field-label">Check feeds every (hours)</span>
-          <input v-model.number="cfg.pass_hours" type="number" min="1" max="24" step="1" data-test="pass-hours" />
-        </label>
-        <label>
-          <span class="field-label">Web research every (hours)</span>
-          <input v-model.number="cfg.research_hours" type="number" min="6" max="336" step="1" data-test="research-hours"
-                 :disabled="cfg.level === 'minimal'" />
+          <span class="field-label">Web research</span>
+          <select v-model.number="cfg.research_days" name="research_days" data-test="research-days" :disabled="cfg.level === 'minimal'">
+            <option v-for="r in researchOptions" :key="r.days" :value="r.days">{{ r.label }}</option>
+          </select>
         </label>
         <label>
           <span class="field-label">Searches per research run</span>
@@ -142,7 +175,8 @@ async function save() {
                  :disabled="cfg.level === 'minimal'" />
         </label>
       </div>
-      <span class="subtext">Feed checks cost little: AI only reads new matched advisories. Web research is the expensive part and runs at the first feed check after its interval.
+      <span class="subtext">Feed checks cost little: AI only reads new matched advisories, and each check runs up to the set number of vendor checks. Web research is the expensive part and runs with the first feed check once it is due.
+        The full scan time is set under <a href="#set-schedule">Schedule</a>.
         Each search costs $0.01 plus the pages the model reads; fewer searches cover fewer of your products per run.</span>
     </SettingsFold>
 
@@ -192,7 +226,7 @@ async function save() {
     <div class="actions">
       <button type="button" class="primary" data-test="save-level" :disabled="busy || !valid || !dirty" @click="save"><Icon name="check" :size="15" />Save</button>
     </div>
-    <p v-if="!valid" class="message error" role="alert">Feed checks: 1–24 hours. Web research: 6–336 hours, 5–30 searches. Vendor check: 1–10 searches, 1–10 per feed check.</p>
+    <p v-if="!valid" class="message error" role="alert">Feed checks: a time as HH:MM. Web research: every 1–14 days, 5–30 searches. Vendor check: 1–10 searches, 1–10 per feed check.</p>
     <p v-if="message" class="message" :class="message.kind" role="status">{{ message.text }}</p>
   </SettingsCard>
 </template>
@@ -209,6 +243,10 @@ async function save() {
 .level-cost { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text); }
 .level-cost small { font-weight: 400; color: var(--text-2); margin-left: 0.125rem; }
 .level-text { font-size: 0.8125rem; line-height: 1.4; font-weight: 400; }
+.slots { list-style: none; margin: 0.25rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.slots li { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; min-height: 2rem; }
+.slots input[type="time"] { width: auto; }
+.schedule { margin: 0.5rem 0 1rem; font-size: 0.875rem; }
 .intervals { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); max-width: 48rem; }
 .table-wrap { overflow-x: auto; margin: 0; padding: 0; }
 .cost-table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }

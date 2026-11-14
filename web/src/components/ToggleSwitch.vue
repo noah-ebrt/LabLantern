@@ -4,6 +4,7 @@ defineProps({
   name: { type: String, default: '' },
   id: { type: String, default: '' },
   label: { type: String, default: '' },
+  describedby: { type: String, default: '' }, // id of a visible explanation next to the switch
   size: { type: String, default: 'default' }, // 'default' | 'lg'
   disabled: { type: Boolean, default: false },
 })
@@ -25,6 +26,7 @@ defineEmits(['update:modelValue', 'change'])
       :disabled="disabled"
       :aria-checked="modelValue"
       :aria-label="label || undefined"
+      :aria-describedby="describedby || undefined"
       class="toggle-input"
       @change="$emit('update:modelValue', $event.target.checked); $emit('change', $event.target.checked)"
     />

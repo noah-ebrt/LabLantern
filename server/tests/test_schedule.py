@@ -132,3 +132,37 @@ def test_the_running_server_starts_the_scheduler_and_applies_changes(tmp_path, c
         env.app.state.ctx.on_schedule_change()   # z. B. nach einer Zeitplan-Änderung
         assert sched.get_job("daily-scan") is not None
     assert not sched.running
+
+
+def test_early_warning_runs_at_the_chosen_times_and_catches_up_after_a_restart(admin, monkeypatch):
+    import app.schedule as schedule
+    from app import earlywarning as ew
+    from app.models import put_setting
+
+    env, client, h = admin
+    ctx = ctx_of(env)
+    sched = build_scheduler(ctx)
+    ctx.on_schedule_change = lambda: apply_schedule(sched, ctx)
+    hours = lambda: sorted(str(j.trigger.fields[5]) for j in sched.get_jobs() if j.id.startswith("early-warnings-"))  # noqa: E731
+    assert hours() == ["15", "6"] and sched.get_job("early-warnings") is None   # kein stündlicher Takt mehr
+    body = {"level": "full", "pass_times": ["07:00"], "research_days": 1}
+    assert client.put("/api/early-warnings/ai-level", headers=h, json=body).status_code == 200
+    assert hours() == ["7"]
+    assert client.put("/api/early-warnings/ai-level", headers=h, json={**body, "pass_times": []}).status_code == 200
+    assert hours() == []   # nur noch die Prüfung im vollständigen Lauf
+
+    ran = []
+    monkeypatch.setattr(ew, "run_pass", lambda c: ran.append(1))
+    now = ctx.clock()
+    slot = schedule.last_early_warning_slot(ctx)   # 03:00 des vollständigen Laufs, heute oder gestern
+    assert now - 86400 < slot <= now
+    with ctx.session_factory() as s:
+        put_setting(s, ew.STATE_KEY, {"at": slot + 60})
+        s.commit()
+    schedule._early_warnings_catchup(ctx)
+    assert ran == []
+    with ctx.session_factory() as s:
+        put_setting(s, ew.STATE_KEY, {"at": slot - 3600})
+        s.commit()
+    schedule._early_warnings_catchup(ctx)
+    assert ran == [1]

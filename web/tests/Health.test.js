@@ -175,6 +175,37 @@ describe('HealthApiSettings', () => {
     expect(w.text()).toContain('Signing key for Shelf')
   })
 
+  it('shows what each endpoint answers, live from this server', async () => {
+    const doc = { v: 1, rev: 42, server_time: '2027-01-15T08:00:00Z', generated_at: 1800000000, engine_ok: true,
+      engine: { ok: true, last_cycle_at: '2027-01-15T07:59:50Z', interval_s: 10 }, states: { 'host-a': 'up' }, critical: [] }
+    const base = fetch.getMockImplementation()
+    fetch.mockImplementation(async (url, init = {}) => {
+      if (url === '/api/health/states') return new Response(JSON.stringify(doc), { headers: { ETag: '"42"', 'X-Lablantern-Rev': '42' } })
+      if (url === '/api/health/states?hosts=1') return json({ ...doc, hosts: { 'host-a': { label: 'Host A', critical: true, kind: 'service' } } })
+      if (url === '/api/health/status/host-a') return json({ slug: 'host-a', state: 'up', checks: [] })
+      return base(url, init)
+    })
+    const w = mount(HealthApiSettings)
+    await flushPromises()
+    const open = async (i) => {
+      await w.findAll('button').filter((b) => b.text() === 'Response')[i].trigger('click')
+      await flushPromises()
+      return w.findAll('.sample .cmd-text').at(-1).text()
+    }
+    const states = await open(0)
+    expect(states).toContain('HTTP 200\nETag: "42"\nX-Lablantern-Rev: 42')
+    expect(states).toContain('"host-a": "up"')
+    expect(await open(1)).toContain('HTTP 304')
+    expect(await open(3)).toContain('"slug": "host-a"')
+    const hook = await open(4)
+    expect(hook).toContain('X-Lablantern-Signature: sha256=')
+    expect(hook).toContain('"event": "state_changed"')
+    expect(hook).toContain('"name": "Host A"')
+
+    await w.findAll('button').filter((b) => b.text() === 'Response')[0].trigger('click')
+    expect(w.findAll('.sample')).toHaveLength(3)
+  })
+
   it('edits a webhook’s filters without asking for the URL again', async () => {
     const hook = { id: 7, name: 'HA', target: 'http://ha.lan:8123', created_at: 1800000000, events: ['state_changed'],
       monitors: ['nas'], heartbeat_min: 5, last_sent: null, last_event: '', last_error: '' }

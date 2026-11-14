@@ -4,6 +4,7 @@ import NotificationSettings from '../src/components/NotificationSettings.vue'
 import { setCsrf } from '../src/api.js'
 
 let calls, channels
+const EVENTS = [{ id: 'report', label: 'Scan reports', hint: 'h' }, { id: 'outage', label: 'Outages', hint: 'h' }]
 
 beforeEach(() => {
   setCsrf('tok')
@@ -13,7 +14,8 @@ beforeEach(() => {
     const method = init.method || 'GET'
     calls.push({ url, method, body: init.body ? JSON.parse(init.body) : null })
     const json = (b, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { 'content-type': 'application/json' } })
-    if (url === '/api/integrations/notifications' && method === 'GET') return json({ configured: true, channels })
+    if (url === '/api/integrations/notifications' && method === 'GET') return json({ configured: true, channels, events: EVENTS, defaults: { report: true, outage: true } })
+    if (url === '/api/integrations/notifications/defaults') return json({ ok: true, defaults: { report: false, outage: true } })
     if (url.startsWith('/api/integrations/notifications') && method === 'POST') return json({ ok: true })
     if (url.startsWith('/api/integrations/notifications/') && method === 'DELETE') return json({ ok: true })
     if (url.startsWith('/api/integrations/notifications/') && method === 'PUT') return json({ ok: true })
@@ -96,13 +98,54 @@ describe('NotificationSettings', () => {
     expect(calls.some((c) => c.method === 'DELETE' && c.url === '/api/integrations/notifications/0')).toBe(true)
   })
 
-  it('stellt pro Kanal ein, ob er Bericht, Alarme oder beides bekommt', async () => {
-    channels = [{ index: 0, name: 'Handy', scheme: 'ntfy', gets: 'both' }]
+  it('Vorgabe je Art und Ausnahmen je Kanal: Bericht per Mail, Ausfall per Push', async () => {
+    channels = [{ index: 0, name: 'Mail', scheme: 'mailtos', enabled: true, events: { outage: false } },
+      { index: 1, name: 'Handy', scheme: 'ntfy', enabled: true, events: { report: false } }]
     const w = mount(NotificationSettings)
     await flushPromises()
-    await w.get('select[data-test=channel-gets]').setValue('alerts')
+    expect(w.text()).toContain('Gets scan reports')
+    expect(w.text()).toContain('Gets outages')
+    await w.get('input[name=default_report]').setValue(false)
     await flushPromises()
-    const put = calls.find((c) => c.method === 'PUT')
-    expect(put).toEqual({ url: '/api/integrations/notifications/0', method: 'PUT', body: { gets: 'alerts' } })
+    expect(calls.find((c) => c.url.endsWith('/defaults')).body).toEqual({ defaults: { report: false } })
+    await w.findAll('button[data-test=channel-customize]').at(1).trigger('click')
+    await w.get('select[name=ev_1_report]').setValue('default')
+    await flushPromises()
+    expect(calls.find((c) => c.url === '/api/integrations/notifications/1' && c.method === 'PUT').body).toEqual({ events: { report: null } })
+  })
+
+  it('schaltet einen Kanal aus', async () => {
+    channels = [{ index: 0, name: 'Handy', scheme: 'ntfy', enabled: true, events: {} }]
+    const w = mount(NotificationSettings)
+    await flushPromises()
+    await w.get('input[name=channel_on_0]').setValue(false)
+    await flushPromises()
+    expect(calls.find((c) => c.method === 'PUT').body).toEqual({ enabled: false })
+  })
+
+  it('legt einen ntfy-Kanal über das Formular an', async () => {
+    const w = mount(NotificationSettings)
+    await flushPromises()
+    await w.get('button[data-test=add-channel]').trigger('click')
+    await w.get('button[data-test=tab-ntfy]').trigger('click')
+    await w.get('input[name=ntfy_topic]').setValue('lab-alerts')
+    await w.get('input[name=ntfy_token]').setValue('tk_GEHEIM')
+    await w.find('form').trigger('submit')
+    await flushPromises()
+    const post = calls.find((c) => c.url === '/api/integrations/notifications/ntfy')
+    expect(post.body).toMatchObject({ server: 'ntfy.sh', topic: 'lab-alerts', token: 'tk_GEHEIM' })
+    expect(w.html()).not.toContain('tk_GEHEIM')
+  })
+
+  it('füllt ein zufälliges ntfy-Thema ein, das zum Muster passt', async () => {
+    const w = mount(NotificationSettings)
+    await flushPromises()
+    await w.get('button[data-test=add-channel]').trigger('click')
+    await w.get('button[data-test=tab-ntfy]').trigger('click')
+    await w.get('button[data-test=ntfy-random-topic]').trigger('click')
+    const first = w.get('input[name=ntfy_topic]').element.value
+    expect(first).toMatch(/^lablantern-[a-z0-9]{16}$/)
+    await w.get('button[data-test=ntfy-random-topic]').trigger('click')
+    expect(w.get('input[name=ntfy_topic]').element.value).not.toBe(first)
   })
 })

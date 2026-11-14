@@ -104,9 +104,67 @@ const status = computed(() => {
     : { tone: 'neutral', text: 'No access yet' }
 })
 
-async function copy() {
+// Beispielantworten je Endpunkt: live von diesem Server mit der Sitzung abgefragt (gleicher Body wie mit Token),
+// damit man den Empfänger am echten Format baut
+const ENDPOINTS = [
+  { id: 'states', title: 'GET /api/health/states', meta: 'compact: {key: state} for microcontrollers, with rev and ETag; ?hosts=1 adds names and critical flags' },
+  { id: 'poll', title: 'GET /api/health/states?since=<rev>&wait=55', meta: 'long-poll: answers as soon as something changes, else 304 after the wait; no open port needed' },
+  { id: 'status', title: 'GET /api/health/status', meta: 'full: every host with its checks, latency, age of each result and summary; takes ?since=&wait= too' },
+  { id: 'one', title: 'GET /api/health/status/<key>', meta: 'one host' },
+  { id: 'hook', title: 'POST <your webhook URL>', meta: 'what a webhook receives: event, changes and the states, signed' },
+]
+const samples = ref({})   // id -> { url, text }
+
+async function fetchSample(url) {
+  const res = await fetch(url, { credentials: 'same-origin' })
+  const raw = await res.text()
+  let data = null
+  try { data = JSON.parse(raw) } catch { /* kein JSON */ }
+  const head = [['ETag', 'etag'], ['X-Lablantern-Rev', 'x-lablantern-rev']]
+    .filter(([, h]) => res.headers.get(h)).map(([n, h]) => `${n}: ${res.headers.get(h)}`)
+  const text = [`HTTP ${res.status}`, ...head, '', data ? JSON.stringify(data, null, 2) : raw].join('\n')
+  return { url, data, text, ok: res.ok }
+}
+async function buildSample(id) {
+  if (id === 'status') return fetchSample('/api/health/status')
+  const st = await fetchSample(id === 'hook' ? '/api/health/states?hosts=1' : '/api/health/states')
+  if (id === 'states' || !st.ok) return st
+  const doc = st.data
+  if (id === 'poll') {
+    return { url: `/api/health/states?since=${doc.rev}&wait=55`, text: [
+      `# nothing changed within the wait: no body, send the same since again`,
+      `HTTP 304`, `ETag: "${doc.rev}"`, `X-Lablantern-Rev: ${doc.rev}`, '',
+      `# a state changed: the same body as /api/health/states, take its rev as the next since`, st.text].join('\n') }
+  }
+  const key = Object.keys(doc.states || {})[0]
+  if (id === 'one') return key ? fetchSample(`/api/health/status/${encodeURIComponent(key)}`) : { url: '', text: 'No host yet.' }
+  const changes = key ? [{ slug: key, name: doc.hosts?.[key]?.label ?? key, critical: !!doc.hosts?.[key]?.critical,
+    from: doc.states[key] === 'down' ? 'up' : 'down', to: doc.states[key], at: doc.server_time }] : []
+  const body = { event: 'state_changed', ...doc, changes }
+  return { url: '', text: [
+    'POST <your webhook URL>', 'Content-Type: application/json', 'X-Lablantern-Event: state_changed',
+    'X-Lablantern-Delivery: <uuid, the same on retries>', 'X-Lablantern-Timestamp: <unix seconds>',
+    'X-Lablantern-Signature: sha256=<hex HMAC-SHA256 of "timestamp.body" with the signing key>', '',
+    '# events: state_changed, engine_down, engine_up, heartbeat, test; changes is empty except for state_changed',
+    JSON.stringify(body, null, 2)].join('\n') }
+}
+async function toggleSample(id) {
+  if (samples.value[id]) {
+    const { [id]: _, ...rest } = samples.value
+    samples.value = rest
+    return
+  }
+  samples.value = { ...samples.value, [id]: { url: '', text: 'Loading…' } }
   try {
-    await navigator.clipboard.writeText(fresh.value.value)
+    samples.value = { ...samples.value, [id]: await buildSample(id) }
+  } catch (e) {
+    samples.value = { ...samples.value, [id]: { url: '', text: e.message } }
+  }
+}
+
+async function copy(text = fresh.value.value) {
+  try {
+    await navigator.clipboard.writeText(text)
     copied.value = true
     setTimeout(() => (copied.value = false), 2500)
   } catch {
@@ -124,12 +182,23 @@ onMounted(load)
       Three ways in: ask now and then, wait for the next change (long-poll, best for status LEDs), or get a webhook.
     </template>
 
-    <SettingsFold title="Endpoints" hint="states · long-poll · full status">
+    <SettingsFold title="Endpoints" hint="states · long-poll · full status · webhook">
+      <p class="subtext">Send the token as <code>Authorization: Bearer &lt;token&gt;</code>. “Response” shows what this server answers right now.</p>
       <SettingsList>
-        <SettingsEntry dense mono title="GET /api/health/states" meta="compact: {key: state} for microcontrollers, with rev and ETag; ?hosts=1 adds names and critical flags" />
-        <SettingsEntry dense mono title="GET /api/health/states?since=<rev>&wait=55" meta="long-poll: answers as soon as something changes, else 304 after the wait; no open port needed" />
-        <SettingsEntry dense mono title="GET /api/health/status" meta="full: every host with its checks, latency, age of each result and summary; takes ?since=&wait= too" />
-        <SettingsEntry dense mono title="GET /api/health/status/<key>" meta="one host" />
+        <SettingsEntry v-for="e in ENDPOINTS" :key="e.id" dense mono :title="e.title" :meta="e.meta">
+          <template #actions>
+            <button type="button" class="btn-sm" :aria-expanded="!!samples[e.id]" @click="toggleSample(e.id)">
+              <Icon name="chevron" :size="14" :class="['chev', { open: samples[e.id] }]" />Response
+            </button>
+          </template>
+          <div v-if="samples[e.id]" class="cmd-block sample">
+            <div class="cmd-bar-top">
+              <span>{{ samples[e.id].url ? `Live from ${samples[e.id].url}` : 'Example built from the current states' }}</span>
+              <button type="button" class="btn-sm" @click="copy(samples[e.id].text)"><Icon name="copy" :size="14" />Copy</button>
+            </div>
+            <pre class="cmd-text">{{ samples[e.id].text }}</pre>
+          </div>
+        </SettingsEntry>
       </SettingsList>
     </SettingsFold>
 
@@ -191,7 +260,7 @@ onMounted(load)
     <div v-if="fresh" class="cmd-block">
       <div class="cmd-bar-top">
         <span>{{ fresh.kind === 'token' ? 'Token' : 'Signing key' }} for {{ fresh.name }} · shown only now</span>
-        <button type="button" class="btn-sm" @click="copy"><Icon :name="copied ? 'check' : 'copy'" :size="14" />{{ copied ? 'Copied' : 'Copy' }}</button>
+        <button type="button" class="btn-sm" @click="copy()"><Icon :name="copied ? 'check' : 'copy'" :size="14" />{{ copied ? 'Copied' : 'Copy' }}</button>
       </div>
       <pre class="cmd-text">{{ fresh.value }}</pre>
     </div>
@@ -213,6 +282,9 @@ onMounted(load)
 .hook-form .subtext { max-width: 72ch; margin: 0; line-height: 1.55; }
 .cmd-block { border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--ground); overflow: hidden; }
 .cmd-bar-top { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.25rem 0.5rem 0.25rem 0.75rem; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 0.75rem; }
+.sample .cmd-text { max-height: 24rem; }
+.chev { transition: transform 0.2s var(--ease); }
+.chev.open { transform: rotate(90deg); }
 .cmd-text { margin: 0; padding: 0.75rem; overflow: auto; font: 0.75rem/1.55 var(--mono); color: var(--text-2); white-space: pre; }
 @media (max-width: 640px) {
   .hook-grid { grid-template-columns: minmax(0, 1fr); }

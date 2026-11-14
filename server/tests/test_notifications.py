@@ -34,7 +34,8 @@ def test_endpoints_require_login_and_admin(admin):
 
 def test_unconfigured_notifications_reports_empty(admin):
     env, client, _ = admin
-    assert client.get("/api/integrations/notifications").json() == {"configured": False, "channels": []}
+    body = client.get("/api/integrations/notifications").json()
+    assert body["configured"] is False and body["channels"] == []
 
 
 def test_no_part_of_any_channel_url_is_ever_shown(admin):
@@ -46,7 +47,7 @@ def test_no_part_of_any_channel_url_is_ever_shown(admin):
     assert [c["scheme"] for c in body.json()["channels"]] == ["tgram", "slack", "discord", "mailto", "ntfy"]
     for part in SECRET_PARTS + ["smtp.example.org", "ntfy.example.org", "987654", "noah@example.org"]:
         assert part not in body.text, part
-    assert all(set(c) == {"index", "name", "scheme", "gets"} for c in body.json()["channels"])
+    assert all(set(c) == {"index", "name", "scheme", "enabled", "events"} for c in body.json()["channels"])
 
 
 def test_urls_are_stored_encrypted_and_not_in_the_audit_log(admin):
@@ -95,7 +96,8 @@ def test_remove_channel_by_index(admin):
     assert client.get("/api/integrations/notifications").json()["channels"][0]["index"] == 0
     assert client.delete("/api/integrations/notifications/5", headers=h).status_code == 404
     client.delete("/api/integrations/notifications/0", headers=h)
-    assert client.get("/api/integrations/notifications").json() == {"configured": False, "channels": []}
+    body = client.get("/api/integrations/notifications").json()
+    assert body["configured"] is False and body["channels"] == []
 
 
 def test_changes_are_audited_with_name_and_scheme_only(admin):

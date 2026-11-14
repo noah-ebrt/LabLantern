@@ -82,19 +82,68 @@ def test_channel_routing(env, monkeypatch):
                                    {"name": "old", "url": "json://y"}])
     calls = []
     monkeypatch.setattr(notify_mod, "send_notification", lambda urls, *a, **k: calls.append(urls) or (True, None))
-    notify_mod.notify_via_apprise(ctx, "t", "b", kind="report")
-    notify_mod.notify_via_apprise(ctx, "t", "b", kind="alert")
-    assert calls == [["mailto://a@b.c", "json://y"], ["ntfy://x", "json://y"]]
+    notify_mod.notify_via_apprise(ctx, "t", "b", html="<p>", kind="report")
+    notify_mod.notify_via_apprise(ctx, "t", "b", html="<p>", kind="alert")
+    assert calls == [["mailto://a@b.c", "json://y"], ["ntfy://x?priority=high", "json://y"]]
 
 
-def test_channel_gets_endpoint(admin):
+def test_defaults_overrides_and_switched_off_channels(env, monkeypatch):
+    ctx = env.app.state.ctx
+    notify_mod.save_channels(ctx, [{"name": "mail", "url": "mailto://a@b.c", "events": {"outage": False}},
+                                   {"name": "push", "url": "ntfys://ntfy.sh/t", "events": {"report": True}},
+                                   {"name": "off", "url": "json://y", "enabled": False},
+                                   {"name": "own", "url": "ntfy://z?priority=min"}])
+    notify_mod.save_defaults(ctx, {"report": False})
+    calls = []
+    monkeypatch.setattr(notify_mod, "send_notification", lambda urls, *a, **k: calls.append(urls) or (True, None))
+    notify_mod.notify_via_apprise(ctx, "t", "b", html="<p>", kind="report")
+    notify_mod.notify_via_apprise(ctx, "t", "b", html="<p>", kind="outage")
+    assert calls == [["ntfys://ntfy.sh/t?priority=low"],
+                     ["ntfys://ntfy.sh/t?priority=urgent", "ntfy://z?priority=min"]]
+    notify_mod.save_channels(ctx, [{"name": "push", "url": "json://x", "events": {"report": False}}])
+    assert notify_mod.notify_via_apprise(ctx, "t", "b", kind="report") == (False, "No channel gets scan reports")
+
+
+def test_plain_alerts_reach_mail_in_the_shared_frame(env, monkeypatch):
+    ctx = env.app.state.ctx
+    notify_mod.save_channels(ctx, [{"name": "mail", "url": "mailto://a@b.c"}])
+    got = []
+    monkeypatch.setattr(notify_mod, "send_notification", lambda urls, t, b, html=None: got.append(html) or (True, None))
+    notify_mod.notify_via_apprise(ctx, "LabLantern: NAS is DOWN", "- NAS (host-a) is down\n  TCP 445 refused",
+                                  kind="outage")
+    assert "<h1" in got[0] and "NAS is DOWN" in got[0] and "TCP 445 refused" in got[0] and ">Outage<" in got[0]
+
+
+def test_channel_endpoint(admin):
     env, client, csrf = admin
     assert client.post("/api/integrations/notifications", json={"name": "push", "url": "json://x"},
                        headers=csrf).status_code == 200
-    assert client.get("/api/integrations/notifications").json()["channels"][0]["gets"] == "both"
-    assert client.put("/api/integrations/notifications/0", json={"gets": "alerts"}, headers=csrf).status_code == 200
-    assert client.get("/api/integrations/notifications").json()["channels"][0]["gets"] == "alerts"
-    assert client.put("/api/integrations/notifications/0", json={"gets": "x"}, headers=csrf).status_code == 422
+    body = client.get("/api/integrations/notifications").json()
+    assert body["channels"][0]["enabled"] is True and body["channels"][0]["events"] == {}
+    assert [e["id"] for e in body["events"]][:3] == ["report", "alert", "outage"] and all(body["defaults"].values())
+    put = lambda b: client.put("/api/integrations/notifications/0", json=b, headers=csrf)  # noqa: E731
+    assert put({"events": {"report": False, "outage": True}}).status_code == 200
+    assert put({"enabled": False, "events": {"outage": None}}).status_code == 200
+    ch = client.get("/api/integrations/notifications").json()["channels"][0]
+    assert ch["enabled"] is False and ch["events"] == {"report": False}
+    assert put({"gets": "alerts"}).status_code == 200
+    assert client.get("/api/integrations/notifications").json()["channels"][0]["events"] == {"report": False, "coverage": False}
+    assert put({"events": {"nope": True}}).status_code == 422
+    r = client.put("/api/integrations/notifications/defaults", json={"defaults": {"coverage": False}}, headers=csrf)
+    assert r.status_code == 200 and r.json()["defaults"]["coverage"] is False and r.json()["defaults"]["report"] is True
+
+
+def test_ntfy_channel_form(admin):
+    env, client, csrf = admin
+    post = lambda b: client.post("/api/integrations/notifications/ntfy", json=b, headers=csrf)  # noqa: E731
+    assert post({"topic": "lab-alerts"}).status_code == 200
+    assert post({"server": "https://ntfy.example.org", "topic": "t", "token": "tk_abc"}).status_code == 200
+    assert post({"server": "http://192.0.2.10:8080", "topic": "t", "username": "u", "password": "p w"}).status_code == 200
+    assert post({"topic": "lab-alerts"}).status_code == 409
+    assert post({"topic": "bad topic"}).status_code == 422
+    assert notify_mod.load_notification_urls(env.app.state.ctx) == [
+        "ntfys://ntfy.sh/lab-alerts", "ntfys://tk_abc@ntfy.example.org/t", "ntfy://u:p%20w@192.0.2.10:8080/t"]
+    assert "tk_abc" not in client.get("/api/integrations/notifications").text
 
 
 def test_policy_endpoint_and_overview(admin):
@@ -168,8 +217,13 @@ def test_config_document_carries_policy_and_channel_gets(admin):
     doc = client.get("/api/settings/config").json()
     assert doc["report_policy"] == {"frequency": "daily", "weekday": 0, "paused_until": None}
     doc["report_policy"] = {"frequency": "on_change", "weekday": 0, "paused_until": None}
-    doc["notifications"][0]["gets"] = "alerts"
+    doc["notifications"][0]["events"] = {"report": False}
+    doc["notification_defaults"] = {"defaults": {**doc["notification_defaults"]["defaults"], "coverage": False}}
     r = client.put("/api/settings/config", headers=h, json=doc).json()
     assert r["ok"], r
     assert client.get("/api/settings/report-policy").json()["frequency"] == "on_change"
-    assert client.get("/api/integrations/notifications").json()["channels"][0]["gets"] == "alerts"
+    got = client.get("/api/integrations/notifications").json()
+    assert got["channels"][0]["events"] == {"report": False} and got["defaults"]["coverage"] is False
+    old = {"notifications": [{"name": "Push", "url": None, "gets": "alerts"}]}   # Dokument von vor den Arten
+    assert client.put("/api/settings/config", headers=h, json=old).json()["ok"]
+    assert client.get("/api/integrations/notifications").json()["channels"][0]["events"] == {"report": False, "coverage": False}

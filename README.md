@@ -80,7 +80,7 @@ and its web interface is reachable only in your LAN.
 
 ### AI early warning (optional)
 
-- Reads global security feeds every two hours and runs a daily AI-assisted web search, narrowed to the images,
+- Reads global security feeds up to three times a day (with the full scan and at two times you pick), runs a daily AI-assisted web search, narrowed to the images,
   operating systems and packages you actually run. Works with Anthropic, OpenAI or a local model through Ollama.
 - The AI only finds and summarizes; whether your version is affected is decided in code, not by the model.
 - A relevant hit arrives right away with its severity and the command to fix it on each host, or the vendor's

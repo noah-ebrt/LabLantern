@@ -142,7 +142,7 @@ def test_monitor_goes_down_alerts_once_and_recovers(hw):
     doc = client.get("/api/health/status/nas", headers={"Authorization": f"Bearer {tok}"}).json()
     assert doc["state"] == "down"
     assert {c["error"] for c in doc["checks"]} == {"timed out"}
-    assert len(sent) == 1 and "NAS is DOWN" in sent[0][0] and sent[0][2] == "alert"
+    assert len(sent) == 1 and "NAS is DOWN" in sent[0][0] and sent[0][2] == "outage"
 
     mid = client.get("/api/health/overview").json()["monitors"][0]["id"]
     for period in ("24h", "7d", "30d"):

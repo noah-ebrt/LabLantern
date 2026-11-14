@@ -30,9 +30,11 @@ export async function loadSettingsSummary() {
       report.paused_until ? 'warning' : '')
   }
   if (notify) {
-    const n = notify.channels?.length || 0
-    item('Channels', String(n), 'alerts', 'set-channels', n ? '' : 'danger')
-    if (!n) problem('alerts', 'No notification channel', 'danger')
+    const all = notify.channels?.length || 0
+    const n = (notify.channels || []).filter((c) => c.enabled !== false).length
+    item('Channels', n === all ? String(n) : `${n} of ${all} on`, 'alerts', 'set-channels', n ? '' : 'danger')
+    if (!all) problem('alerts', 'No notification channel', 'danger')
+    else if (!n) problem('alerts', 'Every notification channel is switched off', 'danger')
   }
   if (watchdog) {
     const checks = ['heartbeat', 'run', 'short'].filter((k) => watchdog[k]?.set)

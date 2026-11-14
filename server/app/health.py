@@ -537,18 +537,18 @@ class HealthEngine:
                 names = ", ".join(m.name for m, _p in went_down)
                 title = f"LabLantern: {names} {'is' if len(went_down) == 1 else 'are'} DOWN"
                 for m, _p in went_down:
-                    lines.append(f"{m.name} ({m.host or 'no host'}) is down")
+                    lines.append(f"- {m.name} ({m.host or 'no host'}) is down")
                     lines += [f"  {d}" for d in details.get(m.id, [])[:5]]
             if recovered:
                 names = ", ".join(m.name for m in recovered)
                 title = title or f"LabLantern: {names} recovered"
-                lines += [f"{m.name} is back up" for m in recovered]
+                lines += [f"- {m.name} is back up" for m in recovered]
         body = "\n".join(lines)
         self.executor.submit(self._send, title, body)
 
     def _send(self, title: str, body: str) -> None:
         try:
-            ok, err = self.ctx.notifier(title, body, None, kind="alert")
+            ok, err = self.ctx.notifier(title, body, None, kind="outage")
             if not ok:
                 log.warning("Health alert not delivered: %s", err)
         except Exception:

@@ -41,7 +41,7 @@ def build_config_router(ctx: Context, guards: Guards, routers: list[APIRouter]) 
     from .fritzbox import FRITZ_CONFIG, FRITZ_SECRET
     from .integrity import drop_config
     from .models import CoverageExclusion, Snooze, System
-    from .notify import load_channels
+    from .notify import events_from_gets, load_channels, load_defaults
     from .reportpolicy import get_report_policy
     from .schedule import get_schedule, get_short_schedule, get_timezone
     from .watchdog import get_config as watchdog_config
@@ -87,7 +87,7 @@ def build_config_router(ctx: Context, guards: Guards, routers: list[APIRouter]) 
         return {**cfg, "password": None} if cfg else None
 
     def read_notifications(s):
-        return [{"name": c["name"], "url": None, "gets": c["gets"]} for c in load_channels(ctx)]
+        return [{"name": c["name"], "url": None, "enabled": c["enabled"], "events": c["events"]} for c in load_channels(ctx)]
 
     def read_appliances(s):
         return [{"system_id": int(sid), "kind": c["kind"], "name": s.get(System, int(sid)).name, "url": c["url"],
@@ -147,10 +147,22 @@ def build_config_router(ctx: Context, guards: Guards, routers: list[APIRouter]) 
             if isinstance(c, dict) and c.get("url") is not None:
                 call(found, "POST", "/integrations/notifications", c)
         # Was ein bestehender Kanal bekommt; Positionen erst nach dem Entfernen und Anlegen bestimmen
-        wanted = {c["name"]: c["gets"] for c in value if isinstance(c, dict) and c.get("url") is None and "gets" in c}
+        # Ältere Dokumente nennen „gets“ (report/alerts/both), neue „enabled“ und „events“
+        wanted = {}
+        for c in value:
+            if isinstance(c, dict) and c.get("url") is None:
+                events = c.get("events") if isinstance(c.get("events"), dict) else (
+                    events_from_gets(c["gets"]) if "gets" in c else None)
+                wanted[c["name"]] = {"enabled": c.get("enabled", True), "events": events}
         for i, c in enumerate(load_channels(ctx)):
-            if c["name"] in wanted and wanted[c["name"]] != c["gets"]:
-                call(found, "PUT", "/integrations/notifications/{index}", {"gets": wanted[c["name"]]}, index=i)
+            want = wanted.get(c["name"])
+            if not want:
+                continue
+            events = c["events"] if want["events"] is None else want["events"]
+            if want["enabled"] != c["enabled"] or events != c["events"]:
+                patch = {**{k: None for k in c["events"]}, **events}  # null: zurück auf die Vorgabe
+                call(found, "PUT", "/integrations/notifications/{index}", {"enabled": want["enabled"], "events": patch},
+                     index=i)
 
     def write_appliances(found, value, current):
         """Mit system_id: ändern, ohne: neu anlegen, fehlende: entfernen (samt System und Funden)."""
@@ -236,6 +248,7 @@ def build_config_router(ctx: Context, guards: Guards, routers: list[APIRouter]) 
         "report_policy": (lambda s: {k: get_report_policy(ctx)[k] for k in ("frequency", "weekday", "paused_until")},
                           simple("/settings/report-policy")),
         "finding_drop": (drop_config, simple("/settings/finding-drop")),
+        "notification_defaults": (lambda s: {"defaults": load_defaults(ctx)}, simple("/integrations/notifications/defaults")),
         "notifications": (read_notifications, write_notifications),
         "watchdog": (read_watchdog, simple("/settings/watchdog")),
         "early_warning": (lambda s: {"feeds": setting(s, FEEDS_KEY, DEFAULT_FEEDS), "products": setting(s, PRODUCTS_KEY, [])},

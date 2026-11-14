@@ -499,7 +499,7 @@ def test_research_settings_api_has_two_switches_and_ignores_the_old_model(admin)
     r = client.put("/api/early-warnings/research", headers=h, json={"enabled": False, "verify": True, "model": "claude-x"})
     assert r.status_code == 200
     got = client.get("/api/early-warnings").json()["research"]
-    assert got == {"enabled": False, "verify": True, "state": {}, "interval_hours": ew.RESEARCH_HOURS, "level": "full"}
+    assert got == {"enabled": False, "verify": True, "state": {}, "interval_days": ew.RESEARCH_EVERY, "level": "full"}
     # Ohne `verify` (alter Client): der gespeicherte Wert bleibt
     r = client.put("/api/early-warnings/research", headers=h, json={"enabled": True, "model": "claude-x"})
     assert r.status_code == 200
@@ -909,11 +909,11 @@ def rss_only(url):
     return [] if url == ew.KEV_URL else ew.parse_feed(RSS)
 
 
-def set_level(ctx, level, pass_hours=2, research_hours=20, **switches):
+def set_level(ctx, level, research_days=1, **switches):
     from app.models import put_setting
 
     with ctx.session_factory() as s:
-        put_setting(s, ew.AI_KEY, {"level": level, "pass_hours": pass_hours, "research_hours": research_hours,
+        put_setting(s, ew.AI_KEY, {"level": level, "pass_times": ["06:00", "15:00"], "research_days": research_days,
                                    "kev": True, **switches})
         s.commit()
 
@@ -1058,20 +1058,28 @@ def test_intervals_follow_the_settings(ctx):
 
     now = time.time()
     with ctx.session_factory() as s:
-        put_setting(s, ew.STATE_KEY, {"at": now - 2 * 3600 + 60})
-        put_setting(s, ew.RESEARCH_STATE_KEY, {"at": now - 20 * 3600 + 60})
+        put_setting(s, ew.STATE_KEY, {"at": now - 10 * 60})
+        put_setting(s, ew.RESEARCH_STATE_KEY, {"at": now - 24 * 3600 + 30 * 60})
         s.commit()
-        assert ew.pass_due(s, now) and ew.research_due(s, now)   # ein Durchgang beginnt nie genau im Takt
-    set_level(ctx, "balanced", pass_hours=6, research_hours=72)
+        # gerade lief einer (z. B. der des vollständigen Laufs): die Prüfung zur Uhrzeit fällt aus; die Recherche
+        # läuft in der ersten Prüfung, die den Abstand in Tagen erreicht, auch wenn sie etwas früher am Tag liegt
+        assert not ew.pass_due(s, now) and ew.pass_due(s, now + 30 * 60) and ew.research_due(s, now)
+    set_level(ctx, "balanced", research_days=3)
     with ctx.session_factory() as s:
-        assert not ew.pass_due(s, now) and not ew.research_due(s, now)
-        assert ew.pass_due(s, now + 4 * 3600) and ew.research_due(s, now + 52 * 3600)
+        assert not ew.research_due(s, now) and not ew.research_due(s, now + 40 * 3600)
+        assert ew.research_due(s, now + 46 * 3600)
     set_level(ctx, "minimal")
     with ctx.session_factory() as s:
         assert not ew.research_due(s, now + 1e7)
-        put_setting(s, ew.AI_KEY, {"level": "evil", "pass_hours": 0, "research_hours": "x"})
+        put_setting(s, ew.AI_KEY, {"level": "full", "pass_hours": 24, "research_hours": 72})   # alte Form
         s.commit()
-        assert ew.ai_config(s) == {"level": "full", "pass_hours": 1, "research_hours": 20, "max_searches": 15, **ew.VERIFY_DEFAULTS,
+        assert (ew.ai_config(s)["pass_times"], ew.ai_config(s)["research_days"]) == (["06:00", "15:00"], 3)
+        put_setting(s, ew.AI_KEY, {"level": "full", "pass_times": [], "research_hours": 20})
+        s.commit()
+        assert (ew.ai_config(s)["pass_times"], ew.ai_config(s)["research_days"]) == ([], 1)   # nur der vollständige Lauf
+        put_setting(s, ew.AI_KEY, {"level": "evil", "pass_times": ["25:00", "15:00", "6:00"], "research_days": "x"})
+        s.commit()
+        assert ew.ai_config(s) == {"level": "full", "pass_times": ["15:00"], "research_days": 1, "max_searches": 15, **ew.VERIFY_DEFAULTS,
                                    "kev": False, "release_feeds": False, "health_alerts": True, "miss_check": True}
 
 
@@ -1079,18 +1087,23 @@ def test_ai_level_api_and_cost_basis(admin):
     env, client, h = admin
     ctx = env.app.state.ctx
     got = client.get("/api/early-warnings/ai-level").json()
-    assert (got["level"], got["pass_hours"], got["research_hours"]) == ("full", 2, 20)
+    assert (got["level"], got["pass_times"], got["research_days"]) == ("full", ["06:00", "15:00"], 1)
+    assert got["full_scan"] == {"enabled": True, "time": "03:00"} and got["timezone"]
     assert got["basis"]["classify"]["usd"] is None and got["basis"]["classify"]["error"]   # kein Anbieter
-    bad = client.put("/api/early-warnings/ai-level", headers=h, json={"level": "max", "pass_hours": 2, "research_hours": 20})
+    bad = client.put("/api/early-warnings/ai-level", headers=h, json={"level": "max", "research_days": 1})
     assert bad.status_code == 422
     assert client.put("/api/early-warnings/ai-level", headers=h,
-                      json={"level": "balanced", "pass_hours": 0, "research_hours": 20}).status_code == 422
-    r = client.put("/api/early-warnings/ai-level", headers=h, json={"level": "balanced", "pass_hours": 3, "research_hours": 72})
-    want = {"level": "balanced", "pass_hours": 3, "research_hours": 72, "max_searches": 15, "verify_repeat": "never",
+                      json={"level": "balanced", "research_days": 0}).status_code == 422
+    for times in (["6:00"], ["06:00", "12:00", "18:00"]):
+        assert client.put("/api/early-warnings/ai-level", headers=h,
+                          json={"level": "balanced", "pass_times": times, "research_days": 3}).status_code == 422
+    r = client.put("/api/early-warnings/ai-level", headers=h,
+                   json={"level": "balanced", "pass_times": ["15:00", "07:30"], "research_days": 3})
+    want = {"level": "balanced", "pass_times": ["07:30", "15:00"], "research_days": 3, "max_searches": 15, "verify_repeat": "never",
             "verify_searches": 4, "verify_per_pass": 3, "kev": True,
             "release_feeds": True, "health_alerts": True, "miss_check": True}   # fehlende Schalter: an
     assert r.status_code == 200 and setting_of(ctx, ew.AI_KEY) == want
-    assert client.get("/api/early-warnings").json()["research"]["interval_hours"] == 72
+    assert client.get("/api/early-warnings").json()["research"]["interval_days"] == 3
     assert client.get("/api/settings/config").json()["early_warning_ai"] == want
     assert client.put("/api/early-warnings/ai-level", headers=h, json={**want, "max_searches": 31}).status_code == 422
     # Gemessene Nutzung: ein Lesen mit Haiku, eine Prüfung mit NVD, eine mit KI
@@ -1253,7 +1266,7 @@ def test_run_miss_check_stores_reports_and_survives_a_dead_source(ctx, gitlab_ho
         raise ew.FeedError("GitHub advisories: HTTP 403")
     got = ew.run_miss_check(ctx, fetch=lambda url: ew.parse_kev(KEV) if url == ew.KEV_URL else [], advisories=down)
     assert got["errors"] == {"ghsa": "GitHub advisories: HTTP 403"} and got["counts"]["missed"] == 1
-    assert ctx.notifier.sent[-1][0] == "LabLantern: early warning coverage check" and ctx.notifier.kinds[-1] == "report"
+    assert ctx.notifier.sent[-1][0] == "LabLantern: early warning coverage check" and ctx.notifier.kinds[-1] == "coverage"
     with ctx.session_factory() as s:
         assert setting(s, ew.MISS_KEY)["counts"]["missed"] == 1 and not ew.miss_due(s)
         assert ew.miss_due(s, now=time.time() + 7 * 86400)

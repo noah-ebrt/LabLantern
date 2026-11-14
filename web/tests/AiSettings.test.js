@@ -61,7 +61,7 @@ describe('AiSettings', () => {
   })
 
   it('shows what each model costs per month for a task', async () => {
-    level = { level: 'full', pass_hours: 8, research_hours: 72, max_searches: 15, verify_searches: 4, verify_per_pass: 3,
+    level = { level: 'full', pass_times: ['06:00', '15:00'], full_scan: { enabled: true, time: '03:00' }, research_days: 3, max_searches: 15, verify_searches: 4, verify_per_pass: 3,
       research: { enabled: true, verify: true },
       basis: { search_usd: 0.01, prices: { 'claude-haiku-5-5': [0.1, 0.5], 'claude-sonnet-5-5': [2, 10] },
         classify: { tokens_in: 3000, tokens_out: 500, searches: 0, per_day: 20 },
