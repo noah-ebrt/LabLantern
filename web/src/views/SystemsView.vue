@@ -165,6 +165,7 @@ useLive(['commands'], () => loadSystems(true))
 // Hinzufügen: erst die Art des Hosts, dann deren Anleitung. Geräte ohne Agent laufen über ihre API (Connector).
 const HOST_KINDS = [
   { kind: 'linux', title: 'Linux server', text: 'Agent with pairing: packages, containers, images, updates, reboot. Needs systemd and curl.' },
+  { kind: 'windows', title: 'Windows PC or server', text: 'Agent with pairing, one command in PowerShell: Windows version and end of support, pending security updates, reboot needed. No package CVEs, no reboot from here.' },
   { kind: 'truenas', title: 'TrueNAS', text: 'Read through the TrueNAS API: version, system update, apps, alerts. No agent on the NAS.' },
   { kind: 'homeassistant', title: 'Home Assistant', text: 'Read through the Home Assistant API: Core, OS, add-ons and firmware updates.' },
   { kind: 'proxmox', title: 'Proxmox VE', text: 'Read through the PVE API: version and updates per node, and which VMs and LXCs have no agent yet.' },
@@ -173,6 +174,10 @@ const HOST_KINDS = [
   { kind: 'collector', title: 'Other device (collector script)', text: 'Linux servers, Unraid, UGREEN, Synology, OpenWrt …: a small cron script sends packages and containers. No agent, no commands.' },
 ]
 const addKind = ref(null)
+// Linux und Windows teilen sich die Anleitung (Pairing mit Code); nur die Befehle unterscheiden sich
+const isWindows = computed(() => addKind.value === 'windows')
+const agentCmds = computed(() => (isWindows.value ? enrollData.value?.windows : enrollData.value))
+const tokenCmd = computed(() => agentCmds.value?.install_cmd || (isWindows.value ? '' : enrollData.value?.enroll_cmd))
 const connectorId = ref(null)   // Detailansicht eines Geräts ohne Agent
 // Ganze Zeile öffnet die Details, wie in der Abdeckung der Übersicht
 const openRow = (s) => (s.connector ? (connectorId.value = s.id) : viewDetails(s.id))
@@ -195,7 +200,7 @@ function openAddModal() {
 function chooseKind(kind) {
   addKind.value = kind
   Object.assign(collector, { name: '', error: '', data: null })
-  if (kind === 'linux') startLinux()
+  if (kind === 'linux' || kind === 'windows') startLinux()
 }
 
 // Collector-Gerät (PLAN-extensions C): Token nur einmal sichtbar, danach nur ein neues ausstellbar
@@ -301,7 +306,9 @@ async function revokeSystem(id) {
 // danach löscht der Server den Eintrag. Sonst bleiben nur die Daten hier zu löschen.
 async function deleteSystem(id) {
   const sys = systems.value.find((x) => x.id === id)
-  if (sys?.online && sys.status === 'active') {
+  // Der Windows-Agent prüft keine Passkeys und entfernt sich deshalb nicht auf Befehl
+  const windows = sys?.host_type === 'windows'
+  if (!windows && sys?.online && sys.status === 'active') {
     if (!confirm(`Remove the agent from ${sys.name} completely (services, configuration, token, passkey list) and delete all its data here? This needs a passkey touch.`)) return
     // Der Eintrag verschwindet per Live-Update, sobald der Agent sich entfernt hat
     await sendSigned('uninstall', sys)
@@ -313,7 +320,10 @@ async function deleteSystem(id) {
     await loadSystems()
     return
   }
-  if (!confirm(`${sys?.name || 'This system'} is not connected, so LabLantern can only delete its data here.\nOn the host, remove the agent yourself: sudo apt purge lablantern-agent (or sudo rpm -e lablantern-agent).\n\nDelete the data now?`)) return
+  const manual = windows
+    ? `The Windows agent does not remove itself on command, so LabLantern only deletes the data of ${sys.name} here.\nOn the host, run in PowerShell as administrator:\n& "$env:ProgramFiles\\LabLantern\\lablantern-agent.exe" uninstall`
+    : `${sys?.name || 'This system'} is not connected, so LabLantern can only delete its data here.\nOn the host, remove the agent yourself: sudo apt purge lablantern-agent (or sudo rpm -e lablantern-agent).`
+  if (!confirm(`${manual}\n\nDelete the data now?`)) return
   try {
     await api.del(`/api/systems/${id}`)
     await loadSystems()
@@ -536,7 +546,7 @@ onMounted(() => {
       </ol>
     </template>
 
-    <template v-else-if="addKind !== 'linux'">
+    <template v-else-if="addKind !== 'linux' && addKind !== 'windows'">
       <button v-if="!editEntry" type="button" class="link back" @click="addKind = null">← Other kind of host</button>
       <h2>{{ editEntry ? `Edit ${editEntry.name}` : `Add ${APPLIANCE_KINDS[addKind]}` }}</h2>
       <p class="subtitle">No agent: LabLantern reads the device through its own API, with a read-only account.</p>
@@ -545,29 +555,31 @@ onMounted(() => {
 
     <template v-else>
     <button type="button" class="link back" @click="addKind = null">← Other kind of host</button>
-    <h2>Add a Linux host</h2>
-    <p class="subtitle">Three steps. The host needs systemd and <code>curl</code>; the agent installs as a signed package.</p>
+    <h2>Add a {{ isWindows ? 'Windows' : 'Linux' }} host</h2>
+    <p v-if="isWindows" class="subtitle">Three steps. Open PowerShell with “Run as administrator” (Windows 10, 11 or Server 2019 and newer).
+      The agent runs as a Windows service and reports the Windows version, pending security updates and whether a reboot is due.</p>
+    <p v-else class="subtitle">Three steps. The host needs systemd and <code>curl</code>; the agent installs as a signed package.</p>
 
     <div v-if="enrollLoading" class="empty">Preparing…</div>
     <ol v-else-if="enrollData" class="steps">
-      <li v-if="enrollData.setup_cmd">
+      <li v-if="agentCmds?.setup_cmd">
         <div class="step-head">
           <strong>Run this on the new host</strong>
-          <span class="subtext">Downloads and verifies the package, installs it and starts pairing.</span>
+          <span class="subtext">{{ isWindows ? 'Downloads and verifies the agent, starts pairing, then installs and starts the service.' : 'Downloads and verifies the package, installs it and starts pairing.' }}</span>
         </div>
         <div class="cmd-block">
           <div class="cmd-bar-top">
-            <span class="mono">bash</span>
-            <button class="btn-sm" @click="copyCommand(enrollData.setup_cmd)">
+            <span class="mono">{{ isWindows ? 'PowerShell (as administrator)' : 'bash' }}</span>
+            <button class="btn-sm" data-test="agent-setup-copy" @click="copyCommand(agentCmds.setup_cmd)">
               <Icon :name="copied ? 'check' : 'copy'" :size="14" />{{ copied ? 'Copied' : 'Copy' }}
             </button>
           </div>
-          <pre class="cmd-text">{{ enrollData.setup_cmd }}</pre>
+          <pre class="cmd-text" data-test="agent-setup-cmd">{{ agentCmds.setup_cmd }}</pre>
         </div>
       </li>
       <li v-else>
         <div class="step-head">
-          <strong>No agent packages on this master yet</strong>
+          <strong>{{ isWindows ? 'No Windows agent on this master yet' : 'No agent packages on this master yet' }}</strong>
           <span class="subtext">The stack builds and signs the agent when it starts; that takes a few minutes the first time.
             If it does not appear, check <code>docker compose logs agent-build agent-sign</code> in <code>deploy/</code> and
             <RouterLink to="/einstellungen?tab=system#set-release" @click="showAddModal = false">Settings → System → Agent release</RouterLink>.</span>
@@ -596,17 +608,36 @@ onMounted(() => {
       </li>
     </ol>
 
-    <details v-if="enrollData" class="alt">
+    <details v-if="enrollData && tokenCmd" class="alt">
       <summary>Alternative: one-time token instead of pairing</summary>
       <p class="hint">For hosts where nobody can compare a code. The token is valid for 60 minutes; approve the host afterwards in the list.</p>
       <div class="cmd-block">
         <div class="cmd-bar-top">
-          <span class="mono">bash</span>
-          <button class="btn-sm" @click="copyCommand(enrollData.install_cmd || enrollData.enroll_cmd)"><Icon name="copy" :size="14" />Copy</button>
+          <span class="mono">{{ isWindows ? 'PowerShell (as administrator)' : 'bash' }}</span>
+          <button class="btn-sm" @click="copyCommand(tokenCmd)"><Icon name="copy" :size="14" />Copy</button>
         </div>
-        <pre class="cmd-text">{{ enrollData.install_cmd || enrollData.enroll_cmd }}</pre>
+        <pre class="cmd-text">{{ tokenCmd }}</pre>
       </div>
       <p class="subtext">CA fingerprint <span class="mono">{{ enrollData.ca_fingerprint }}</span></p>
+    </details>
+    <details v-if="isWindows && agentCmds" class="alt" data-test="windows-manage">
+      <summary>Update or remove the agent by hand</summary>
+      <p class="hint">Updates normally run from here (“Update” in the host's row, with your passkey). If the agent is too old or not connected, this replaces the program and restarts the service; the pairing stays.</p>
+      <div class="cmd-block">
+        <div class="cmd-bar-top">
+          <span class="mono">PowerShell (as administrator)</span>
+          <button class="btn-sm" @click="copyCommand(agentCmds.update_cmd)"><Icon name="copy" :size="14" />Copy</button>
+        </div>
+        <pre class="cmd-text">{{ agentCmds.update_cmd }}</pre>
+      </div>
+      <p class="hint">Remove the service, the program and the configuration from the host. Delete the host here afterwards.</p>
+      <div class="cmd-block">
+        <div class="cmd-bar-top">
+          <span class="mono">PowerShell (as administrator)</span>
+          <button class="btn-sm" @click="copyCommand(agentCmds.uninstall_cmd)"><Icon name="copy" :size="14" />Copy</button>
+        </div>
+        <pre class="cmd-text">{{ agentCmds.uninstall_cmd }}</pre>
+      </div>
     </details>
     </template>
 

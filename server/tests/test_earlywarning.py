@@ -141,7 +141,9 @@ class Claude:
         if self.status != 200:
             raise sdk_error(self.status)
         last = params["tools"][-1]
-        if "type" in last:   # Rechercheschritt 1: nur die Websuche
+        ask = params["messages"][-1]["content"]
+        # Recherche: Websuche und Bericht stehen immer beide in der Liste; gesucht wird, bis der Bericht verlangt ist
+        if any("type" in t for t in params["tools"]) and not (isinstance(ask, str) and ask.startswith("Now report")):
             content = [SimpleNamespace(type="server_tool_use"), SimpleNamespace(
                 type="web_search_tool_result", content=[SimpleNamespace(url="https://tailscale.com/security-bulletins")]),
                 SimpleNamespace(type="text", text="notes")]
@@ -740,7 +742,9 @@ def test_web_research_adds_new_items_once_and_skips_known_ones(ctx, pi_host):
     state = ew.run_pass(ctx, fetch=lambda url: [])
     search, report = claude.calls[:2]   # danach die Prüfung des neuen „hoch“-Treffers (zwei weitere Aufrufe)
     assert state["verified"] == 1 and len(claude.calls) == 4
-    assert [x.get("type", x.get("name")) for x in search["tools"]] == ["web_search_20260209"]   # erst nur suchen
+    # beide Schritte mit derselben Werkzeugliste, sonst liest der Bericht den Verlauf nicht aus dem Cache
+    assert [x.get("type", x.get("name")) for x in search["tools"]] == ["web_search_20260209", "report_research"]
+    assert search["tools"] == report["tools"]
     assert report["tools"][-1]["name"] == "report_research" and report["messages"][1]["content"][-1].text == "notes"
     assert report["model"] == "claude-sonnet-5-5"
     assert "tailscale 1.104.2 (package; raspberrypi)" in search["messages"][0]["content"]
@@ -961,7 +965,7 @@ def test_full_level_is_unchanged_and_never_asks_nvd(ctx, gitlab_host):
 
 def test_balanced_checks_with_nvd_first_and_falls_back_to_ai(ctx, gitlab_host):
     only_research_and_verify(ctx, enabled=False, verify=True)
-    set_level(ctx, "balanced")
+    set_level(ctx, "balanced", verify_repeat="always")   # RSS und KEV melden dieselbe Produktversion: beide prüfen
     claude, asked = use(ctx, Claude()), []
     feed = lambda url: ew.parse_kev(KEV) if url == ew.KEV_URL else ew.parse_feed(RSS)  # noqa: E731
     state = ew.run_pass(ctx, fetch=feed, lookup=lambda cve: asked.append(cve) or ew.nvd_facts(NVD_GITLAB))
@@ -984,6 +988,43 @@ def test_balanced_checks_with_nvd_first_and_falls_back_to_ai(ctx, gitlab_host):
     with ctx.session_factory() as s:
         v = json.loads(s.scalar(select(EarlyWarning)).ai_json)["verified"]
         assert (v["source"], v["nvd"]) == ("ai", "missing")
+
+
+def test_vendor_check_runs_once_per_product_version(ctx, gitlab_host):
+    """RSS und KEV melden dieselbe Produktversion: geprüft wird einmal, die zweite Meldung kostet keinen Aufruf."""
+    only_research_and_verify(ctx, enabled=False, verify=True)
+    set_level(ctx, "full")
+    claude = use(ctx, Claude())
+    feed = lambda url: ew.parse_kev(KEV) if url == ew.KEV_URL else ew.parse_feed(RSS)  # noqa: E731
+    state = ew.run_pass(ctx, fetch=feed)
+    assert (state["verified"], state["verify_skipped"]) == (1, 1)
+    assert len(claude.calls) == state["ai_calls"] + 2   # lesen, dann eine Prüfung in zwei Schritten
+    with ctx.session_factory() as s:
+        rows = s.scalars(select(EarlyWarning).order_by(EarlyWarning.id)).all()
+        done = {json.loads(r.ai_json)["verified"]["source"]: r for r in rows}
+        assert set(done) == {"ai", "skipped"}
+        pairs = json.loads(done["ai"].ai_json)["verified"]["pairs"]
+        assert pairs and pairs == json.loads(done["skipped"].ai_json)["verified"]["pairs"]
+        assert not ew._needs_verify(done["skipped"])
+        # die Meldung trifft nach einem Update eine andere Version: sie steht wieder an
+        done["skipped"].affected = json.dumps([{**a, "version": "99.0"} for a in json.loads(done["skipped"].affected)])
+        assert ew._needs_verify(done["skipped"])
+        assert ew.cost_basis(ctx, s)["verify"]["per_day"] == 1   # Übersprungenes zählt nicht als Prüfung
+    calls = len(claude.calls)
+    assert ew.run_pass(ctx, fetch=feed)["verified"] == 0 and len(claude.calls) == calls
+
+
+def test_vendor_check_repeat_modes():
+    known = {("gitlab", "19.5.0"): {"CVE-2026-1"}}
+    hit = lambda cves, version="19.5.0": EarlyWarning(   # noqa: E731
+        cves=json.dumps(cves), affected=json.dumps([{"system": "host-a", "product": "GitLab", "version": version}]))
+    assert ew._covered(hit(["CVE-2026-2"]), known, "never") and not ew._covered(hit(["CVE-2026-1"]), known, "always")
+    assert ew._covered(hit(["CVE-2026-1"]), known, "new_cve") and ew._covered(hit([]), known, "new_cve")
+    assert not ew._covered(hit(["CVE-2026-1", "CVE-2026-2"]), known, "new_cve")   # eine neue CVE: prüfen
+    assert not ew._covered(hit([], "19.6.0"), known, "never")                     # andere Version: prüfen
+    both = EarlyWarning(cves="[]", affected=json.dumps([{"product": "gitlab", "version": "19.5.0"},
+                                                        {"product": "redis", "version": "7.2"}]))
+    assert not ew._covered(both, known, "never")   # ein Produkt ist noch ungeprüft
 
 
 def test_minimal_never_researches_or_verifies_with_ai(ctx, gitlab_host):
@@ -1030,7 +1071,7 @@ def test_intervals_follow_the_settings(ctx):
         assert not ew.research_due(s, now + 1e7)
         put_setting(s, ew.AI_KEY, {"level": "evil", "pass_hours": 0, "research_hours": "x"})
         s.commit()
-        assert ew.ai_config(s) == {"level": "full", "pass_hours": 1, "research_hours": 20, "max_searches": 15,
+        assert ew.ai_config(s) == {"level": "full", "pass_hours": 1, "research_hours": 20, "max_searches": 15, **ew.VERIFY_DEFAULTS,
                                    "kev": False, "release_feeds": False, "health_alerts": True, "miss_check": True}
 
 
@@ -1045,7 +1086,8 @@ def test_ai_level_api_and_cost_basis(admin):
     assert client.put("/api/early-warnings/ai-level", headers=h,
                       json={"level": "balanced", "pass_hours": 0, "research_hours": 20}).status_code == 422
     r = client.put("/api/early-warnings/ai-level", headers=h, json={"level": "balanced", "pass_hours": 3, "research_hours": 72})
-    want = {"level": "balanced", "pass_hours": 3, "research_hours": 72, "max_searches": 15, "kev": True,
+    want = {"level": "balanced", "pass_hours": 3, "research_hours": 72, "max_searches": 15, "verify_repeat": "never",
+            "verify_searches": 4, "verify_per_pass": 3, "kev": True,
             "release_feeds": True, "health_alerts": True, "miss_check": True}   # fehlende Schalter: an
     assert r.status_code == 200 and setting_of(ctx, ew.AI_KEY) == want
     assert client.get("/api/early-warnings").json()["research"]["interval_hours"] == 72

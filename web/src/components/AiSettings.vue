@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { api } from '../api.js'
 import { fmtStamp } from '../time.js'
+import { fmtUsd, taskMonthly } from '../aicost.js'
 import Icon from './Icon.vue'
 import SecretField from './SecretField.vue'
 import SettingsCard from './SettingsCard.vue'
@@ -30,8 +31,30 @@ const busy = ref(false)
 const tasksMessage = ref(null)
 const loadError = ref(null)
 
+// Grundlage der Kostenschätzung (gemessener Verbrauch, Preise, Takte): zeigt je Modell, was die Aufgabe im Monat kostet
+const level = ref(null)
+async function loadCost() {
+  try {
+    level.value = await api.get('/api/early-warnings/ai-level')
+  } catch {
+    level.value = null   // ohne Schätzung bleibt die Auswahl benutzbar
+  }
+}
+
+// Monatskosten der Aufgabe mit diesem Modell; nur für Anbieter mit bekannten Listenpreisen
+function monthly(task, pid, model) {
+  const l = level.value
+  if (!l?.basis || pid !== 'anthropic') return null
+  return taskMonthly(l.basis, l, l.research, task.id, model)
+}
+const costText = (task, pid, model) => {
+  const usd = monthly(task, pid, model)
+  return usd == null ? '' : ` · about ${fmtUsd(usd)}/month`
+}
+
 // Auswahl nur beim ersten Laden und nach dem Speichern übernehmen, sonst gingen offene Änderungen verloren
 async function load(adopt = false) {
+  if (adopt) loadCost()
   try {
     state.value = await api.get('/api/ai')
     loadError.value = null
@@ -81,7 +104,9 @@ function stale(task) {
 
 function autoText(task) {
   const r = state.value.tasks[task.id]?.resolved
-  return r ? `Automatic — currently ${modelLabel(r)}` : 'Automatic — not available'
+  if (!r) return 'Automatic — not available'
+  const cut = r.indexOf(':')
+  return `Automatic — currently ${modelLabel(r)}${costText(task, r.slice(0, cut), r.slice(cut + 1))}`
 }
 
 function lastUsed(p) {
@@ -216,14 +241,15 @@ onMounted(() => load(true))
               <option value="">{{ autoText(t) }}</option>
               <option v-if="stale(t)" :value="stale(t)">{{ stale(t) }} (not available)</option>
               <optgroup v-for="g in groups(t)" :key="g.id" :label="g.label">
-                <option v-for="m in g.models" :key="m.id" :value="`${g.id}:${m.id}`">{{ m.name }}</option>
+                <option v-for="m in g.models" :key="m.id" :value="`${g.id}:${m.id}`">{{ m.name }}{{ costText(t, g.id, m.id) }}</option>
               </optgroup>
             </select>
           </label>
           <p v-if="state.tasks[t.id]?.error" class="text-danger task-error" :data-test="`error-${t.id}`">{{ state.tasks[t.id].error }}</p>
         </div>
       </div>
-      <span class="subtext">Web research and the vendor check need a model with web search; compatible endpoints are not offered there.</span>
+      <span class="subtext">Web research and the vendor check need a model with web search; compatible endpoints are not offered there.
+        <template v-if="level?.basis">The monthly cost is an estimate from your measured usage and Anthropic list prices at the current settings; a smaller model costs less but reads advisories less carefully.</template></span>
       <div class="actions">
         <button type="button" class="primary" data-test="save-tasks" :disabled="busy" @click="saveTasks"><Icon name="check" :size="15" />Save models</button>
       </div>

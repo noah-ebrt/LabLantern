@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -153,7 +154,7 @@ func (c *Client) post(path string, body any, bearer string) ([]byte, int, error)
 
 func (c *Client) Enroll(token, hostname, agentVersion string) (*EnrollResponse, error) {
 	out, status, err := c.post("/api/agent/enroll", EnrollRequest{
-		EnrollmentToken: token, Hostname: hostname, HostType: "linux", AgentVersion: agentVersion,
+		EnrollmentToken: token, Hostname: hostname, HostType: runtime.GOOS, AgentVersion: agentVersion,
 	}, "")
 	if err != nil {
 		return nil, err
@@ -303,7 +304,7 @@ func (c *Client) CommandResult(id int, status, output string) error {
 // der Master antwortet mit seiner Zufallszahl. Das Geheimnis selbst folgt erst danach mit RevealPairing.
 func (c *Client) Pair(hostname, commitment, agentVersion string) (int, string, error) {
 	out, status, err := c.post("/api/agent/pair", map[string]any{"hostname": hostname, "commitment": commitment,
-		"host_type": "linux", "agent_version": agentVersion}, "")
+		"host_type": runtime.GOOS, "agent_version": agentVersion}, "")
 	if err != nil {
 		return 0, "", err
 	}

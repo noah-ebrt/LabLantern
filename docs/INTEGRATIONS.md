@@ -345,6 +345,14 @@ The AI never removes or downgrades a finding. Feed and web content is treated as
 Model for reading feeds: **Latest Haiku (automatic)** by default when Anthropic is configured (with only OpenAI or
 your own endpoint, choose a model yourself), or any model your provider offers (Settings → AI early warning
 → Models per task). The same page sets the models for the web research and the vendor check.
+With Anthropic, each model in the list shows what the task would cost per month at your measured usage, so you can
+put a cheaper model on a task.
+
+The vendor check is usually the largest part of the cost. Under AI level and cost → Vendor check you choose how
+often a product version is checked again (once per product version, again only for a new CVE, or every warning), how
+many web searches one check may use (1–10) and how many checks run per feed check (1–10). With "once per product
+version" a later warning about the same installed version gets no check of its own and shows "not checked again";
+it is checked once the installed version changes.
 
 ### Local models with Ollama
 

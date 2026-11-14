@@ -29,12 +29,17 @@ from .trust import ca_fingerprint
 ARCHES = ("amd64", "arm64")
 # Ausgelieferte Dateien: Pakete (.deb/.rpm) für Installation und Update, rohe Binaries nur zum Herunterladen.
 PACKAGES = tuple(f"{a}.{p}" for a in ARCHES for p in ("deb", "rpm"))
-DOWNLOADS = ARCHES + PACKAGES
+# Windows: eine einzelne .exe je Architektur, die ihren Dienst selbst einrichtet (ab Agent 0.20)
+WINDOWS_FILES = tuple(f"windows-{a}.exe" for a in ARCHES)
+DOWNLOADS = ARCHES + PACKAGES + WINDOWS_FILES
+WINDOWS = "windows"   # host_type des Windows-Agenten: meldet Version, Updates und Neustart, keine Pakete
+WINDOWS_UNINSTALL = '& "$env:ProgramFiles\\LabLantern\\lablantern-agent.exe" uninstall'
 ERROR_KEYS = ("packages", "containers", "security_updates")
 # gleiche Liste im Agenten (collector): Traefik-Router ja, Middlewares und Services nie (Basic-Auth …)
 SAFE_LABEL_PREFIXES = ("com.docker.compose.", "org.opencontainers.", "traefik.http.routers.", "traefik.tcp.routers.")
 SAFE_LABEL_KEYS = frozenset({"traefik.enable"})
 INIT_WINDOW = 180.0     # so lange darf ein frisch freigegebener Agent bis zum ersten Report brauchen
+INIT_WINDOW_WINDOWS = 900.0   # Windows fragt für den Report erst Windows Update, das dauert Minuten
 STALE_HOURS = 24
 ONLINE_WINDOW = 120.0   # letzter Long-Poll jünger als das: verbunden
 MAX_HOST_SBOM_BYTES = 2 << 30   # alle Image-SBOMs eines Hosts zusammen: ein übernommener Agent füllt nicht die Platte
@@ -50,7 +55,8 @@ def system_state(ctx: Context, r: System) -> str:
     if r.status != "active":
         return r.status
     if r.awaiting_report_since is not None:
-        return "initializing" if ctx.clock() - r.awaiting_report_since < INIT_WINDOW else "error"
+        window = INIT_WINDOW_WINDOWS if r.host_type == "windows" else INIT_WINDOW
+        return "initializing" if ctx.clock() - r.awaiting_report_since < window else "error"
     seen = r.last_seen
     if seen is None:
         return "error"
@@ -160,6 +166,22 @@ class StorageIn(BaseModel):
     error: str = Field(default="", max_length=300)
 
 
+class SoftwareIn(BaseModel):
+    name: str = Field(max_length=300)
+    version: str = Field(default="", max_length=100)
+    publisher: str = Field(default="", max_length=200)
+
+
+class ProtectionIn(BaseModel):
+    antivirus: str = Field(default="unknown", pattern=r"^(on|off|unknown)$")
+    antivirus_name: str = Field(default="", max_length=200)
+    signature_age_days: int | None = Field(default=None, ge=0, le=1_000_000)
+    antivirus_outdated: bool = False
+    firewall: str = Field(default="unknown", pattern=r"^(on|off|unknown)$")
+    firewall_off: list[str] = Field(default_factory=list, max_length=10)
+    detail: str = Field(default="", max_length=500)
+
+
 class AgentReportIn(BaseModel):
     agent_version: str = Field(default="0.1.0", max_length=32)
     os_name: str = Field(default="", max_length=200)
@@ -175,6 +197,8 @@ class AgentReportIn(BaseModel):
     host_ports: list[int] = Field(default_factory=list, max_length=2000)   # Dienste des Hosts (ab 0.14)
     packages: list[PackageIn] = Field(default_factory=list, max_length=100_000)
     storage: StorageIn | None = None   # Laufwerke und Pools, nur auf echter Hardware (ab 0.18)
+    software: list[SoftwareIn] = Field(default_factory=list, max_length=5000)   # Programme, nur Windows (ab 0.21)
+    protection: ProtectionIn | None = None   # Virenschutz und Firewall, nur Windows (ab 0.21)
     collection_errors: dict[str, str] = Field(default_factory=dict)
 
 
@@ -200,11 +224,18 @@ def resolve_removed_packages(s, system_id: int, sbom: dict, now: datetime) -> No
         log.exception("Resolving findings of removed packages after a report failed")
 
 
-def agent_packages(ctx: Context) -> dict[str, str | None]:
-    """SHA-256 der Agent-Pakete, die dieser Server ausliefert (None = nicht vorhanden)."""
+def agent_file(ctx: Context, name: str):
+    """Pfad einer ausgelieferten Datei (None ohne Agent-Verzeichnis). Nur die Linux-Dateien tragen "linux" im Namen."""
+    if not ctx.agent_dir():
+        return None
+    return ctx.agent_dir() / (f"lablantern-agent-{name}" if name in WINDOWS_FILES else f"lablantern-agent-linux-{name}")
+
+
+def agent_packages(ctx: Context, names: tuple[str, ...] = PACKAGES) -> dict[str, str | None]:
+    """SHA-256 der Agent-Dateien, die dieser Server ausliefert (None = nicht vorhanden)."""
     out: dict[str, str | None] = {}
-    for name in PACKAGES:
-        path = ctx.agent_dir() / f"lablantern-agent-linux-{name}" if ctx.agent_dir() else None
+    for name in names:
+        path = agent_file(ctx, name)
         out[name] = hashlib.sha256(path.read_bytes()).hexdigest() if path and path.is_file() else None
     return out
 
@@ -253,6 +284,37 @@ def _install_cmd(base: str, token: str, fp: str, sums: dict[str, str | None], pi
         return None
     # enroll startet den Daemon neu, danach meldet er sofort
     return f"{part} && sudo lablantern-agent enroll --server {base} --token {token} --ca-fingerprint {fp}{pin}"
+
+
+def _windows_part(base: str, sums: dict[str, str | None]) -> str | None:
+    """Eine Zeile für eine PowerShell mit Administratorrechten (ab Windows PowerShell 5.1, deshalb `;` statt `&&`):
+    lädt die .exe, prüft die Prüfsumme und ruft sie auf. `throw` bricht die ganze Zeile ab; fehlt die Datei, ist
+    der Hash leer und es kommt ebenfalls dazu. `curl.exe` gehört seit Windows 10 1803 und Server 2019 zum System."""
+    available = {n.removeprefix("windows-").removesuffix(".exe"): s for n, s in sums.items() if s}
+    if not available:
+        return None
+    table = ";".join(f"{arch}='{s}'" for arch, s in available.items())
+    return (
+        "$a=if($env:PROCESSOR_ARCHITECTURE -eq 'ARM64'){'arm64'}else{'amd64'}; "
+        f"$s=@{{{table}}}[$a]; "
+        "$f=\"$env:TEMP\\lablantern-agent.exe\"; "
+        f"curl.exe -fsSLk \"{base}/api/agent/download/windows-$a.exe\" -o $f; "
+        "if(-not $s -or (Get-FileHash $f -Algorithm SHA256).Hash -ne $s){throw 'Download failed or checksum mismatch'}; "
+        "& $f"
+    )
+
+
+def windows_commands(base: str, token: str, fp: str, sums: dict[str, str | None]) -> dict[str, str] | None:
+    """Befehle für den Windows-Agenten; None, solange dieser Master keine Windows-Datei ausliefert."""
+    part = _windows_part(base, sums)
+    if part is None:
+        return None
+    return {
+        "setup_cmd": f"{part} setup --master {base} --ca-fingerprint {fp}",
+        "install_cmd": f"{part} enroll --server {base} --token {token} --ca-fingerprint {fp}",
+        "update_cmd": f"{part} install",   # ersetzt Programm und Dienst, behält die Konfiguration
+        "uninstall_cmd": WINDOWS_UNINSTALL,
+    }
 
 
 class ImageSbomIn(BaseModel):
@@ -355,6 +417,7 @@ def build_agent_router(ctx: Context, guards: Guards) -> APIRouter:
             # ohne Token, mit Pairing-Code; der Fingerabdruck im Befehl macht einen falschen Master sofort sichtbar
             "setup_cmd": (f"{part} && sudo lablantern-agent setup --master {base} --ca-fingerprint {fp}{pin}"
                           if part and _version(version) >= SECURE_SETUP_VERSION else None),
+            "windows": windows_commands(base, raw_token, fp, agent_packages(ctx, WINDOWS_FILES)),
         }
 
     def system_dict(r: System, detail: bool = False, actions: dict[int, str] | None = None) -> dict[str, Any]:
@@ -491,7 +554,7 @@ def build_agent_router(ctx: Context, guards: Guards) -> APIRouter:
     def download(name: str):
         if name not in DOWNLOADS or not ctx.agent_dir():
             raise HTTPException(404, "Unknown architecture or package type")
-        path = ctx.agent_dir() / f"lablantern-agent-linux-{name}"
+        path = agent_file(ctx, name)
         if not path.is_file():
             raise HTTPException(404, "Agent file not available")
         suffix = name.partition(".")[2]
@@ -572,7 +635,7 @@ def build_agent_router(ctx: Context, guards: Guards) -> APIRouter:
     def agent_report(body: AgentReportIn, request: Request, authorization: str | None = Header(None)):
         # Erst das Token, dann die teure Umwandlung: Ohne gültiges Token soll niemand CPU-Zeit verbrauchen können.
         with ctx.session_factory() as s:
-            agent_system(s, authorization)
+            windows = agent_system(s, authorization).host_type == WINDOWS
 
         errors ={k: v.strip()[:300] for k, v in body.collection_errors.items() if k in ERROR_KEYS and v.strip()}
         if not body.security_updates_known:
@@ -580,10 +643,11 @@ def build_agent_router(ctx: Context, guards: Guards) -> APIRouter:
         if "packages" not in errors:
             if not body.os_id:
                 errors["packages"] = "agent reports no OS ID (update the agent)"
-            elif not body.packages:
+            elif not body.packages and not windows:
                 errors["packages"] = "agent reported no packages"
         sbom = None
-        if "packages" not in errors:
+        # Windows: keine Pakete, also keine SBOM und kein Scan; die Abdeckung zeigt Paket-CVEs als n/a
+        if "packages" not in errors and not windows:
             sbom = build_cyclonedx("", body.os_id, body.os_version_id, body.os_name,
                                    [p.model_dump() for p in body.packages])
             if not any(c["type"] == "library" for c in sbom["components"]):
@@ -607,6 +671,8 @@ def build_agent_router(ctx: Context, guards: Guards) -> APIRouter:
                 "packages_count": len(body.packages), "has_sbom": sbom is not None,
                 "security_updates": [{"name": u.name, "from": u.from_, "to": u.to} for u in body.security_updates],
                 **({"storage": from_agent(body.storage.model_dump())} if body.storage else {}),
+                **({"software": [a.model_dump() for a in body.software],
+                    "protection": body.protection.model_dump() if body.protection else None} if windows else {}),
             })
             if "containers" not in errors:
                 learn_baseline(system)

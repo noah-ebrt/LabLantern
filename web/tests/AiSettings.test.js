@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import AiSettings from '../src/components/AiSettings.vue'
 import { setCsrf } from '../src/api.js'
 
-let calls, ai
+let calls, ai, level
 
 const baseAi = () => ({
   providers: [
@@ -28,11 +28,13 @@ beforeEach(() => {
   setCsrf('tok')
   calls = []
   ai = baseAi()
+  level = null
   vi.stubGlobal('fetch', vi.fn(async (url, init = {}) => {
     const method = init.method || 'GET'
     calls.push({ url, method, body: init.body ? JSON.parse(init.body) : null })
     const json = (b, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { 'content-type': 'application/json' } })
     if (url === '/api/ai' && method === 'GET') return json(ai)
+    if (url === '/api/early-warnings/ai-level' && level) return json(level)
     if (url === '/api/ai/tasks' && method === 'PUT') return json({ ok: true })
     if (url === '/api/ai/providers/anthropic/test') return json({ ok: false, error: 'Anthropic: invalid x-api-key (HTTP 401)' })
     if (url.startsWith('/api/ai/providers/')) return json({ ok: true, models: [] })
@@ -56,6 +58,21 @@ describe('AiSettings', () => {
     expect(w.text()).toContain('Classify feed advisories')
     expect(w.text()).toContain('Web research')
     expect(w.text()).toContain('Vendor check of critical and high matches')
+  })
+
+  it('shows what each model costs per month for a task', async () => {
+    level = { level: 'full', pass_hours: 8, research_hours: 72, max_searches: 15, verify_searches: 4, verify_per_pass: 3,
+      research: { enabled: true, verify: true },
+      basis: { search_usd: 0.01, prices: { 'claude-haiku-5-5': [0.1, 0.5], 'claude-sonnet-5-5': [2, 10] },
+        classify: { tokens_in: 3000, tokens_out: 500, searches: 0, per_day: 20 },
+        research: { tokens_in: 75000, tokens_out: 3000, searches: 15 },
+        verify: { tokens_in: 40000, tokens_out: 2000, searches: 4, per_day: 2, nvd_share: null } } }
+    const w = mount(AiSettings)
+    await flushPromises()
+    const options = w.get('[data-test="task-verify"]').findAll('option').map((o) => o.text())
+    expect(options[0]).toBe('Automatic — currently Claude Sonnet 5.5 · about $8.40/month')
+    expect(options).toContain('Claude Haiku 5.5 · about $2.70/month')
+    expect(w.text()).toContain('estimate from your measured usage')
   })
 
   it('shows "not available" when a task cannot resolve', async () => {

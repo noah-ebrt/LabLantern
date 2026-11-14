@@ -1,3 +1,5 @@
+//go:build !windows
+
 // Package images erzeugt die SBOM eines lokalen Container-Images mit der Syft-Bibliothek.
 // Gelesen wird über den Container-Socket; das Image verlässt den Host nie, nur die SBOM.
 //

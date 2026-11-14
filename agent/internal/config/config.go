@@ -8,9 +8,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"os"
-	"os/user"
 	"path/filepath"
-	"strconv"
 	"strings"
 )
 
@@ -22,17 +20,6 @@ type Config struct {
 	SystemID      int    `json:"system_id,omitempty"`
 	// SHA-256 der Passkey-Liste aus dem Einrichtungsbefehl: Nur genau diese Liste wird als erste übernommen.
 	PasskeysSHA256 string `json:"passkeys_sha256,omitempty"`
-}
-
-func DefaultConfigPath() string {
-	if os.Geteuid() == 0 {
-		return "/etc/lablantern/agent.json"
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "agent.json"
-	}
-	return filepath.Join(home, ".config", "lablantern", "agent.json")
 }
 
 // NormalizeFingerprint macht aus "aa:bb ..." einheitlich "AABB...".
@@ -107,6 +94,9 @@ func SaveConfig(path string, cfg *Config, caPEM []byte) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("cannot create directory %s: %w", dir, err)
 	}
+	if err := prepareDir(dir); err != nil {
+		return fmt.Errorf("cannot protect directory %s: %w", dir, err)
+	}
 	cfg.CAFile = CAFilePath(path)
 	if err := os.WriteFile(cfg.CAFile, caPEM, 0o644); err != nil {
 		return fmt.Errorf("cannot write %s: %w", cfg.CAFile, err)
@@ -124,26 +114,4 @@ func SaveConfig(path string, cfg *Config, caPEM []byte) error {
 	}
 	shareWithDaemon(dir, path)
 	return nil
-}
-
-// shareWithDaemon gibt dem Daemon (Gruppe lablantern) Lesezugriff auf Token und CA, wenn das Paket
-// installiert ist. Schreiben darf weiter nur root.
-func shareWithDaemon(dir, path string) {
-	if os.Geteuid() != 0 {
-		return
-	}
-	g, err := user.LookupGroup("lablantern")
-	if err != nil {
-		return
-	}
-	gid, err := strconv.Atoi(g.Gid)
-	if err != nil {
-		return
-	}
-	if os.Chown(dir, 0, gid) == nil {
-		_ = os.Chmod(dir, 0o750)
-	}
-	if os.Chown(path, 0, gid) == nil {
-		_ = os.Chmod(path, 0o640)
-	}
 }

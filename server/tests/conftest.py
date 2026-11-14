@@ -80,6 +80,7 @@ class Env:
             (self.agent_dir / f"lablantern-agent-linux-{arch}").write_bytes(f"fake-agent-{arch}".encode())
             for pkg in ("deb", "rpm"):
                 (self.agent_dir / f"lablantern-agent-linux-{arch}.{pkg}").write_bytes(f"fake-{arch}.{pkg}".encode())
+            (self.agent_dir / f"lablantern-agent-windows-{arch}.exe").write_bytes(f"fake-windows-{arch}".encode())
         defaults = dict(data_dir=self.data_dir, hostnames=["lablantern.lan", "192.0.2.10", "localhost"],
                         ca_url=os.environ["LL_TEST_CA_URL"], agent_dir=self.agent_dir)
         with caplog.at_level(logging.INFO, logger="lablantern"):

@@ -15,7 +15,8 @@ MONO = "ui-monospace,'SF Mono','JetBrains Mono',Menlo,Consolas,monospace"
 SEV_COLOR = {"kritisch": CRIT, "hoch": HIGH, "mittel": MED, "info": INFO}
 SEV_LABEL = {"kritisch": "Critical", "hoch": "High", "mittel": "Medium", "info": "Info"}
 CHECK_NAMES = {"paket_cve": "Package CVEs", "sicherheitsupdates": "Security updates", "reboot": "Reboot",
-               "container": "Containers", "images": "Container images", "versionen": "Versions"}
+               "container": "Containers", "images": "Container images", "versionen": "Versions",
+               "schutz": "Protection"}
 CHECK_STATUS = {"fund": ("Finding", WARN), "fehler": ("Error", CRIT), "offen": ("Queued", MUTED),
                 "excluded": ("Excluded", MUTED)}
 

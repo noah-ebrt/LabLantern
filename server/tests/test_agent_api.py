@@ -117,11 +117,167 @@ def test_install_command_is_missing_when_the_server_has_no_agent_binaries(tmp_pa
     assert d["install_cmd"] is None and d["enroll_cmd"]
 
 
+def test_windows_setup_is_one_line_with_pinned_checksums(admin):
+    env, client, h = admin
+    d = client.post("/api/systems/enrollment-token", headers={**h, "Host": "192.0.2.10:8443"}).json()
+    w = d["windows"]
+    for arch in ("amd64", "arm64"):
+        assert f"{arch}='{hashlib.sha256(f'fake-windows-{arch}'.encode()).hexdigest()}'" in w["setup_cmd"]
+    for cmd in (w["setup_cmd"], w["install_cmd"], w["update_cmd"]):
+        assert "\n" not in cmd and "&&" not in cmd   # eine Zeile, auch für Windows PowerShell 5.1
+        assert 'curl.exe -fsSLk "https://192.0.2.10:8443/api/agent/download/windows-$a.exe" -o $f; ' in cmd
+        assert "(Get-FileHash $f -Algorithm SHA256).Hash -ne $s){throw" in cmd
+    assert w["setup_cmd"].endswith(f"& $f setup --master https://192.0.2.10:8443 --ca-fingerprint {d['ca_fingerprint']}")
+    assert w["install_cmd"].endswith(f"& $f enroll --server https://192.0.2.10:8443 --token {d['token']} "
+                                     f"--ca-fingerprint {d['ca_fingerprint']}")
+    assert w["update_cmd"].endswith("& $f install") and w["uninstall_cmd"].endswith("lablantern-agent.exe\" uninstall")
+
+
+def test_windows_commands_are_missing_without_a_windows_build(tmp_path, caplog):
+    env = Env(tmp_path, caplog)
+    for f in env.agent_dir.glob("*windows*"):
+        f.unlink()
+    secret = env.complete_setup()
+    csrf = env.login(env.client, secret).json()["csrf_token"]
+    d = env.client.post("/api/systems/enrollment-token", headers={"X-CSRF-Token": csrf}).json()
+    assert d["windows"] is None and d["install_cmd"]
+
+
+def test_windows_host_reports_without_packages_and_package_cves_are_na(admin):
+    env, client, h = admin
+    token = client.post("/api/systems/enrollment-token", headers=h).json()["token"]
+    e = env.new_client().post("/api/agent/enroll", json={
+        "enrollment_token": token, "hostname": "host-w", "ip": "192.0.2.20", "host_type": "windows",
+        "agent_version": "0.20.0"}).json()
+    assert client.post(f"/api/systems/{e['system_id']}/approve", headers=h).status_code == 200
+    bearer = {"Authorization": f"Bearer {e['agent_token']}"}
+    r = env.new_client().post("/api/agent/report", headers=bearer, json=report(
+        os_name="Windows 11 Pro 24H2", os_id="windows", os_version_id="11-24h2-w", kernel="10.0.26100.2314",
+        packages=[], containers=[], security_updates_count=1, reboot_required=False,
+        security_updates=[{"name": "2026-11 Cumulative Update for Windows 11 (KB5000001)", "to": ""}]))
+    assert r.status_code == 200 and r.json()["needed_sboms"] == []
+    row = system(env, e["system_id"])
+    assert json.loads(row.collection_errors) == {} and row.sbom_updated_at is None
+    assert not (env.data_dir / "sboms" / f"{e['system_id']}.json").exists()
+    checks = coverage_of(client, "host-w")["checks"]
+    assert checks["paket_cve"]["status"] == "na" and "Windows" in checks["paket_cve"]["detail"]
+    assert checks["sicherheitsupdates"]["status"] == "fund" and "KB5000001" in checks["sicherheitsupdates"]["detail"]
+    assert checks["reboot"]["status"] == "ok"
+    # Container sammelt der Windows-Agent nicht: nicht geprüft ist nicht "ok"
+    assert checks["container"]["status"] == "na" and checks["images"]["status"] == "na"
+    # der Build ist kein Linux-Kernel: Die Frühwarnung beobachtet nur das Betriebssystem
+    from app import earlywarning
+    with env.app.state.ctx.session_factory() as s:
+        watched = [(p["kind"], p["keyword"], p["version"]) for p in earlywarning.inventory_products(s)]
+    assert watched == [("os", "windows", "11-24h2-w")]
+    # ein Linux-Agent ohne Pakete bleibt ein Fehler
+    sid, linux = activate(env, client, h, hostname="host-l", ip="192.0.2.21")
+    env.new_client().post("/api/agent/report", headers=linux, json=report(packages=[]))
+    assert "packages" in json.loads(system(env, sid).collection_errors)
+
+
+WIN = dict(os_name="Windows 11 Pro 24H2", os_id="windows", os_version_id="11-24h2-w", kernel="10.0.26100.2314",
+           packages=[], containers=[], security_updates_count=0, security_updates=[], reboot_required=False)
+PROTECTED = {"antivirus": "on", "antivirus_name": "Microsoft Defender", "signature_age_days": 1, "firewall": "on"}
+
+
+def windows_host(env, client, h):
+    token = client.post("/api/systems/enrollment-token", headers=h).json()["token"]
+    e = env.new_client().post("/api/agent/enroll", json={
+        "enrollment_token": token, "hostname": "host-w", "ip": "192.0.2.20", "host_type": "windows",
+        "agent_version": "0.21.0"}).json()
+    assert client.post(f"/api/systems/{e['system_id']}/approve", headers=h).status_code == 200
+    return e["system_id"], {"Authorization": f"Bearer {e['agent_token']}"}
+
+
+def test_windows_protection_is_a_check_of_its_own(admin):
+    env, client, h = admin
+    sid, bearer = windows_host(env, client, h)
+
+    def check(protection):
+        body = report(**WIN) if protection is None else report(**WIN, protection=protection)
+        assert env.new_client().post("/api/agent/report", headers=bearer, json=body).status_code == 200
+        return coverage_of(client, "host-w")["checks"]["schutz"]
+
+    # ein Agent vor 0.21 meldet es nicht: nicht geprüft, aber kein Fehler des Hosts
+    old = check(None)
+    assert old["status"] == "na" and "update the agent" in old["detail"]
+    ok = check(PROTECTED)
+    assert ok == {"status": "ok", "detail": "Microsoft Defender on, signatures 1 day old; firewall on"}
+    off = check({**PROTECTED, "firewall": "off", "firewall_off": ["Public"]})
+    assert off["status"] == "fund" and off["detail"].startswith("firewall off for the profile Public")
+    stale = check({**PROTECTED, "signature_age_days": 12})
+    assert stale["status"] == "fund" and "signatures are 12 days old" in stale["detail"]
+    other = check({"antivirus": "off", "antivirus_name": "Other AV", "firewall": "on"})
+    assert other["status"] == "fund" and "Other AV is off" in other["detail"]
+    # nicht lesbar ist ein Fehler, nie ok; ein Fund daneben geht vor
+    unknown = check({"antivirus": "unknown", "firewall": "on", "detail": "antivirus state not readable"})
+    assert unknown["status"] == "fehler" and "antivirus could not be read (antivirus state not readable)" in unknown["detail"]
+    both = check({"antivirus": "unknown", "firewall": "off", "firewall_off": ["Domain", "Public"]})
+    assert both["status"] == "fund" and "profiles Domain, Public" in both["detail"] and "antivirus could not be read" in both["detail"]
+    # der Fund steht bei den nächsten Schritten; Linux-Hosts haben die Prüfung nicht
+    from datetime import datetime, timedelta, timezone
+    from types import SimpleNamespace
+    from app.actions import next_steps
+    now = datetime.now(timezone.utc)
+    run = SimpleNamespace(id=1, status="success", canary_status="ok", finished_at=now - timedelta(hours=1))
+    cov = {"systems": client.get("/api/overview").json()["coverage"]}
+    with env.app.state.ctx.session_factory() as s:
+        steps = next_steps(s, {"kritisch": 0, "hoch": 0}, cov, run, now)
+    assert any(st["title"] == "Protection" and "host-w: firewall off" in st["detail"] for st in steps)
+    activate(env, client, h, hostname="host-l", ip="192.0.2.21")
+    assert "schutz" not in coverage_of(client, "host-l")["checks"]
+    # ein ungültiger Zustand wird abgelehnt statt als "an" gelesen
+    bad = report(**WIN, protection={"antivirus": "yes", "firewall": "on"})
+    assert env.new_client().post("/api/agent/report", headers=bearer, json=bad).status_code == 422
+
+
+def test_windows_programs_are_stored_and_the_known_ones_watched(admin):
+    env, client, h = admin
+    sid, bearer = windows_host(env, client, h)
+    software = [{"name": "Mozilla Firefox (x64 en-US)", "version": "131.0.3", "publisher": "Mozilla"},
+                {"name": "Mozilla Maintenance Service", "version": "131.0.3", "publisher": "Mozilla"},
+                {"name": "7-Zip 24.08 (x64)", "version": "24.08", "publisher": "Igor Pavlov"},
+                {"name": "Tailscale", "version": "1.76.6", "publisher": "Tailscale Inc."},
+                {"name": "Example Tool with (odd) – name", "version": "", "publisher": ""}]
+    r = env.new_client().post("/api/agent/report", headers=bearer, json=report(
+        **{**WIN, "security_updates_count": 1,
+           "security_updates": [{"name": "2026-11 Security Update (KB5000001)", "to": ""}]},
+        protection=PROTECTED, software=software))
+    assert r.status_code == 200
+    inv = client.get(f"/api/systems/{sid}").json()["inventory"]
+    assert [a["name"] for a in inv["software"]] == [a["name"] for a in software] and inv["protection"]["firewall"] == "on"
+    sec = coverage_of(client, "host-w")["checks"]["sicherheitsupdates"]
+    assert sec["status"] == "fund" and sec["detail"].endswith("Settings → Windows Update") and "command" not in sec
+    from app import earlywarning
+    with env.app.state.ctx.session_factory() as s:
+        products = earlywarning.inventory_products(s)
+    watched = {p["keyword"]: p for p in products if p["kind"] == "software"}
+    assert set(watched) == {"firefox", "7-zip", "tailscale"}
+    assert watched["firefox"]["product"] == "Mozilla Firefox (x64 en-US)" and watched["firefox"]["version"] == "131.0.3"
+    assert earlywarning._watch_group(watched["firefox"]) == "Installed programs"
+    # nur im Titel, wie Host-Pakete; der Schritt nennt die Version des Herstellers, ohne Befehl
+    item = {"title": "Security Advisory: Firefox 132 fixes a sandbox escape", "summary": ""}
+    assert [p["keyword"] for p in earlywarning.prefilter(item, products)] == ["firefox"]
+    assert earlywarning.prefilter({"title": "Weekly roundup", "summary": "also Firefox and 7-Zip"}, products) == []
+    ai = {"products": [{"product": "Firefox", "fixed_versions": ["132.0"], "affected": []}], "fix_available": "yes"}
+    assert earlywarning.recommend(ai, [watched["firefox"]]) == [{
+        "system": "host-w", "product": "Mozilla Firefox (x64 en-US)", "command": "",
+        "text": "Update Mozilla Firefox (x64 en-US) to 132.0"}]
+    # ein Linux-Host legt weder Programme noch Schutz ab, auch wenn ein Report sie nennt
+    lid, linux = activate(env, client, h, hostname="host-l", ip="192.0.2.21")
+    env.new_client().post("/api/agent/report", headers=linux, json=report(software=software, protection=PROTECTED))
+    assert "software" not in client.get(f"/api/systems/{lid}").json()["inventory"]
+
+
 def test_agent_download_serves_only_known_files(env):
     c = env.new_client()
     r = c.get("/api/agent/download/amd64")
     assert r.status_code == 200 and r.content == b"fake-agent-amd64"
     assert c.get("/api/agent/download/arm64.rpm").content == b"fake-arm64.rpm"
+    r = c.get("/api/agent/download/windows-amd64.exe")
+    assert r.content == b"fake-windows-amd64" and "lablantern-agent.exe" in r.headers["content-disposition"]
+    assert c.get("/api/agent/download/windows-386.exe").status_code == 404
     for bad in ("386", "..%2F..%2Fetc%2Fpasswd", "amd64%00", "AMD64", "amd64.tar", "amd64.deb.sig"):
         assert c.get(f"/api/agent/download/{bad}").status_code == 404
 

@@ -103,16 +103,22 @@ def web_search_tool(model: str, max_uses: int) -> dict:
 
 def research(client: anthropic.Anthropic, model: str, system: str, text: str, tool: dict,
              max_searches: int = 15) -> tuple[dict, dict]:
-    """Recherche mit Websuche (serverseitig bei Anthropic) in zwei Schritten: erst nur suchen (ohne Bericht-Werkzeug
-    kann das Modell die Suche nicht überspringen), dann das Ergebnis über `tool` melden.
+    """Recherche mit Websuche (serverseitig bei Anthropic): erst suchen, dann das Ergebnis über `tool` melden.
+    Alle Anfragen senden dieselbe Werkzeugliste (Websuche und Bericht): Werkzeuge stehen am Anfang des Cache-Präfixes,
+    eine andere Liste im Berichtsschritt ließ ihn den ganzen Verlauf neu zum Schreibpreis bezahlen statt ihn zum
+    Cache-Preis zu lesen. Dass das Modell die Suche überspringt, verhindert deshalb der Code: ein Bericht ohne eine
+    einzige Suche wird einmal zurückgewiesen. Meldet das Modell nach der Suche von selbst, entfällt der zweite Schritt.
     `pause_turn` (Server-Werkzeug braucht mehr Runden) wird fortgesetzt, höchstens MAX_PAUSES-mal. `max_searches` gilt
-    für die ganze Recherche (`max_uses` zählt je Anfrage, Fortsetzungen fingen sonst von vorn an). Automatisches
-    Prompt-Caching: Fortsetzungen lesen den bisherigen Verlauf zum Cache-Preis."""
+    für die ganze Recherche: `max_uses` zählt je Anfrage, eine Fortsetzung bekommt deshalb nur den Rest (selten; das
+    kostet dann den Cache). Der Berichtsschritt behält die Liste der letzten Anfrage und soll nicht mehr suchen."""
     user = {"role": "user", "content": text}
-    found: list = []
+    report_tool = {**tool, "strict": True}
+    tools = [web_search_tool(model, max_searches), report_tool]
+    msgs: list = [user]
+    turn: list = []   # Blöcke der laufenden Assistenten-Runde (pause_turn setzt sie fort)
     searches, sources, usage = 0, [], []
 
-    def call(messages, tools):
+    def call(messages):
         nonlocal searches
         resp = _create(client, model=model, max_tokens=16000, system=system, tools=tools, messages=messages,
                        output_config={"effort": "medium"}, cache_control={"type": "ephemeral"})
@@ -122,20 +128,32 @@ def research(client: anthropic.Anthropic, model: str, system: str, text: str, to
         usage.append(resp.usage.model_dump() if resp.usage else None)
         return resp
 
-    resp = None
-    for _ in range(MAX_PAUSES + 1):
-        resp = call([user, {"role": "assistant", "content": found}] if found else [user],
-                    [web_search_tool(model, max(max_searches - searches, 1))])
-        found = [*found, *resp.content]
-        if resp.stop_reason != "pause_turn" or searches >= max_searches:
-            break
+    def reported(resp):
+        return next((b for b in resp.content if b.type == "tool_use" and b.name == tool["name"]), None)
+
+    resp, nudged = None, False
+    for _ in range(MAX_PAUSES + 2):
+        resp = call([*msgs, {"role": "assistant", "content": turn}] if turn else msgs)
+        turn = [*turn, *resp.content]
+        if resp.stop_reason == "pause_turn" and searches < max_searches:
+            tools = [web_search_tool(model, max(max_searches - searches, 1)), report_tool]
+            continue
+        block = reported(resp)
+        if block is not None and searches == 0 and not nudged:
+            nudged = True
+            msgs = [*msgs, {"role": "assistant", "content": turn},
+                    {"role": "user", "content": [{"type": "tool_result", "tool_use_id": getattr(block, "id", ""),
+                                                  "is_error": True, "content": "Search the web first, then report."}]}]
+            turn = []
+            continue
+        break
     if resp.stop_reason == "refusal":
         raise ClaudeError("Claude declined the request")
-    report = {"role": "user", "content": f"Now report what you found by calling {tool['name']} exactly once. "
-                                         f"Leave fields empty (or lists empty) where nothing was found."}
-    # Die Websuche muss im zweiten Schritt definiert bleiben (der Verlauf enthält ihre Blöcke), sucht aber kaum noch
-    resp = call([user, {"role": "assistant", "content": found}, report],
-                [web_search_tool(model, 1), {**tool, "strict": True}])
+    if reported(resp) is None:
+        report = {"role": "user", "content": f"Now report what you found by calling {tool['name']} exactly once, "
+                                             f"without searching again. "
+                                             f"Leave fields empty (or lists empty) where nothing was found."}
+        resp = call([*msgs, *([{"role": "assistant", "content": turn}] if turn else []), report])
     archive = {"id": resp.id, "model": resp.model, "stop_reason": resp.stop_reason, "searches": searches,
                "usage": usage, "sources": list(dict.fromkeys(sources))[:50]}
     return _tool_input(resp, tool["name"]), archive

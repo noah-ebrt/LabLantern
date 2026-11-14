@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { api } from '../api.js'
-import { CHECKS, checkClass, fmtNum as fmt, label } from '../labels.js'
+import { HOST_CHECKS, checkClass, fmtNum as fmt, label } from '../labels.js'
 import { useLive } from '../live.js'
 import { ago, fmtDateTime } from '../time.js'
 import Icon from './Icon.vue'
@@ -14,7 +14,7 @@ const STATUS_HELP = {
   fund: 'Checked, needs attention.',
   fehler: 'Could not be checked – see the reason.',
   offen: 'New data or a new host – checked in the next scan run.',
-  na: 'The device API does not provide this check.',
+  na: 'Not available for this kind of host – see the reason.',
   excluded: 'Excluded from coverage on purpose, see the reason above.',
 }
 
@@ -118,7 +118,7 @@ async function includeAgain() {
       <div class="table-wrap">
         <table class="data-table detail-table">
           <tbody>
-            <tr v-for="[k, l] in CHECKS" :key="k">
+            <tr v-for="[k, l] in HOST_CHECKS.filter(([key]) => row.checks[key])" :key="k">
               <th scope="row">{{ l }}</th>
               <td><span :class="checkClass(row.checks[k].status)">{{ label(row.checks[k].status) }}</span></td>
               <td>

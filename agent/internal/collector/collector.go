@@ -1,4 +1,4 @@
-// Package collector sammelt Inventar eines Linux-Hosts. Jeder Fehler beim Sammeln wird als Fehler gemeldet:
+// Package collector sammelt Inventar eines Hosts (Linux; Windows in schmalem Umfang, siehe windows.go). Jeder Fehler beim Sammeln wird als Fehler gemeldet:
 // "kein Paket" oder "kein Container" ist nie das Ergebnis eines stillen Scheiterns.
 package collector
 
@@ -40,6 +40,8 @@ type Env struct {
 	SocketGet func(socket, path string) (body []byte, status int, err error)
 	Glob      func(pattern string) ([]string, error)
 	Listeners func() []queries.Listener
+	// WindowsInventory liefert die Ausgabe des Windows-Skripts (windows.go); nil auf allen anderen Systemen.
+	WindowsInventory func() ([]byte, error)
 }
 
 type ContainerInfo struct {
@@ -72,6 +74,24 @@ type UpdateInfo struct {
 	To   string `json:"to"`
 }
 
+// Ein installiertes Programm (nur Windows, ab 0.21)
+type SoftwareInfo struct {
+	Name      string `json:"name"`
+	Version   string `json:"version"`
+	Publisher string `json:"publisher,omitempty"`
+}
+
+// Virenschutz und Firewall (nur Windows, ab 0.21): "on", "off" oder "unknown" (nicht lesbar, Grund in Detail)
+type Protection struct {
+	Antivirus         string   `json:"antivirus"`
+	AntivirusName     string   `json:"antivirus_name,omitempty"`
+	SignatureAgeDays  *int     `json:"signature_age_days,omitempty"` // nur Microsoft Defender
+	AntivirusOutdated bool     `json:"antivirus_outdated,omitempty"` // meldet ein Fremdprodukt selbst
+	Firewall          string   `json:"firewall"`
+	FirewallOff       []string `json:"firewall_off,omitempty"` // Profile mit ausgeschalteter Firewall
+	Detail            string   `json:"detail,omitempty"`
+}
+
 type HostReport struct {
 	AgentVersion         string            `json:"agent_version"`
 	OSName               string            `json:"os_name"`
@@ -87,6 +107,8 @@ type HostReport struct {
 	HostPorts            []int             `json:"host_ports,omitempty"` // TCP-Ports von Diensten des Hosts selbst
 	Packages             []PackageInfo     `json:"packages"`
 	Storage              *Storage          `json:"storage,omitempty"` // Laufwerke und Pools, nur auf echter Hardware (ab 0.18)
+	Software             []SoftwareInfo    `json:"software,omitempty"`
+	Protection           *Protection       `json:"protection,omitempty"`
 	CollectionErrors     map[string]string `json:"collection_errors"`
 }
 
@@ -124,7 +146,8 @@ func DefaultEnv() Env {
 			}
 			return unixGet(dockerSocket, path)
 		},
-		SocketGet: unixGet,
+		SocketGet:        unixGet,
+		WindowsInventory: windowsInventory,
 	}
 }
 
@@ -136,6 +159,10 @@ func Collect(env Env, agentVersion string) *HostReport {
 		Containers:           []ContainerInfo{},
 		Packages:             []PackageInfo{},
 		CollectionErrors:     map[string]string{},
+	}
+	if env.WindowsInventory != nil {
+		collectWindows(env, r)
+		return r
 	}
 	osInfo(env, r)
 	r.Kernel = kernel(env)

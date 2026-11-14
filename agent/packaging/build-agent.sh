@@ -26,5 +26,11 @@ for arch in amd64 arm64; do
             -t "$stage/dist/lablantern-agent-linux-$arch.$pkg" >/dev/null)
     done
 done
+# Windows: eine einzelne Datei ohne Paket; sie richtet ihren Dienst selbst ein (lablantern-agent.exe setup|install)
+for arch in amd64 arm64; do
+    GOOS=windows GOARCH=$arch go build -C "$src" -trimpath -o "$stage/dist/lablantern-agent-windows-$arch.exe" \
+        -ldflags "-s -w -X main.AgentVersion=$version -X lablantern/agent/internal/release.publicKeyB64=$pub" \
+        ./cmd/lablantern-agent
+done
 printf '{"version": "%s", "source": "%s"}\n' "$version" "$source" > "$stage/plan.json"
 echo "Built agent $version."

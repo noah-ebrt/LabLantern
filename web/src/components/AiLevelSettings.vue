@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { api } from '../api.js'
-import { ASSUMED_NVD_SHARE, DEFAULT_RESEARCH_HOURS, LEVELS, SWITCHES, estimate, fmtUsd } from '../aicost.js'
+import { ASSUMED_NVD_SHARE, DEFAULT_RESEARCH_HOURS, LEVELS, SWITCHES, VERIFY_DEFAULTS, VERIFY_REPEAT, estimate, fmtUsd } from '../aicost.js'
 import Icon from './Icon.vue'
 import SettingsCard from './SettingsCard.vue'
 import SettingsEntry from './SettingsEntry.vue'
@@ -10,8 +10,8 @@ import SettingsList from './SettingsList.vue'
 import SettingsSection from './SettingsSection.vue'
 import ToggleSwitch from './ToggleSwitch.vue'
 
-const KEYS = ['level', 'pass_hours', 'research_hours', 'max_searches', ...SWITCHES.map((x) => x.id)]
-const cfg = reactive({ level: 'full', pass_hours: 2, research_hours: 20, max_searches: 15, kev: true, release_feeds: true, health_alerts: true, miss_check: true })
+const KEYS = ['level', 'pass_hours', 'research_hours', 'max_searches', ...Object.keys(VERIFY_DEFAULTS), ...SWITCHES.map((x) => x.id)]
+const cfg = reactive({ level: 'full', pass_hours: 2, research_hours: 20, max_searches: 15, ...VERIFY_DEFAULTS, kev: true, release_feeds: true, health_alerts: true, miss_check: true })
 const releaseFeeds = ref([])
 const saved = ref(null)
 const basis = ref(null)
@@ -24,7 +24,7 @@ async function load() {
   loadError.value = null
   try {
     const data = await api.get('/api/early-warnings/ai-level')
-    for (const k of KEYS) cfg[k] = data[k]
+    for (const k of KEYS) if (data[k] !== undefined) cfg[k] = data[k]   // ein älterer Server kennt nicht jeden Wert
     releaseFeeds.value = data.release_feeds_found || []
     saved.value = { ...cfg }
     basis.value = data.basis
@@ -50,7 +50,9 @@ const perLevel = computed(() => {
 const current = computed(() => perLevel.value[cfg.level])
 const valid = computed(() => Number.isInteger(cfg.pass_hours) && cfg.pass_hours >= 1 && cfg.pass_hours <= 24
   && Number.isInteger(cfg.research_hours) && cfg.research_hours >= 6 && cfg.research_hours <= 336
-  && Number.isInteger(cfg.max_searches) && cfg.max_searches >= 5 && cfg.max_searches <= 30)
+  && Number.isInteger(cfg.max_searches) && cfg.max_searches >= 5 && cfg.max_searches <= 30
+  && [cfg.verify_searches, cfg.verify_per_pass].every((n) => Number.isInteger(n) && n >= 1 && n <= 10))
+const repeat = computed(() => VERIFY_REPEAT.find((r) => r.id === cfg.verify_repeat) || VERIFY_REPEAT[0])
 const dirty = computed(() => !!saved.value && KEYS.some((k) => cfg[k] !== saved.value[k]))
 const status = computed(() => ({ tone: 'neutral', text: LEVELS.find((l) => l.id === (saved.value?.level || 'full')).label }))
 const ICONS = { kev: 'shield', release_feeds: 'package', health_alerts: 'bell', miss_check: 'activity' }
@@ -144,6 +146,29 @@ async function save() {
         Each search costs $0.01 plus the pages the model reads; fewer searches cover fewer of your products per run.</span>
     </SettingsFold>
 
+    <SettingsFold id="set-ai-verify" title="Vendor check"
+                  :hint="cfg.level === 'minimal' ? `${repeat.label.toLowerCase()} · NVD only` : `${repeat.label.toLowerCase()} · ${cfg.verify_searches} searches · up to ${cfg.verify_per_pass} per pass`">
+      <div class="intervals">
+        <label>
+          <span class="field-label">Check a product version again</span>
+          <select v-model="cfg.verify_repeat" name="verify_repeat" data-test="verify-repeat">
+            <option v-for="r in VERIFY_REPEAT" :key="r.id" :value="r.id">{{ r.label }}</option>
+          </select>
+        </label>
+        <label>
+          <span class="field-label">Searches per vendor check</span>
+          <input v-model.number="cfg.verify_searches" type="number" min="1" max="10" step="1" data-test="verify-searches"
+                 :disabled="cfg.level === 'minimal'" />
+        </label>
+        <label>
+          <span class="field-label">Vendor checks per feed check (at most)</span>
+          <input v-model.number="cfg.verify_per_pass" type="number" min="1" max="10" step="1" data-test="verify-per-pass" />
+        </label>
+      </div>
+      <span class="subtext">{{ repeat.text }} The vendor check looks up the vendor’s advisory for every critical or high match before it alerts, and is usually the largest part of the cost.
+        The model for it is chosen under <a href="#set-ai-models">Models per task</a>.</span>
+    </SettingsFold>
+
     <SettingsFold v-if="current" id="set-ai-cost" title="Cost estimate" :hint="`${fmtUsd(current.total)} per month`">
       <div class="table-wrap">
       <table class="cost-table" data-test="breakdown">
@@ -167,7 +192,7 @@ async function save() {
     <div class="actions">
       <button type="button" class="primary" data-test="save-level" :disabled="busy || !valid || !dirty" @click="save"><Icon name="check" :size="15" />Save</button>
     </div>
-    <p v-if="!valid" class="message error" role="alert">Feed checks: 1–24 hours. Web research: 6–336 hours, 5–30 searches.</p>
+    <p v-if="!valid" class="message error" role="alert">Feed checks: 1–24 hours. Web research: 6–336 hours, 5–30 searches. Vendor check: 1–10 searches, 1–10 per feed check.</p>
     <p v-if="message" class="message" :class="message.kind" role="status">{{ message.text }}</p>
   </SettingsCard>
 </template>

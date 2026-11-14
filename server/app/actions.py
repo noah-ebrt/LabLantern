@@ -19,7 +19,8 @@ from .products import load_state
 from .recommend import _inventory, image_action
 
 CHECK_NAMES = {"paket_cve": "Package CVEs", "sicherheitsupdates": "Security updates", "reboot": "Reboot",
-               "container": "Containers", "images": "Container images", "versionen": "Versions"}
+               "container": "Containers", "images": "Container images", "versionen": "Versions",
+               "schutz": "Protection"}
 FULL_UPGRADE = {pm: cmds[1] for pm, cmds in UPGRADE.items()}
 KERNEL_PKG = re.compile(r"^linux-(?:image|modules|headers|tools|hwe-[\d.]+-tools|hwe-[\d.]+-headers)[-a-z]*-(\d+\.\d+\.\d+-\d+)")
 MAX_GROUPS = 5
@@ -191,11 +192,11 @@ def next_steps(s, counts: dict, cov: dict, last: ScanRun | None, now: datetime) 
         steps.append(_step("gelb", f"Security updates pending on {r['system_name']}", check.get("detail") or "",
                            command=check.get("command") or FULL_UPGRADE.get(pm, ""),
                            link={"path": "/systeme", "query": {"open": str(r["system_id"])}}, cta="Open host"))
-    for key, cta in (("container", "Open systems"), ("versionen", "Show versions")):
+    for key, cta in (("container", "Open systems"), ("schutz", "Open systems"), ("versionen", "Show versions")):
         items = [f"{r['system_name']}: {r['checks'][key].get('detail')}" for r in cov["systems"]
                  if (r["checks"].get(key) or {}).get("status") == "fund"]
         if items:
-            link = {"path": "/systeme"} if key == "container" else {"path": "/funde", "query": {"source": "products"}}
+            link = {"path": "/funde", "query": {"source": "products"}} if key == "versionen" else {"path": "/systeme"}
             steps.append(_step("gelb", CHECK_NAMES[key], "; ".join(items)[:400], link=link, cta=cta))
     order = {"rot": 0, "gelb": 1}
     return sorted(steps, key=lambda st: order[st["level"]])

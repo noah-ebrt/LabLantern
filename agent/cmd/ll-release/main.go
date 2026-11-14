@@ -113,7 +113,7 @@ func publish(stage, releases, keyFile string) {
 	must(os.RemoveAll(tmp))
 	must(os.MkdirAll(tmp, 0o755))
 	dist := filepath.Join(stage, "dist")
-	names, _ := filepath.Glob(filepath.Join(dist, "lablantern-agent-linux-*"))
+	names, _ := filepath.Glob(filepath.Join(dist, "lablantern-agent-*"))
 	for _, n := range names {
 		b, err := os.ReadFile(n)
 		must(err)

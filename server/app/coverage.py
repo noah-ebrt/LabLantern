@@ -15,6 +15,8 @@ FINISHED = ("success", "partial", "failed")
 
 
 CHECK_KEYS = ("paket_cve", "sicherheitsupdates", "reboot", "container", "images", "versionen")
+PROTECTION = "schutz"   # Virenschutz und Firewall: eine Prüfung nur für Windows-Hosts, keine Spalte der Matrix
+SIGNATURE_MAX_DAYS = 7
 SCANNER_SOURCES = ("grype", "osv", "both")
 
 
@@ -27,6 +29,8 @@ def security_updates(sys: System) -> tuple[str, str]:
         return "0 pending", ""
     shown = ", ".join(f"{p['name']} → {p['to']}" if p.get("to") else p["name"] for p in pkgs[:8])
     detail = f"{n} pending" + (f": {shown}" if shown else "") + (f" and {len(pkgs) - 8} more" if len(pkgs) > 8 else "")
+    if inv.get("os_id", "").startswith("windows"):
+        return f"{detail}. Install them on the host: Settings → Windows Update", ""
     cmds = UPGRADE.get(PACKAGE_MANAGERS.get(inv.get("os_id", ""), ""))
     if not cmds:
         return detail, ""
@@ -73,6 +77,34 @@ def _image_check(session, sys, last, stale, stale_detail, image_has_sbom):
         Finding.source.in_(SCANNER_SOURCES),
         Finding.severity.in_(("kritisch", "hoch"))))
     return ("fund" if bad else "ok", f"{len(images)} images, {bad} critical/high")
+
+
+def protection_check(sys: System) -> tuple[str, str]:
+    """Virenschutz und Firewall eines Windows-Hosts. Ein Fund geht vor; nicht lesbar ist ein Fehler, nie ok."""
+    p = json.loads(sys.inventory_json or "{}").get("protection")
+    if not p:
+        return ("na", "this agent version does not report it: update the agent")
+    name, age = p.get("antivirus_name") or "antivirus", p.get("signature_age_days")
+    found, unknown, fine = [], [], []
+    if p.get("antivirus") == "off":
+        found.append(f"{name} is off (no real-time protection)")
+    elif p.get("antivirus") != "on":
+        unknown.append("antivirus")
+    elif p.get("antivirus_outdated") or (age is not None and age > SIGNATURE_MAX_DAYS):
+        found.append(f"{name} signatures are " + (f"{age} days old" if age is not None else "out of date"))
+    else:
+        fine.append(f"{name} on" + (f", signatures {age} {'day' if age == 1 else 'days'} old" if age is not None else ""))
+    if p.get("firewall") == "off":
+        found.append(f"firewall off for the profile{'s' if len(p.get('firewall_off') or []) > 1 else ''} "
+                     f"{', '.join(p.get('firewall_off') or []) or '?'}")
+    elif p.get("firewall") != "on":
+        unknown.append("firewall")
+    else:
+        fine.append("firewall on")
+    if unknown:
+        unknown = [f"{' and '.join(unknown)} could not be read" + (f" ({p['detail']})" if p.get("detail") else "")]
+    status = "fund" if found else "fehler" if unknown else "ok"
+    return (status, "; ".join(found + unknown + fine)[:500])
 
 
 def _collector_checks(session, sys, last, stale, stale_detail, image_has_sbom, cve, container) -> dict:
@@ -193,6 +225,9 @@ def calculate_coverage_matrix(session: Session, now: datetime | None = None, sbo
             cve = ("fehler", stale_detail)
         elif "packages" in errors:
             cve = ("fehler", errors["packages"])
+        elif sys.host_type == "windows":
+            cve = ("na", "no vulnerability database covers Windows software; checked instead: pending security "
+                         "updates and end of support")
         elif sys.sbom_updated_at is None and sbom_exists(sys.id):
             cve = ("fehler", "SBOM comes from the old agent: set the system up again")
         elif last is not None and last.status != "ok" and sys.sbom_updated_at is not None \
@@ -214,10 +249,14 @@ def calculate_coverage_matrix(session: Session, now: datetime | None = None, sbo
             cve = ("fund" if bad else "ok", f"{len(bad)} critical/high")
 
         images = _image_check(session, sys, last, stale, stale_detail, image_has_sbom)
+        if sys.host_type == "windows" and not stale:   # sammelt keine Container: nicht geprüft ist nicht "ok"
+            container = images = ("na", "the Windows agent does not look at containers")
         versions = ("fehler", stale_detail) if stale else versions_check(vstate, sys, vcounts.get(sys.id, {}),
                                                                          now.timestamp())
         checks = {"paket_cve": cve, "sicherheitsupdates": sec, "reboot": reboot, "container": container,
                   "images": images, "versionen": versions}
+        if sys.host_type == "windows":
+            checks[PROTECTION] = ("fehler", stale_detail) if stale else protection_check(sys)
         if collector:
             checks.update(_collector_checks(session, sys, last, stale, stale_detail, image_has_sbom, cve, container))
         for status, _ in checks.values():

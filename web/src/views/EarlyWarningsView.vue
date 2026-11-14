@@ -379,6 +379,7 @@ useLive(['findings', 'settings'], load, 3000)
             <time :datetime="w.published" :title="w.published ? fmtDateTime(w.published) : ''">{{ w.published ? fmtDay(w.published) : 'no date' }}</time>
             <span :title="w.origin === 'research' ? 'Found by the web research' : w.feed">{{ w.source }}<template v-if="w.origin === 'research'"> · web research</template></span>
             <span v-if="w.verified" title="Versions and mitigations checked against the vendor's advisory by a web search">checked with vendor</span>
+            <span v-else-if="w.verify_skipped" title="This product version was already checked with the vendor for an earlier warning, so this one got no check of its own (Settings, AI, Vendor check)">not checked again</span>
             <span v-if="w.fix_claimed_at" data-test="fix-claimed" :title="`Marked as fixed by hand ${fmtDateTime(w.fix_claimed_at)}. The host's next report confirms it or brings the advisory back as affected.`">marked fixed {{ timeAgo(w.fix_claimed_at) }}, not confirmed yet</span>
             <span v-else-if="w.fix_refuted_at && w.status === 'betroffen'" class="ew-refuted" data-test="fix-refuted" :title="`Marked as fixed by hand, but a later report still showed an affected version (${fmtDateTime(w.fix_refuted_at)})`">marked fixed, but the host still reports an affected version</span>
             <span v-if="w.notified_at" :title="fmtDateTime(w.notified_at)">notified {{ timeAgo(w.notified_at) }}</span>

@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import AiLevelSettings from '../src/components/AiLevelSettings.vue'
-import { estimate, fmtUsd, researchRunUsd, researchRunsPerMonth } from '../src/aicost.js'
+import { estimate, fmtUsd, priceOf, researchRunUsd, researchRunsPerMonth, taskMonthly } from '../src/aicost.js'
 import { setCsrf } from '../src/api.js'
 
 const basis = () => ({
@@ -9,6 +9,33 @@ const basis = () => ({
   classify: { model: 'claude-haiku-5-5', usd: 0.0007, per_day: 5, measured: 30 },
   research: { model: 'claude-sonnet-5-5', usd: 0.35, measured: 1 },
   verify: { model: 'claude-sonnet-5-5', usd: 0.15, per_day: 1, nvd_share: null, nvd_measured: 0, measured: 0 },
+})
+
+describe('cost per model', () => {
+  const measured = () => ({
+    ...basis(), prices: { 'claude-haiku-5-5': [0.1, 0.5], 'claude-sonnet-5-5': [2, 10], 'claude-sonnet-5': [3, 15] },
+    verify: { model: 'claude-sonnet-5-5', price: [2, 10], usd: 0.14, tokens_in: 40000, tokens_out: 2000, searches: 4, per_day: 2, nvd_share: null },
+  })
+  const cfg = { level: 'full', pass_hours: 8, research_hours: 72, verify_searches: 4, verify_per_pass: 3 }
+
+  it('finds the list price by the longest model prefix', () => {
+    expect(priceOf(measured().prices, 'claude-sonnet-5-5-20260928')).toEqual([2, 10])
+    expect(priceOf(measured().prices, 'gpt-x')).toBeNull()
+  })
+
+  it('prices a task for another model from the measured token use', () => {
+    // 60 Prüfungen im Monat: Sonnet 0,08 + 0,02 + 0,04 Suche; Haiku 0,004 + 0,001 + 0,04
+    expect(taskMonthly(measured(), cfg, { enabled: true, verify: true }, 'verify', 'claude-sonnet-5-5')).toBeCloseTo(60 * 0.14)
+    expect(taskMonthly(measured(), cfg, { enabled: true, verify: true }, 'verify', 'claude-haiku-5-5')).toBeCloseTo(60 * 0.045)
+    expect(taskMonthly(measured(), cfg, { enabled: true, verify: true }, 'verify', 'qwen3.8:27b')).toBeNull()
+  })
+
+  it('follows the searches per vendor check and the checks per pass', () => {
+    const half = estimate(measured(), { ...cfg, verify_searches: 2 }).rows[2]
+    expect(half.usd).toBeCloseTo(0.05 + 0.02)   // halb so viele Suchen lesen halb so viele Seiten
+    const capped = estimate({ ...measured(), verify: { ...measured().verify, per_day: 9 } }, { ...cfg, verify_per_pass: 1 })
+    expect(capped.rows[2].count).toBeCloseTo(90)   // 3 Durchgänge am Tag, je einer
+  })
 })
 
 describe('estimate', () => {
@@ -85,7 +112,8 @@ describe('AiLevelSettings', () => {
     await w.get('[data-test="save-level"]').trigger('click')
     await flushPromises()
     expect(calls.at(-1)).toEqual({ url: '/api/early-warnings/ai-level', method: 'PUT', body: { level: 'balanced', pass_hours: 4, research_hours: 72,
-      max_searches: 15, kev: true, release_feeds: true, health_alerts: true, miss_check: true } })
+      max_searches: 15, verify_repeat: 'never', verify_searches: 4, verify_per_pass: 3,
+      kev: true, release_feeds: true, health_alerts: true, miss_check: true } })
     expect(w.text()).toContain('Saved.')
   })
 
@@ -99,6 +127,20 @@ describe('AiLevelSettings', () => {
     await flushPromises()
     expect(calls.at(-1).body).toMatchObject({ miss_check: false, max_searches: 8, kev: true })
     await w.get('[data-test="max-searches"]').setValue(40)
+    expect(w.get('[data-test="save-level"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('saves how the vendor check repeats, searches and how many run per feed check', async () => {
+    const w = mount(AiLevelSettings)
+    await flushPromises()
+    expect(w.get('[data-test="verify-repeat"]').element.value).toBe('never')   // ein Server ohne den Wert: Vorgabe
+    await w.get('[data-test="verify-repeat"]').setValue('new_cve')
+    await w.get('[data-test="verify-searches"]').setValue(2)
+    await w.get('[data-test="verify-per-pass"]').setValue(5)
+    await w.get('[data-test="save-level"]').trigger('click')
+    await flushPromises()
+    expect(calls.at(-1).body).toMatchObject({ verify_repeat: 'new_cve', verify_searches: 2, verify_per_pass: 5 })
+    await w.get('[data-test="verify-searches"]').setValue(11)
     expect(w.get('[data-test="save-level"]').attributes('disabled')).toBeDefined()
   })
 

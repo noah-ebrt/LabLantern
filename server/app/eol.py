@@ -18,7 +18,9 @@ MAX_CACHE_DAYS = 7      # älter: kein Vergleich mehr, sondern ein sichtbarer Fe
 MAX_BYTES = 30_000_000
 OS_PRODUCTS = {"ubuntu": "ubuntu", "debian": "debian", "raspbian": "debian", "alpine": "alpine",
                "fedora": "fedora", "rocky": "rocky-linux", "almalinux": "almalinux", "centos": "centos",
-               "rhel": "rhel", "opensuse-leap": "opensuse", "linuxmint": "linuxmint"}
+               "rhel": "rhel", "opensuse-leap": "opensuse", "linuxmint": "linuxmint",
+               # der Windows-Agent meldet os_version_id schon in der Schreibweise von endoflife.date ("11-24h2-w")
+               "windows": "windows", "windows-server": "windows-server"}
 # Images ohne Docker-purl bei endoflife.date
 EXTRA_DOCKER = {"gitlab/gitlab-ce": "gitlab", "gitlab/gitlab-ee": "gitlab"}
 VERSION = re.compile(r"^v?(\d+(?:\.\d+)*)")
@@ -43,6 +45,9 @@ class EolDb:
     def release(self, product: str, version: str) -> dict | None:
         """Release-Linie zu einer Version: 10.11.18 -> „10.11“; nur „8“ (Tag 8-alpine) -> neueste 8.x-Linie."""
         p = self.products.get(product)
+        named = [r for r in (p or {}).get("releases") or [] if r["name"] == version]
+        if named:   # Linien ohne Versionsnummer ("11-24h2-w", "2012-r2")
+            return named[0]
         m = VERSION.match(version or "")
         if not p or not m:
             return None

@@ -101,6 +101,18 @@ def test_enqueue_creates_queued_run_and_pending_job_for_active_systems_only(ctx)
     assert json.loads(job.payload)["systems"] == [{"id": a, "name": "host-c", "sbom": True, "images": []}]
 
 
+def test_windows_hosts_are_not_part_of_the_scan_job(ctx):
+    a = make_system(ctx, "host-c")
+    w = make_system(ctx, "host-w", sbom=False)
+    with ctx.session_factory() as s:
+        s.get(System, w).host_type = "windows"
+        s.commit()
+    run = enqueue_scan_run(ctx, "scheduled")
+    with ctx.session_factory() as s:
+        job = s.scalar(select(ScanJob).where(ScanJob.run_id == run.id))
+    assert [x["id"] for x in json.loads(job.payload)["systems"]] == [a]
+
+
 def test_enqueue_flags_systems_without_sbom(ctx):
     a = make_system(ctx, "host-c", sbom=False)
     enqueue_scan_run(ctx, "manual")

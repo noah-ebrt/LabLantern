@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -20,7 +19,6 @@ import (
 	"lablantern/agent/internal/collector"
 	"lablantern/agent/internal/config"
 	"lablantern/agent/internal/discover"
-	"lablantern/agent/internal/images"
 	"lablantern/agent/internal/jobs"
 	"lablantern/agent/internal/pairing"
 	"lablantern/agent/internal/queries"
@@ -32,10 +30,13 @@ var AgentVersion = "dev"
 // Wartezeit auf den Sammler; austauschbar für Tests.
 var waitTimeout, waitInterval = 20 * time.Minute, 2 * time.Second
 
-// imageSBOM ist austauschbar, damit Tests ohne Docker auskommen.
-var imageSBOM = images.SyftSBOM
+// restartRequested: Der Daemon soll sich beenden, damit der Dienstmanager die neue Version startet (Windows).
+var restartRequested bool
 
 func main() {
+	if code, ok := serviceMain(); ok {
+		os.Exit(code)
+	}
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, collector.DefaultEnv()))
 }
 
@@ -64,26 +65,16 @@ func run(args []string, stdout, stderr io.Writer, env collector.Env) int {
 		printHelp(stdout)
 		return 0
 	}
+	if code, ok := platformCLI(args, stdout, stderr); ok {
+		return code
+	}
 	fmt.Fprintf(stderr, "Unknown command %q\n", args[0])
 	printHelp(stderr)
 	return 2
 }
 
 func printHelp(w io.Writer) {
-	fmt.Fprintf(w, `lablantern-agent %s – push agent for vulnerabilities and inventory
-
-Usage:
-  sudo lablantern-agent setup [--master <URL> [--ca-fingerprint <FP>]] [--passkeys-sha256 <HASH>]
-                                   (find the master on the LAN and pair with a code)
-  lablantern-agent enroll --server <URL> --token <TOKEN> --ca-fingerprint <FP> [--passkeys-sha256 <HASH>] [--config <PATH>]
-  lablantern-agent scan [--config <PATH>]      (as root: collect and report now)
-  lablantern-agent daemon           (run by lablantern-agentd.service as user lablantern)
-  lablantern-agent collect-job      (run by lablantern-collect.service as root without network)
-  lablantern-agent action-job       (run by lablantern-action.service: passkey-confirmed reboot/update)
-  lablantern-agent version
-
-The LabLantern web UI shows the complete enroll command including the fingerprint under Systems.
-`, AgentVersion)
+	fmt.Fprintf(w, usage, AgentVersion)
 }
 
 // Suche und Abfrageintervall; austauschbar für Tests.
@@ -107,14 +98,21 @@ func runSetup(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "Error: --passkeys-sha256 must be 64 hex characters.")
 		return 2
 	}
+	if err := requireAdmin(); err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
 	if _, err := os.Stat(*configPath); err == nil && !*force {
+		if code, ok := alreadySetUp(*configPath, stdout, stderr); ok {
+			return code
+		}
 		fmt.Fprintf(stderr, "This host is already set up (%s). Use --force to pair it again.\n", *configPath)
 		return 1
 	}
 	if *hostName == "" {
 		h, err := os.Hostname()
 		if err != nil {
-			h = "linux-host"
+			h = runtime.GOOS + "-host"
 		}
 		*hostName = h
 	}
@@ -189,8 +187,13 @@ func runSetup(args []string, stdout, stderr io.Writer) int {
 					return 1
 				}
 				fmt.Fprintf(stdout, "✓ Paired as '%s' (system ID %d); master certificate pinned in %s.\n", *hostName, st.SystemID, *configPath)
-				if restartDaemon() {
-					fmt.Fprintln(stdout, "✓ lablantern-agentd restarted; the first report follows within a minute.")
+				msg, err := startDaemon()
+				if err != nil {
+					fmt.Fprintf(stderr, "Error: %v\n", err)
+					return 1
+				}
+				if msg != "" {
+					fmt.Fprintf(stdout, "✓ %s; the first report follows within a minute.\n", msg)
 				}
 				return 0
 			case "pending", "committed":
@@ -214,17 +217,6 @@ func validPin(s string) bool {
 	return err == nil && len(s) == 64
 }
 
-// restartDaemon startet den Daemon nach enroll neu, wenn das Paket installiert ist (nur als root).
-var restartDaemon = func() bool {
-	if os.Geteuid() != 0 {
-		return false
-	}
-	if _, err := os.Stat("/usr/lib/systemd/system/lablantern-agentd.service"); err != nil {
-		return false
-	}
-	return exec.Command("systemctl", "restart", "lablantern-agentd.service").Run() == nil
-}
-
 func runEnroll(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("enroll", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -241,6 +233,10 @@ func runEnroll(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "Error: --passkeys-sha256 must be 64 hex characters.")
 		return 2
 	}
+	if err := requireAdmin(); err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
 	if *token == "" && fs.NArg() > 0 {
 		*token = fs.Arg(0)
 	}
@@ -256,7 +252,7 @@ func runEnroll(args []string, stdout, stderr io.Writer) int {
 	if *hostName == "" {
 		h, err := os.Hostname()
 		if err != nil {
-			h = "linux-host"
+			h = runtime.GOOS + "-host"
 		}
 		*hostName = h
 	}
@@ -293,8 +289,13 @@ func runEnroll(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "✓ Host '%s' enrolled (system ID %d), server CA verified and pinned.\n", *hostName, res.SystemID)
 	fmt.Fprintf(stdout, "✓ Configuration: %s\n", target)
-	if restartDaemon() {
-		fmt.Fprintln(stdout, "✓ lablantern-agentd restarted; it reports within a minute.")
+	msg, err := startDaemon()
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
+	if msg != "" {
+		fmt.Fprintf(stdout, "✓ %s; it reports within a minute.\n", msg)
 	}
 	fmt.Fprintln(stdout, "Next step: approve the host in the LabLantern web UI under Systems.")
 	return 0
@@ -460,7 +461,7 @@ func deliver(cl *client.Client, src source, stdout, stderr io.Writer) int {
 func runDaemon(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("daemon", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	configPath := fs.String("config", "/etc/lablantern/agent.json", "path of the configuration file")
+	configPath := fs.String("config", config.SystemConfigPath(), "path of the configuration file")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -474,7 +475,12 @@ func runDaemon(args []string, stdout, stderr io.Writer) int {
 		if watch.changed(time.Now()) {
 			force = true // Pakete installiert, aktualisiert oder entfernt: gleich melden statt erst zur vollen Stunde
 		}
-		if daemonStep(*configPath, jobs.Default(), force, longPollWait, stdout, stderr) {
+		ok := daemonStep(*configPath, jobs.Default(), force, longPollWait, stdout, stderr)
+		if restartRequested {
+			fmt.Fprintln(stdout, "New version installed; stopping so that the service starts it.")
+			return 3
+		}
+		if ok {
 			force = false
 		} else if authRejected {
 			// gelöscht oder widerrufen: selten nachfragen, bis jemand neu paart oder das Paket entfernt
@@ -539,7 +545,7 @@ func daemonStep(configPath string, p jobs.Paths, force bool, wait int, stdout, s
 		return false
 	}
 	defer func() { authRejected = cl.Rejected() }()
-	if force && deliver(cl, viaCollector(p), stdout, stderr) != 0 {
+	if force && deliver(cl, daemonSource(p), stdout, stderr) != 0 {
 		return false
 	}
 	next, err := cl.NextCommands(wait)
@@ -550,7 +556,7 @@ func daemonStep(configPath string, p jobs.Paths, force bool, wait int, stdout, s
 	syncPasskeys(next.Passkeys, stdout, stderr)
 	reported := false
 	if next.Report {
-		if deliver(cl, viaCollector(p), stdout, stderr) != 0 {
+		if deliver(cl, daemonSource(p), stdout, stderr) != 0 {
 			return false
 		}
 		reported = true
@@ -567,13 +573,16 @@ func daemonStep(configPath string, p jobs.Paths, force bool, wait int, stdout, s
 
 // runCommand kennt nur die feste Liste; alles andere wird abgelehnt, egal was der Master schickt.
 func runCommand(cl *client.Client, p jobs.Paths, c client.Command, reported *bool) (status, output string) {
+	if status, output, ok := platformCommand(cl, c); ok {
+		return status, output
+	}
 	switch c.Type {
 	case "report_now":
 		if *reported {
 			return "done", "Report already sent a moment ago."
 		}
 		var out bytes.Buffer
-		code := deliver(cl, viaCollector(p), &out, &out)
+		code := deliver(cl, daemonSource(p), &out, &out)
 		*reported = code == 0
 		if code != 0 {
 			return "failed", out.String()
@@ -608,7 +617,7 @@ var actionPaths, lastTrustTry = actions.DefaultPaths(), 0
 // syncPasskeys reicht eine neuere Passkey-Liste an root weiter; root übernimmt sie nur signiert
 // (oder als allererste Liste).
 func syncPasskeys(offer *client.TrustOffer, stdout, stderr io.Writer) {
-	if offer == nil || offer.Rev <= actionPaths.TrustRev() || offer.Rev == lastTrustTry {
+	if !signedActions || offer == nil || offer.Rev <= actionPaths.TrustRev() || offer.Rev == lastTrustTry {
 		return
 	}
 	lastTrustTry = offer.Rev

@@ -11,7 +11,16 @@ export const LEVELS = [
 ]
 
 export const DEFAULT_RESEARCH_HOURS = { full: 20, balanced: 72, minimal: 72 }
-export const MAX_VERIFY_PER_PASS = 3
+export const MAX_VERIFY_PER_PASS = 3   // Vorgabe; einstellbar als verify_per_pass
+export const VERIFY_DEFAULTS = { verify_repeat: 'never', verify_searches: 4, verify_per_pass: 3 }
+export const VERIFY_REPEAT = [
+  { id: 'never', label: 'Once per product version (cheapest)',
+    text: 'A warning about a product version that was already checked is not checked again. It is checked once the installed version changes.' },
+  { id: 'new_cve', label: 'Again only for a new CVE',
+    text: 'Checked again only when the warning names a CVE that earlier checks of this product version did not cover.' },
+  { id: 'always', label: 'Every warning',
+    text: 'Every critical or high match gets its own check, also when several sources report the same issue. Highest cost.' },
+]
 const DAYS = 30
 
 // Die Recherche läuft im ersten Durchgang nach Ablauf ihres Abstands
@@ -48,9 +57,24 @@ export function researchRunUsd(r, maxSearches, searchUsd) {
   return ((r.tokens_in * r.price[0] + r.tokens_out * r.price[1]) / 1e6) * share + Math.min(r.searches, maxSearches) * searchUsd
 }
 
+// Listenpreis [Eingabe, Ausgabe] je Million Token zum Modell: längstes passendes Präfix der Preistabelle des Servers
+export function priceOf(prices, model) {
+  const hit = Object.keys(prices || {}).filter((k) => (model || '').startsWith(k)).sort((a, b) => b.length - a.length)[0]
+  return hit ? prices[hit] : null
+}
+
+// Monatskosten einer Aufgabe, wenn sie mit `model` liefe (gemessener Verbrauch, Preis des Modells); null ohne Preis
+export function taskMonthly(basis, cfg, research, task, model) {
+  const b = basis?.[task]
+  const p = priceOf(basis?.prices, model)
+  if (!b || !p) return null
+  const usd = (b.tokens_in * p[0] + b.tokens_out * p[1]) / 1e6 + (b.searches || 0) * (basis.search_usd ?? 0.01)
+  return estimate({ ...basis, [task]: { ...b, model, price: p, usd } }, cfg, research).rows.find((r) => r.task === task).total
+}
+
 export function estimate(basis, cfg, research = { enabled: true, verify: true }) {
   const runs = cfg.level === 'minimal' || !research.enabled ? 0 : researchRunsPerMonth(cfg.pass_hours, cfg.research_hours)
-  const checksPerDay = Math.min(basis.verify.per_day, (MAX_VERIFY_PER_PASS * 24) / cfg.pass_hours)
+  const checksPerDay = Math.min(basis.verify.per_day, ((cfg.verify_per_pass ?? MAX_VERIFY_PER_PASS) * 24) / cfg.pass_hours)
   const checks = research.verify ? checksPerDay * DAYS * aiCheckShare(cfg.level, basis.verify.nvd_share) : 0
   const rows = [
     { task: 'classify', label: 'Read feed advisories', count: basis.classify.per_day * DAYS, unit: 'calls' },
@@ -58,7 +82,9 @@ export function estimate(basis, cfg, research = { enabled: true, verify: true })
     { task: 'verify', label: 'Vendor check with AI', count: checks, unit: 'checks' },
   ].map((r) => {
     const b = basis[r.task]
-    const usd = r.task === 'research' ? researchRunUsd(b, cfg.max_searches ?? 15, basis.search_usd ?? 0.01) : b.usd
+    const usd = r.task === 'research' ? researchRunUsd(b, cfg.max_searches ?? 15, basis.search_usd ?? 0.01)
+      : r.task === 'verify' && cfg.verify_searches != null ? researchRunUsd(b, cfg.verify_searches, basis.search_usd ?? 0.01)
+        : b.usd
     return { ...r, model: b.model, usd, total: r.count === 0 ? 0 : usd == null ? null : r.count * usd }
   })
   const total = rows.some((r) => r.total == null) ? null : rows.reduce((sum, r) => sum + r.total, 0)

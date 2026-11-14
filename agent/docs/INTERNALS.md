@@ -252,7 +252,30 @@ and **Report now** on a host to see data from the new version.
 | File system | `ProtectSystem=strict`, writes `/run/lablantern` | `strict`, writes `/run/lablantern*` | writable (dpkg needs it) |
 | `NoNewPrivileges`, `PrivateTmp`, `Protect*`, `SystemCallFilter` | yes | yes | most |
 
-## 7. Tests
+## 7. Windows: one service
+
+The Windows build (`GOOS=windows`, files `*_windows.go`) is the same program with a much smaller job. There is no
+collector and no action handler: a single service, `LabLanternAgent`, runs `lablantern-agent.exe daemon` as
+LocalSystem and collects in process. Network and rights are therefore not separated as on Linux. LocalSystem is
+needed because Windows Update denies the search for pending updates to an unprivileged service account (0.20.0 ran
+as LocalService and got `E_ACCESSDENIED`); `install` switches such a service over.
+
+| Topic | Windows |
+|---|---|
+| Inventory | `collector/windows.go`: one fixed PowerShell script (`-EncodedCommand`), read-only: version from the registry, pending updates from the Windows Update search, reboot flags, antivirus (`Get-MpComputerStatus`, Windows Security Center) and firewall profiles, programs from the machine-wide Uninstall keys. Output is Base64 over UTF-8 JSON. The agent sends facts (`protection`, `software`); the master judges them and picks the watched programs (`WINDOWS_SOFTWARE` in `earlywarning.py`). No packages, containers or storage. |
+| What counts as a security update | classification "Security Updates" or "Critical Updates" (by ID, names are localized) or an MSRC severity |
+| Install | `setup`/`enroll` call `install()` in `main_windows.go`: copy the exe to `%ProgramFiles%\LabLantern`, create the service, restart rule, start. `install` and `uninstall` are also sub-commands. |
+| Configuration | `%ProgramData%\LabLantern`, recreated and locked down (`config.Restrict`: SYSTEM and administrators only) by `config.prepareDir` before the token is written (any user may create directories under `%ProgramData%`) |
+| Commands | `report_now` as on Linux; `update_agent` is handled in process (`selfUpdate`); `query`, `reboot`, `uninstall` are rejected |
+| Update | download manifest, signature and exe; `release.Verify`, `release.Newer`, `CheckFile`; rename the running exe to `.old`, move the new one in place, exit without reporting "stopped" so that the service manager restarts it |
+| Passkeys | not checked on the host, which is why reboot, queries and uninstall stay rejected although the service would have the rights. The passkey list is not stored. |
+| Log | `agent.log` next to the exe |
+
+The Windows parts are cross-compiled and vetted in the build container (`GOOS=windows go vet ./...`) but cannot run
+there. The parsing in `collector/windows.go` is platform-neutral and covered by `windows_test.go`; the service,
+installer and self-update need a Windows machine to try.
+
+## 8. Tests
 
 `CI=true go test ./... < /dev/null` in `agent/`. Notable tests: `actions_test.go` (rejections: wrong system,
 expired, replay, unsigned list update, downgrade), `passkey_test.go` (uses a software authenticator in

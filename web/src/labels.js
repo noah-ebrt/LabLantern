@@ -16,7 +16,9 @@ export const CHECKS = [
   ['images', 'Container images'],
   ['versionen', 'Versions'],
 ]
-export const CHECK_NAMES = Object.fromEntries(CHECKS)
+// Host-Ansicht: zusätzlich Prüfungen, die nur manche Hosts haben (Windows: Virenschutz und Firewall)
+export const HOST_CHECKS = [...CHECKS.slice(0, 3), ['schutz', 'Protection'], ...CHECKS.slice(3)]
+export const CHECK_NAMES = Object.fromEntries(HOST_CHECKS)
 export const checkClass = (s) => ({ ok: 'badge ok', fund: 'badge warning', fehler: 'badge danger' })[s] ?? 'badge neutral'
 
 // Gesamtzustand aus overview.ampel

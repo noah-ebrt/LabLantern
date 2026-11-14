@@ -20,6 +20,20 @@ beforeEach(() => {
 })
 afterEach(() => { vi.unstubAllGlobals(); setCsrf(null) })
 
+describe('HostCoverage checks', () => {
+  it('shows Protection only for hosts that have the check', async () => {
+    let w = mount(HostCoverage, { props: { systemId: 7 } })
+    await flushPromises()
+    expect(w.findAll('tbody th').map((th) => th.text())).not.toContain('Protection')
+    row = { ...row, checks: { ...checks('ok', 'no'), schutz: { status: 'fund', detail: 'firewall off for the profile Public' } } }
+    w = mount(HostCoverage, { props: { systemId: 7 } })
+    await flushPromises()
+    expect(w.findAll('tbody th').map((th) => th.text())).toEqual(
+      ['Package CVEs', 'Security updates', 'Reboot', 'Protection', 'Containers', 'Container images', 'Versions'])
+    expect(w.text()).toContain('firewall off for the profile Public')
+  })
+})
+
 describe('HostCoverage exclusions', () => {
   it('excludes a host with a date and a reason', async () => {
     const w = mount(HostCoverage, { props: { systemId: 7 } })

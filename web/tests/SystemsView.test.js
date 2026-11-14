@@ -119,7 +119,7 @@ describe('SystemsView', () => {
     const w = mount(SystemsView)
     await flushPromises()
     await w.find('button.primary').trigger('click')
-    await w.findAll('button.kind')[1].trigger('click')
+    await w.findAll('button.kind').find((b) => b.text().startsWith('TrueNAS')).trigger('click')
     await flushPromises()
 
     expect(w.text()).toContain('Add TrueNAS')

@@ -29,6 +29,7 @@ something the attacker does not have at that point.
 |---|---|---|
 | the master's server container | read inventory and findings, request reports, run the fixed queries; at the admin's next passkey touch (even a login) obtain a signature over a command or passkey list of its choice (see Known limits): then reboot hosts (at most once per 30 minutes each), remove agents, or add its own passkey to the agents' list | act on the hosts before the admin touches a passkey, ship foreign agent code (no release key), run shell commands (there are none) |
 | one `lablantern-agentd` | forge its own reports, trigger collection and queries on its own host | become root, reboot or update without a valid passkey signature, attack other hosts or the master |
+| one Windows agent (`LabLanternAgent`, runs as LocalSystem) | everything on that host | attack other hosts or the master |
 | an attacker in the LAN | announce a master, send pairing requests (rate limited) | pass pairing (the code does not match, the admin must approve), read traffic (pinned TLS) |
 | root on the master's Docker host | everything the server container can, plus sign agent releases (key volume): combined with the admin's next passkey touch this is root on every host ("Update all") | update hosts before the admin touches a passkey again |
 | the passkey store (e.g. Vaultwarden) | confirm reboots and updates | create commands without the admin login; updates stay bound to the release signature |
@@ -51,6 +52,12 @@ something the attacker does not have at that point.
   address.
 - **The agent signing key sits on the master host.** Back up the volume `agent_key` separately (see
   [docs/INSTALL.md](docs/INSTALL.md)). If it is lost, agents accept no more updates until they are set up again.
+- **The Windows agent is one service running as LocalSystem.** Windows Update only answers the search for pending
+  updates to that account, so the part that talks to the network and the part with rights are the same process, unlike
+  on Linux. To keep that small, it connects only to the pinned master, starts Windows PowerShell with one fixed
+  read-only script (it also sends the list of installed programs to the master), and takes two commands: report now, and update. It does not check passkeys: reboot, uninstall
+  and queries are rejected, and an update is accepted only if the release is signed with this installation's key and
+  newer than the running one. A taken-over master can therefore trigger a genuine update, nothing else.
 - The root part `lablantern-collect` reads the Docker socket; whoever has root on the host has it anyway.
 
 ## Reporting a vulnerability

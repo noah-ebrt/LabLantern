@@ -50,7 +50,7 @@ func fileSHA(path string) (string, error) {
 // BuildManifest erfasst alle lablantern-agent-* Dateien eines Build-Verzeichnisses.
 func BuildManifest(dir, version string) (*Manifest, error) {
 	m := &Manifest{Version: version, Created: time.Now().UTC().Format(time.RFC3339), Files: map[string]string{}}
-	paths, _ := filepath.Glob(filepath.Join(dir, "lablantern-agent-linux-*"))
+	paths, _ := filepath.Glob(filepath.Join(dir, "lablantern-agent-*"))
 	for _, p := range paths {
 		sum, err := fileSHA(p)
 		if err != nil {

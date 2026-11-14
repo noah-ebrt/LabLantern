@@ -43,6 +43,9 @@ and its web interface is reachable only in your LAN.
 
 - **Linux hosts** run a small agent (`.deb` / `.rpm`, amd64 and arm64). It sees Docker and Podman (rootful and
   rootless) and, on bare-metal hosts, disk and pool health (SMART, ZFS, software RAID).
+- **Windows hosts** (experimental) run a limited agent set up with one PowerShell command: Windows version and end
+  of support, pending security updates, whether a reboot is due, whether antivirus and firewall are on, and the installed
+  programs (the well-known ones are watched by the early warning). No package CVEs, no containers, no reboot from the web UI.
 - **Appliances** are read through their own API, read-only: TrueNAS, Home Assistant, Proxmox VE, Synology DSM and
   OPNsense (version, pending updates, apps, alerts, storage health; for Proxmox also which VMs and containers have no
   agent yet).
@@ -209,8 +212,8 @@ Dependencies are pinned with hashes and taken no earlier than 7 days after their
 ## Scope and status
 
 LabLantern is in daily use on a homelab with four hosts. It is a risk overview and alerting tool: it does not replace
-endpoint protection (EDR) and does not install patches for you. Windows hosts are not supported yet. Support is best
-effort.
+endpoint protection (EDR) and does not install patches for you. The Windows agent is experimental and reports less than the Linux agent
+(see [docs/AGENTS.md](docs/AGENTS.md#windows)). Support is best effort.
 
 Nothing phones home. Everything that leaves your network is listed in
 [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md#what-leaves-your-network).

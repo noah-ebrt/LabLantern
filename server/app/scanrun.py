@@ -170,6 +170,8 @@ def refresh_request(s) -> dict | None:
 
 def _system_ready(ctx: Context, s, system: System, since: datetime) -> bool:
     seen = system.last_seen
+    if system.host_type == "windows":   # meldet keine Pakete: nichts, worauf der Scan warten müsste
+        return True
     if system.host_type == "collector":   # lässt sich nicht anstoßen; Image-SBOMs kommen im Report mit
         return seen is not None and (datetime.now(timezone.utc) - seen).total_seconds() <= COLLECTOR_HOURS * 3600
     if seen is None or seen < since:
@@ -223,7 +225,9 @@ def agent_should_report(ctx: Context, system: System) -> bool:
 
 
 def _create_job(ctx: Context, s, run: ScanRun) -> None:
-    systems = s.scalars(select(System).where(System.status == "active").order_by(System.name)).all()
+    # ohne Windows-Agenten: Sie melden keine Pakete, es gibt nichts zu scannen (Abdeckung: Paket-CVEs n/a)
+    systems = s.scalars(select(System).where(System.status == "active", System.host_type != "windows")
+                        .order_by(System.name)).all()
     payload = {"systems": [
         {"id": x.id, "name": x.name, "sbom": sbom_path(ctx, x.id).is_file(),
          "images": [{**img, "sbom": image_sbom_path(ctx, x.id, img["id"]).is_file()} for img in system_images(x)]}

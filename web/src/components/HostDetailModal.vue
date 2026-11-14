@@ -14,6 +14,8 @@ const props = defineProps({ systemId: { type: Number, required: true } })
 const emit = defineEmits(['close', 'changed'])
 
 const system = ref(null)
+// Windows-Agent: meldet und aktualisiert sich nur, kennt weder Neustart noch Abfragen
+const windows = computed(() => system.value?.host_type === 'windows')
 const update = ref(null)
 const loading = ref(true)
 const error = ref('')
@@ -142,20 +144,21 @@ useLive(['commands'], loadCommands)
     <p v-else-if="error" class="message error" role="alert">{{ error }}</p>
     <div v-else-if="system">
       <h2>System inventory: {{ system.name }}</h2>
-      <p class="subtitle">{{ system.inventory?.os_name }} · Kernel {{ system.inventory?.kernel }} ({{ system.inventory?.arch }})</p>
+      <p class="subtitle">{{ system.inventory?.os_name }} · {{ windows ? 'Build' : 'Kernel' }} {{ system.inventory?.kernel }} ({{ system.inventory?.arch }})</p>
       <p class="subtext">Problems also appear as <RouterLink :to="{ path: '/funde', query: { q: system.name } }" @click="emit('close')">findings</RouterLink>.</p>
 
       <template v-if="system.status === 'active' && system.host_type !== 'collector'">
         <h3>Actions</h3>
         <div class="cmd-bar">
           <button class="btn-sm primary" @click="sendCommand('report_now')">Report now</button>
-          <button v-for="q in QUERIES" :key="q.id" class="btn-sm secondary" @click="sendCommand('query', q.id)">{{ q.label }}</button>
+          <button v-for="q in windows ? [] : QUERIES" :key="q.id" class="btn-sm secondary" @click="sendCommand('query', q.id)">{{ q.label }}</button>
         </div>
         <div class="cmd-bar">
           <button v-if="system.agent_outdated" class="btn-sm" :disabled="busy(system)" title="Requires a passkey touch" @click="sendSigned('update_agent')">{{ system.pending_action === 'update_agent' ? 'Updating…' : `Update agent to v${update?.version}` }}</button>
-          <button class="btn-sm btn-revoke" :disabled="busy(system)" title="Requires a passkey touch" @click="sendSigned('reboot')">{{ system.pending_action === 'reboot' ? 'Rebooting…' : 'Reboot host…' }}</button>
+          <button v-if="!windows" class="btn-sm btn-revoke" :disabled="busy(system)" title="Requires a passkey touch" @click="sendSigned('reboot')">{{ system.pending_action === 'reboot' ? 'Rebooting…' : 'Reboot host…' }}</button>
           <span v-if="busy(system)" class="subtext">{{ busyLabel(system) }} Other actions unlock when the agent reports back.</span>
-          <span class="subtext">Reboot and update need a passkey touch; the agent verifies it itself.</span>
+          <span v-if="windows" class="subtext">The Windows agent only reports and updates itself: no reboot and no queries from here. An update needs a passkey touch, and the agent only accepts a release signed with this installation's key.</span>
+          <span v-else class="subtext">Reboot and update need a passkey touch; the agent verifies it itself.</span>
         </div>
         <p class="subtext">
           {{ system.online ? 'Agent connected: answers within seconds.' : 'Agent not connected right now (needs v0.7 or newer): commands expire after 5 minutes.' }}
@@ -178,6 +181,22 @@ useLive(['commands'], loadCommands)
         <StorageView :storage="system.inventory.storage" />
       </template>
 
+      <details v-if="windows && system.inventory?.software?.length" class="software" data-test="software">
+        <summary>Installed programs ({{ system.inventory.software.length }})</summary>
+        <p class="subtext">Programs installed for all users. The well-known ones are watched by the early warning below; no vulnerability database covers Windows programs.</p>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Program</th><th>Version</th><th>Publisher</th></tr></thead>
+            <tbody>
+              <tr v-for="a in system.inventory.software" :key="`${a.name}|${a.version}`">
+                <td>{{ a.name }}</td><td class="mono">{{ a.version }}</td><td>{{ a.publisher }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </details>
+
+      <template v-if="!windows">
       <h3>Containers ({{ system.inventory?.containers?.length || 0 }})</h3>
       <div class="cmd-bar">
         <span v-if="diff.missing.length" class="badge danger">missing: {{ diff.missing.join(', ') }}</span>
@@ -229,6 +248,7 @@ useLive(['commands'], loadCommands)
         </table>
       </div>
       <p v-else class="empty">No Docker containers reported.</p>
+      </template>
 
       <EarlyWarningWatch :system-id="systemId" />
     </div>
@@ -239,6 +259,8 @@ useLive(['commands'], loadCommands)
 </template>
 
 <style scoped>
+.software { margin: 1rem 0; }
+.software summary { cursor: pointer; font-weight: 600; }
 .cmd-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0 0 0.5rem; }
 .cmd-bar + .subtext { margin-top: 0.75rem; }
 .cmd-entry { margin: 0.75rem 0; }

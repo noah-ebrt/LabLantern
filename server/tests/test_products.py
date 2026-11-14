@@ -128,6 +128,18 @@ def test_eol_release_matching():
     assert db.newest_maintained("mariadb") == "11.8.9"
 
 
+def test_eol_release_by_name_for_lines_without_a_version_number():
+    # der Windows-Agent meldet die Linie so, wie endoflife.date sie nennt
+    db = eol.EolDb([{"name": "windows", "label": "Microsoft Windows", "identifiers": [], "releases": [
+        {"name": "11-25h2-w", "isEol": False}, {"name": "11-24h2-w", "isEol": True, "eolFrom": "2026-10-13"},
+        {"name": "11-24h2-e", "isEol": False}, {"name": "10-22h2", "isEol": True, "eolFrom": "2025-10-14"}]}])
+    assert db.release("windows", "11-24h2-w")["isEol"] is True
+    assert db.release("windows", "11-24h2-e")["isEol"] is False
+    assert db.release("windows", "10-22h2")["eolFrom"] == "2025-10-14"
+    assert db.release("windows", "11-23h2-w") is None and db.release("windows", "") is None
+    assert eol.OS_PRODUCTS["windows"] == "windows" and eol.OS_PRODUCTS["windows-server"] == "windows-server"
+
+
 def test_eol_load_uses_cache_and_reports_stale_data(tmp_path):
     data = json.dumps(EOL_DATA).encode()
     db, err = eol.load(tmp_path, fetch=lambda: data)
