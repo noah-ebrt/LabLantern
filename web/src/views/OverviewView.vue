@@ -467,12 +467,14 @@ a.step-link:hover { background: var(--surface-3); }
 
 .split { display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 1rem; margin-bottom: 1rem; }
 .split > .card { margin: 0; }
+/* das Diagramm füllt die Karte, wenn die Host-Liste daneben höher ist */
+.trend { display: flex; flex-direction: column; }
 .legend { display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: var(--muted); }
 .legend i, .tip i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
 .legend i + * { margin-right: 0.5rem; }
 i.crit { background: var(--crit); }
 i.high { background: var(--high); }
-.chart { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.75rem; height: 230px; }
+.chart { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.75rem; flex: 1; min-height: 230px; }
 .y-axis { display: flex; flex-direction: column; justify-content: space-between; font: 0.6875rem var(--mono); color: var(--muted); text-align: right; padding-bottom: 22px; }
 .plot { position: relative; }
 .gridlines { position: absolute; inset: 0 0 22px; display: flex; flex-direction: column; justify-content: space-between; }
@@ -519,7 +521,7 @@ i.high { background: var(--high); }
   .kpis { grid-template-columns: minmax(0, 1fr); }
   .sep { display: none; }
   .posture-meta { gap: 0.25rem 1rem; }
-  .chart { height: 190px; }
+  .chart { min-height: 190px; }
 }
 .state.bad { background: var(--danger); }
 </style>
