@@ -197,6 +197,9 @@ ALIASES = {"python": ("cpython",), "docker engine": ("moby", "docker"), "bind 9"
 SERVER_PACKAGES = {"bind9": {"bind9"}, "bind": {"bind"}, "samba": {"samba"}, "apache2": {"apache2"},
                    "httpd": {"httpd"}, "cups": {"cups", "cups-daemon"}, "dovecot": {"dovecot-core", "dovecot"},
                    "postfix": {"postfix"}, "exim4": {"exim4-daemon-light", "exim4-daemon-heavy"}}
+# Server, um die ein Image gebaut ist: Meldungen nennen nginx, nicht das Image darum. curl, glibc oder openssl stecken
+# in fast jedem Image und wären als Stichwort je Image nur Rauschen; die prüfen Grype und OSV
+BUNDLED_SERVERS = {"nginx", *SERVER_PACKAGES}
 # Portainer legt Stacks in seinem eigenen Volume ab; den Pfad gibt es auf dem Host nicht
 PORTAINER_DIR = re.compile(r"^/data/compose/\d+$")
 # Distributionsbauten tragen Sicherheitsfixes zurück, ohne die Upstream-Version zu ändern: kein Versionsvergleich
@@ -435,6 +438,21 @@ def watched_packages(sbom: Path) -> dict[str, dict]:
     return {src: e for src, e in out.items() if src not in SERVER_PACKAGES or SERVER_PACKAGES[src] & set(e["packages"])}
 
 
+_bundled: dict[tuple, dict] = {}
+
+
+def bundled_servers(sbom: Path) -> dict[str, dict]:
+    """Die Server aus BUNDLED_SERVERS in der SBOM eines Images. Die Dateien sind mehrere MB groß und das Inventar wird
+    bei jedem Bericht eines Hosts gebraucht: das Ergebnis gilt, solange die Datei dieselbe ist."""
+    try:
+        key = (str(sbom), sbom.stat().st_mtime_ns)
+    except OSError:
+        return {}
+    if key not in _bundled:
+        _bundled[key] = {src: pkg for src, pkg in watched_packages(sbom).items() if src in BUNDLED_SERVERS}
+    return _bundled[key]
+
+
 def appliance_products(s) -> list[dict]:
     """Geräte ohne Agent (TrueNAS, Home Assistant): ihre Versionen aus dem letzten Abruf des Connectors.
     Ersetzt den Handeintrag „TrueNAS 25.04.2“, der nach jedem Update veraltet war."""
@@ -526,11 +544,19 @@ def inventory_products(s, data_dir: Path | None = None) -> list[dict]:
             if not pinned and data_dir is not None:   # 3.11-slim, latest: die Version aus der SBOM des Images
                 version = image_version(data_dir / "images" / str(sys.id), c.get("image_id", ""),
                                         _keyword(ref), tag if versioned else "") or version
-            out.append({**base, "keyword": _keyword(ref), "product": ref, "version": version, "kind": "image",
-                        "target": f"image:{ref[:200]}"[:300], "pinned": pinned,
-                        "project_dir": (c.get("labels") or {}).get("com.docker.compose.project.working_dir", ""),
-                        "source": (c.get("labels") or {}).get("org.opencontainers.image.source", ""),
-                        "project": (c.get("labels") or {}).get("com.docker.compose.project", "")})
+            image = {**base, "keyword": _keyword(ref), "product": ref, "version": version, "kind": "image",
+                     "target": f"image:{ref[:200]}"[:300], "pinned": pinned,
+                     "project_dir": (c.get("labels") or {}).get("com.docker.compose.project.working_dir", ""),
+                     "source": (c.get("labels") or {}).get("org.opencontainers.image.source", ""),
+                     "project": (c.get("labels") or {}).get("com.docker.compose.project", "")}
+            out.append(image)
+            if data_dir is not None and c.get("image_id"):
+                sbom = data_dir / "images" / str(sys.id) / f"{c['image_id'].removeprefix('sha256:')}.json"
+                for source, pkg in bundled_servers(sbom).items():
+                    # ohne `source`: das Label gehört zum Image, nicht zum Server darin
+                    out.append({**image, "keyword": WATCHED_PACKAGES[source], "product": f"{ref} (bundled {source})",
+                                "version": pkg["version"], "bundled": source, "source": "", "title_only": True,
+                                "backport": bool(BACKPORTED.search(pkg["version"]))})
         if inv.get("os_id"):
             os_kw = "debian" if inv["os_id"] == "raspbian" else inv["os_id"]
             out.append({**base, "keyword": os_kw, "product": inv.get("os_name") or os_kw, "kind": "os",
@@ -593,7 +619,8 @@ def _watch_group(p: dict) -> str:
 
 
 def _mentions(text: str, keyword: str) -> bool:
-    return bool(re.search(r"(?<![a-z0-9])" + re.escape(keyword) + r"(?![a-z0-9])", text))
+    # Meldungen schreiben den Namen eines Images mit Leerzeichen: nginx-proxy-manager ist dort „Nginx Proxy Manager“
+    return bool(re.search(r"(?<![a-z0-9])" + re.escape(keyword).replace(r"\-", "[- ]") + r"(?![a-z0-9])", text))
 
 
 def _vendor_feed(feed_url: str, keyword: str) -> bool:
@@ -822,6 +849,10 @@ def recommend(ai: dict, hits: list[dict]) -> list[dict]:
                 "Apply the mitigation below." if ai.get("mitigations") else "Check again later.")
         elif fix == "unknown":
             text = "Fixed version not confirmed yet; check the advisory before updating."
+        elif p.get("bundled"):   # die gefixte Version ist die des Servers, kein Tag des Images
+            which = f"{p['bundled']} {', '.join(fixed[:3])} or later" if to else f"the fixed {p['bundled']}"
+            text = (f"Update the image to a release that bundles {which} (see the image's release notes), "
+                    "then recreate the container")
         elif kind == "image":
             text = (f"Change the image tag{to}, then recreate the container" if p.get("pinned")
                     else "Pull the fixed image and recreate the container")

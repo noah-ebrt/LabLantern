@@ -1435,3 +1435,57 @@ def test_a_line_tag_takes_the_version_from_the_image_sbom(ctx):
         s.commit()
         got = {p["product"]: p["version"] for p in ew.inventory_products(s, ctx.settings.data_dir)}
     assert got == {"python:3.11-slim": "3.11.18", "python:3.11": "3.11", "python:3.11.9-slim": "3.11.9-slim"}
+
+
+def test_prefilter_matches_a_hyphenated_keyword_written_with_spaces():
+    products = [{"keyword": "nginx-proxy-manager"}]
+    for title in ("Critical flaw in Nginx Proxy Manager: update now", "nginx-proxy-manager 2.17.1 released"):
+        assert ew.prefilter({"title": title, "summary": ""}, products) == products
+    for title in ("How to run nginx as a reverse proxy", "Two nginx proxy managers compared", "nginxproxymanager"):
+        assert ew.prefilter({"title": title, "summary": ""}, products) == []
+
+
+def test_a_server_bundled_in_an_image_is_watched_with_its_own_version(ctx):
+    """Ein Image nennt nur sich selbst (nginx-proxy-manager), die Lücke steht aber unter dem Namen des Servers darin."""
+    sid = make_system(ctx, "host-a")
+    folder = ctx.settings.data_dir / "images" / str(sid)
+    folder.mkdir(parents=True)
+    (folder / "aaa.json").write_text(json.dumps({"components": [
+        {"type": "application", "name": "nginx", "version": "1.31.8", "purl": "pkg:generic/nginx@1.31.8"},
+        {"name": "nginx-proxy-manager", "version": "2.17.0", "purl": "pkg:npm/nginx-proxy-manager@2.17.0"},
+        {"name": "curl", "version": "8.14.1-2+deb13u2", "purl": "pkg:deb/debian/curl@8.14.1-2+deb13u2"},
+        {"name": "libc6", "version": "2.41-12", "purl": "pkg:deb/debian/libc6@2.41-12?upstream=glibc"}]}))
+    (folder / "bbb.json").write_text(json.dumps({"components": [
+        {"name": "nginx", "version": "1.30.6-r1", "purl": "pkg:apk/alpine/nginx@1.30.6-r1?arch=x86_64"},
+        {"name": "nginx-module-njs", "version": "1.30.6.1.0.2-r1",
+         "purl": "pkg:apk/alpine/nginx-module-njs@1.30.6.1.0.2-r1?upstream=nginx"}]}))
+    with ctx.session_factory() as s:
+        s.get(System, sid).inventory_json = json.dumps({"containers": [
+            {"name": "proxy", "image": "jc21/nginx-proxy-manager:latest", "image_id": "sha256:aaa", "state": "running"},
+            {"name": "speed", "image": "openspeedtest/latest", "image_id": "sha256:bbb", "state": "running",
+             "labels": {"org.opencontainers.image.source": "https://github.com/nginx/docker-nginx-unprivileged"}},
+            {"name": "db", "image": "postgres:16", "image_id": "sha256:ccc", "state": "running"}]})   # ohne SBOM
+        s.commit()
+        products = ew.inventory_products(s, ctx.settings.data_dir)
+    bundled = {p["product"]: p for p in products if p.get("bundled")}
+    assert {(p["keyword"], p["version"]) for p in bundled.values()} == {("nginx", "1.31.8"), ("nginx", "1.30.6-r1")}
+    npm = bundled["jc21/nginx-proxy-manager:latest (bundled nginx)"]
+    assert (npm["kind"], npm["target"], npm["title_only"]) == ("image", "image:jc21/nginx-proxy-manager:latest", True)
+    assert {p["keyword"] for p in products} == {"nginx", "nginx-proxy-manager", "openspeedtest", "postgres"}  # kein curl, glibc
+    assert ew.release_feeds(products) == {}   # das Label stammt vom Basis-Image, nicht vom Server darin
+
+    headline = {"title": "10-Year-Old NGINX HTTP/2 Flaw Lets Attackers Execute Code", "summary": ""}
+    assert [p["product"] for p in ew.prefilter(headline, products)] == list(bundled)
+    assert ew.prefilter({"title": "Mail server update", "summary": "runs behind nginx"}, products) == []   # nur im Titel
+
+    ai = {"products": [{"product": "nginx", "fixed_versions": ["1.30.7", "1.31.9"],
+                        "affected": [{"introduced": "1.9.5", "fixed": "1.31.9", "last_affected": ""}]}],
+          "mitigations": [], "fix_available": "yes"}
+    status, detail, hits = ew.classify(ai, list(bundled.values()))
+    assert status == "betroffen" and "jc21/nginx-proxy-manager:latest (bundled nginx) 1.31.8 on host-a" in detail
+    steps = {x["product"]: x for x in ew.recommend(ai, hits)}
+    assert steps[npm["product"]] == {
+        "system": "host-a", "product": npm["product"], "command": "",
+        "text": "Update the image to a release that bundles nginx 1.31.9 or later (see the image's release notes), "
+                "then recreate the container"}
+    assert "nginx 1.30.7 or later" in steps["openspeedtest/latest (bundled nginx)"]["text"]   # Fix der eigenen Linie
