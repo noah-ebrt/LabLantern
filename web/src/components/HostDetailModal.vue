@@ -164,6 +164,12 @@ useLive(['commands'], loadCommands)
           {{ system.online ? 'Agent connected: answers within seconds.' : 'Agent not connected right now (needs v0.7 or newer): commands expire after 5 minutes.' }}
         </p>
         <p v-if="cmdError" class="text-danger">{{ cmdError }}</p>
+      </template>
+
+      <HostCoverage :system-id="systemId" />
+
+      <template v-if="commands.length && system.status === 'active' && system.host_type !== 'collector'">
+        <h3>Recent actions</h3>
         <div v-for="c in commands" :key="c.id" class="cmd-entry">
           <div>
             <strong>{{ commandLabel(c) }}</strong>
@@ -173,8 +179,6 @@ useLive(['commands'], loadCommands)
           <pre v-if="c.output" class="cmd">{{ c.output }}</pre>
         </div>
       </template>
-
-      <HostCoverage :system-id="systemId" />
 
       <template v-if="system.inventory?.storage">
         <h3>Storage</h3>
